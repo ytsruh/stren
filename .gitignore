@@ -1,0 +1,14 @@
+internal/views/*_templ.go
+*.env
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.DS_Store
+
+# Binaries
+stren
+*.exe
+*.dll
+*.so
+*.dylib

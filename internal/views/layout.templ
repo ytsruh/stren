@@ -1,0 +1,110 @@
+package views
+
+import "stren/internal/models"
+
+type PageData struct {
+	Title   string
+	Entries []models.ExerciseEntry
+	Types   []models.ExerciseType
+	Entry   *models.ExerciseEntry
+}
+
+// Layout is the base layout for all pages
+templ Layout(data PageData) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<meta name="theme-color" content="#4a5568"/>
+			<meta name="apple-mobile-web-app-capable" content="yes"/>
+			<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+			<meta name="apple-mobile-web-app-title" content="Stren"/>
+			<link rel="icon" type="image/png" href="/icons/favicon-96x96.png" sizes="96x96"/>
+			<link rel="icon" type="image/svg+xml" href="/icons/favicon.svg"/>
+			<link rel="shortcut icon" href="/favicon.ico"/>
+			<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
+			<link rel="manifest" href="/manifest.json"/>
+			<title>{ data.Title } - Strength Tracker</title>
+			
+			<!-- Oat CSS -->
+			<link rel="stylesheet" href="https://unpkg.com/@knadh/oat/oat.min.css"/>
+			<script src="https://unpkg.com/@knadh/oat/oat.min.js" defer></script>
+			
+			<!-- htmx -->
+			<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+			
+			<style>
+				html, body { min-height: 100vh; }
+				body { display: flex; flex-direction: column; }
+				main { flex: 1; }
+				.container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+				.mb-2 { margin-bottom: 1rem; }
+				.mt-2 { margin-top: 1rem; }
+				.flex { display: flex; }
+				.justify-between { justify-content: space-between; }
+				.items-center { align-items: center; }
+				.gap-1 { gap: 0.5rem; }
+				.fade-out { animation: fadeOut 0.3s ease-out; }
+				@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+				textarea { width: 100%; min-height: 80px; }
+				select, input:not([type="date"]) { width: 100%; }
+				/* Fix nav styling */
+				nav[data-topnav] { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-4); background-color: var(--background); border-bottom: 1px solid var(--border); box-shadow: var(--shadow-small); }
+				nav[data-topnav] a { text-decoration: none; }
+				nav[data-topnav] ul { display: flex; list-style: none; margin: 0; padding: 0; align-items: center; gap: var(--space-3); }
+				nav[data-topnav] ul:first-child { margin-right: auto; }
+			</style>
+		</head>
+		<body>
+			<header>
+				<nav data-topnav>
+					<ul>
+						<li><strong>Strength Tracker</strong></li>
+					</ul>
+					<ul>
+						<li><a href="/">Dashboard</a></li>
+						<li><a href="/entries/new">New Entry</a></li>
+					</ul>
+				</nav>
+			</header>
+			
+			<main class="container">
+				{ children... }
+			</main>
+			<script>
+				if ('serviceWorker' in navigator) {
+					navigator.serviceWorker.register('/sw.js').catch(function(err) {
+						console.error('Service worker registration failed:', err);
+					});
+				}
+			</script>
+		</body>
+	</html>
+}
+
+// Toast is a notification component
+templ Toast(message string, isError bool) {
+	if isError {
+		<article class="alert alert-danger" role="alert">
+			{ message }
+		</article>
+	} else {
+		<article class="alert alert-success" role="alert">
+			{ message }
+		</article>
+	}
+}
+
+// EmptyState shows when no entries exist
+templ EmptyState() {
+	<article>
+		<header>
+			<h3>No workouts yet</h3>
+		</header>
+		<p>Start tracking your strength journey by adding your first exercise entry.</p>
+		<footer>
+			<a href="/entries/new" role="button">Add First Entry</a>
+		</footer>
+	</article>
+}

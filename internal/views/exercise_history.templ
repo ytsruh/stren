@@ -1,0 +1,116 @@
+package views
+
+import (
+	"fmt"
+	"stren/internal/models"
+)
+
+// ExerciseHistory shows all entries for a specific exercise
+templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry) {
+	@Layout(PageData{Title: exerciseName}) {
+		<div class="flex justify-between items-center mb-2">
+			<h1>{ exerciseName }</h1>
+			<a href="/entries/new" role="button">Log Set</a>
+		</div>
+		
+		if len(entries) == 0 {
+			<article>
+				<header>
+					<h3>No entries yet</h3>
+				</header>
+				<p>You haven't logged any sets for { exerciseName } yet.</p>
+				<footer>
+					<a href="/entries/new" role="button">Log First Set</a>
+				</footer>
+			</article>
+		} else {
+			@ExerciseStats(entries)
+			
+			<h2 class="mt-2">History</h2>
+			<table>
+				<thead>
+					<tr>
+						<th>Date</th>
+						<th>Reps</th>
+						<th>Weight</th>
+						<th>Notes</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, entry := range entries {
+						<tr id={ fmt.Sprintf("entry-%d", entry.ID) }>
+							<td>
+								<strong>{ entry.FormattedDate() }</strong><br/>
+								<small>{ entry.FormattedTime() }</small>
+							</td>
+							<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
+							<td>{ entry.FormattedWeight() }</td>
+							<td>{ entry.Notes }</td>
+							<td>
+								<div class="flex gap-1">
+									<a 
+										href={ templ.SafeURL(fmt.Sprintf("/entries/%d/edit", entry.ID)) } 
+										role="button" 
+										class="secondary"
+										size="small">
+										Edit
+									</a>
+									<button 
+										class="secondary"
+										size="small"
+										hx-delete={ fmt.Sprintf("/entries/%d", entry.ID) }
+										hx-confirm="Delete this entry?"
+										hx-target={ fmt.Sprintf("#entry-%d", entry.ID) }
+										hx-swap="outerHTML swap:0.3s">
+										Delete
+									</button>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+		
+		<div class="mt-2">
+			<a href="/" role="button" class="secondary">← Back to Dashboard</a>
+		</div>
+	}
+}
+
+// ExerciseStats shows statistics for an exercise
+templ ExerciseStats(entries []models.ExerciseEntry) {
+	<article>
+		<header>
+			<h3>Stats</h3>
+		</header>
+		<div class="grid">
+			@StatCard("Personal Best", fmt.Sprintf("%.1f kg", maxWeight(entries)))
+			@StatCard("Last Set", getLastSet(entries))
+		</div>
+	</article>
+}
+
+// Helper functions
+func maxWeight(entries []models.ExerciseEntry) float64 {
+	if len(entries) == 0 {
+		return 0
+	}
+	max := entries[0].Weight
+	for _, e := range entries[1:] {
+		if e.Weight > max {
+			max = e.Weight
+		}
+	}
+	return max
+}
+
+func getLastSet(entries []models.ExerciseEntry) string {
+	if len(entries) == 0 {
+		return "No entries"
+	}
+	// Entries are sorted by created_at DESC, so first is the most recent
+	last := entries[0]
+	return fmt.Sprintf("%.1f kg × %d", last.Weight, last.Reps)
+}

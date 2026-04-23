@@ -1,0 +1,162 @@
+package views
+
+import (
+	"fmt"
+	"stren/internal/models"
+	"time"
+)
+
+// EntryForm renders the form for creating/editing entries
+templ EntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, isEdit bool) {
+	@Layout(PageData{Title: formTitle(isEdit)}) {
+		<h1>{ formTitle(isEdit) }</h1>
+		
+		<form 
+			hx-post={ formAction(entry, isEdit) }
+			hx-target="#form-result"
+			hx-swap="innerHTML"
+			class="mt-2">
+			
+			<fieldset>
+				<label for="exercise-name">
+					Exercise
+					<select 
+						id="exercise-name"
+						name="exercise_name"
+						required>
+						if !isEdit || entry == nil {
+							<option value="">-- Select an exercise --</option>
+						}
+						for _, t := range types {
+							<option 
+								value={ t.Name }
+								selected?={ entry != nil && t.Name == entry.ExerciseName }>
+								{ t.Name }
+							</option>
+						}
+					</select>
+				</label>
+				
+				<div class="grid">
+					<label for="reps">
+						Reps
+						<input
+							type="number"
+							id="reps"
+							name="reps"
+							min="1"
+							value={ entryValue(entry, func(e *models.ExerciseEntry) string { return fmt.Sprintf("%d", e.Reps) }) }
+							placeholder="8"
+							required/>
+					</label>
+					
+					<label for="weight">
+						Weight (kg)
+						<input 
+							type="number" 
+							id="weight"
+							name="weight"
+							step="0.5"
+							min="0"
+							value={ entryValue(entry, func(e *models.ExerciseEntry) string { return fmt.Sprintf("%.1f", e.Weight) }) }
+							placeholder="0.0"
+							required/>
+					</label>
+				</div>
+				
+				if isEdit && entry != nil {
+					<label for="date">
+						Date & Time
+						<input 
+							type="datetime-local" 
+							id="date"
+							name="created_at"
+							value={ formatDateTimeLocal(entry.CreatedAt) }
+							required/>
+					</label>
+				}
+				
+				<label for="notes">
+					Notes (optional)
+					<textarea 
+						id="notes"
+						name="notes"
+						placeholder="How did it feel? Any observations?">{ entryValue(entry, func(e *models.ExerciseEntry) string { return e.Notes }) }</textarea>
+				</label>
+				
+				if isEdit && entry != nil {
+					<input type="hidden" name="id" value={ fmt.Sprintf("%d", entry.ID) }/>
+					<input type="hidden" name="_method" value="PUT"/>
+				}
+			</fieldset>
+			
+			<div class="flex gap-1">
+				<button type="submit">
+					if isEdit {
+						Update Entry
+					} else {
+						Save Entry
+					}
+				</button>
+				<a href="/" role="button" class="secondary">Cancel</a>
+			</div>
+		</form>
+		
+		<div id="form-result" class="mt-2"></div>
+	}
+}
+
+// EntryFormSuccess is shown after successful form submission
+templ EntryFormSuccess(message string, stayOnPage bool) {
+	@Toast(message, false)
+	
+	if !stayOnPage {
+		<div class="mt-2">
+			<a href="/" role="button">Back to Dashboard</a>
+			<a href="/entries/new" role="button" class="secondary">Add Another</a>
+		</div>
+	} else {
+		<script>
+			// Reset form after successful submission
+			document.querySelector('form').reset();
+			// Keep the exercise selection and clear reps for next set
+			const exerciseSelect = document.getElementById('exercise-name');
+			if (exerciseSelect) {
+				const selectedExercise = exerciseSelect.value;
+				document.querySelector('form').reset();
+				exerciseSelect.value = selectedExercise;
+			}
+		</script>
+	}
+}
+
+// EntryFormError shows form validation errors
+templ EntryFormError(message string) {
+	@Toast(message, true)
+}
+
+// Helper functions
+func formTitle(isEdit bool) string {
+	if isEdit {
+		return "Edit Entry"
+	}
+	return "New Entry"
+}
+
+func formAction(entry *models.ExerciseEntry, isEdit bool) string {
+	if isEdit && entry != nil {
+		return fmt.Sprintf("/entries/%d", entry.ID)
+	}
+	return "/entries"
+}
+
+func entryValue(entry *models.ExerciseEntry, getter func(*models.ExerciseEntry) string) string {
+	if entry == nil {
+		return ""
+	}
+	return getter(entry)
+}
+
+func formatDateTimeLocal(t time.Time) string {
+	return t.Format("2006-01-02T15:04")
+}
