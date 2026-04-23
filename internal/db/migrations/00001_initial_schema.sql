@@ -1,7 +1,5 @@
--- Seed script for strength tracker database
--- Run with: sqlite3 strength_tracker.db < seed.sql
-
--- Create tables if they don't exist
+-- +goose Up
+-- Initial schema creation and seed for strength tracker
 CREATE TABLE IF NOT EXISTS exercise_types (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL
@@ -20,8 +18,8 @@ CREATE TABLE IF NOT EXISTS exercise_entries (
 CREATE INDEX IF NOT EXISTS idx_entries_type ON exercise_entries(exercise_type_id);
 CREATE INDEX IF NOT EXISTS idx_entries_created ON exercise_entries(created_at);
 
--- Insert exercises
-INSERT OR IGNORE INTO exercise_types (name) VALUES
+-- Seed default exercise types
+INSERT INTO exercise_types (name) VALUES
 ('Bench Press'),
 ('Squat'),
 ('Deadlift'),
@@ -32,3 +30,10 @@ INSERT OR IGNORE INTO exercise_types (name) VALUES
 ('Lunges'),
 ('Romanian Deadlift'),
 ('Leg Press');
+
+-- +goose Down
+DELETE FROM exercise_types;
+DROP INDEX IF EXISTS idx_entries_created;
+DROP INDEX IF EXISTS idx_entries_type;
+DROP TABLE IF EXISTS exercise_entries;
+DROP TABLE IF EXISTS exercise_types;

@@ -18,7 +18,8 @@
 - **HTTP handlers**: `internal/handlers/handlers.go` (Echo framework)
 - **Repository**: `internal/models/repository.go` (CRUD operations)
 - **Models**: `internal/models/models.go` (ExerciseType, ExerciseEntry)
-- **Database**: `internal/db/db.go` (SQLite wrapper + migrations)
+- **Database**: `internal/db/db.go` (SQLite wrapper)
+- **Migrations**: `internal/db/migrations/*.sql` managed by [goose](https://github.com/pressly/goose) and embedded in the binary via `//go:embed`
 - **Templates**: `internal/views/*.templ` (Templ HTML templates)
 
 ## Environment Variables

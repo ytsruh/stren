@@ -4,7 +4,6 @@
 # Variables
 APP_NAME=stren
 DB_FILE=strength_tracker.db
-SEED_FILE=seed.sql
 PORT=8080
 
 # Default target
@@ -15,8 +14,7 @@ help:
 	@echo "  make build       - Build the application"
 	@echo "  make run         - Build and run the application"
 	@echo "  make dev         - Run with auto-restart (requires entr)"
-	@echo "  make seed        - Seed the database with exercises"
-	@echo "  make db-reset    - Delete and recreate database with seed data"
+	@echo "  make db-reset    - Delete and recreate database"
 	@echo "  make test        - Run tests"
 	@echo "  make test-cover  - Run tests with coverage report"
 	@echo "  make templ       - Regenerate Templ templates"
@@ -55,23 +53,12 @@ templ:
 	templ generate
 	@echo "✓ Templates generated"
 
-# Seed database
-.PHONY: seed
-seed:
-	@echo "Seeding database..."
-	@if [ ! -f $(DB_FILE) ]; then \
-		echo "Creating database..."; \
-	fi
-	sqlite3 $(DB_FILE) < $(SEED_FILE)
-	@echo "✓ Database seeded"
-
-# Reset database (delete and recreate)
+# Reset database (delete - migrations run on next startup)
 .PHONY: db-reset
 db-reset:
 	@echo "Resetting database..."
 	@rm -f $(DB_FILE)
-	sqlite3 $(DB_FILE) < $(SEED_FILE)
-	@echo "✓ Database reset complete"
+	@echo "✓ Database deleted. Migrations and seed data will run on next startup."
 
 # Run tests
 .PHONY: test

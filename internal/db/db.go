@@ -3,19 +3,27 @@
 package db
 
 import (
+	"context"
 	"database/sql"
+	"embed"
 	"fmt"
+	"io/fs"
 	"time"
 
+	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
 )
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
 // DB wraps the sql.DB to provide application-specific operations
 type DB struct {
 	conn *sql.DB
 }
 
-// New creates a new database connection with migrations applied
+// New creates a new database connection with migrations applied.
+// Migrations are embedded in the binary and executed automatically on startup.
 func New(dbPath string) (*DB, error) {
 	conn, err := sql.Open("sqlite", dbPath)
 	if err != nil {
@@ -39,33 +47,26 @@ func (d *DB) Close() error {
 	return d.conn.Close()
 }
 
-// migrate runs database migrations
+// migrate runs embedded goose migrations against the database.
+// It uses an embed.FS so that migrations are included in the compiled binary.
 func (d *DB) migrate() error {
-	migrations := []string{
-		`CREATE TABLE IF NOT EXISTS exercise_types (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT UNIQUE NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS exercise_entries (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			exercise_type_id INTEGER NOT NULL,
-			reps INTEGER NOT NULL,
-			weight REAL NOT NULL,
-			notes TEXT,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			FOREIGN KEY (exercise_type_id) REFERENCES exercise_types(id)
-		)`,
-
-		`CREATE INDEX IF NOT EXISTS idx_entries_type ON exercise_entries(exercise_type_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_entries_created ON exercise_entries(created_at)`,
+	fsys, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("failed to open embedded migrations: %w", err)
 	}
 
-	for _, migration := range migrations {
-		if _, err := d.conn.Exec(migration); err != nil {
-			return fmt.Errorf("migration failed: %w", err)
-		}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, d.conn, fsys)
+	if err != nil {
+		return fmt.Errorf("failed to create migration provider: %w", err)
 	}
 
+	ctx := context.Background()
+	if _, err := provider.Up(ctx); err != nil {
+		return fmt.Errorf("failed to apply migrations: %w", err)
+	}
+	fmt.Println("-------------------------------")
+	fmt.Println("successfully applied migrations")
+	fmt.Println("-------------------------------")
 	return nil
 }
 
