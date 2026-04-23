@@ -1,0 +1,47 @@
+/* Layout & structure */
+html, body { min-height: 100vh; }
+body { display: flex; flex-direction: column; }
+main { flex: 1; }
+.container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+
+/* Utility classes */
+.mb-2 { margin-bottom: 1rem; }
+.mt-2 { margin-top: 1rem; }
+.flex { display: flex; }
+.inline-flex { display: inline-flex; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.items-center { align-items: center; }
+.gap-1 { gap: 0.5rem; }
+
+/* Fade-out animation for htmx deletes */
+.fade-out { animation: fadeOut 0.3s ease-out; }
+@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+/* Form fixes */
+textarea { width: 100%; min-height: 80px; }
+select, input:not([type="date"]) { width: 100%; }
+
+/* Nav styling */
+nav[data-topnav] {
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-2) var(--space-4);
+	background-color: var(--background);
+	border-bottom: 1px solid var(--border);
+	box-shadow: var(--shadow-small);
+}
+nav[data-topnav] a { text-decoration: none; }
+nav[data-topnav] ul {
+	display: flex;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	align-items: center;
+	gap: var(--space-3);
+}
+nav[data-topnav] ul:first-child { margin-right: auto; }

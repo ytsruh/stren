@@ -1,0 +1,108 @@
+package views
+
+import "fmt"
+
+// IconProps configures the appearance of a Lucide icon.
+type IconProps struct {
+	Name  string // Canonical or aliased icon name (e.g., "trash", "edit")
+	Size  int    // Width and height in pixels (default: 24)
+	Color string // Stroke colour, any valid CSS colour (default: "currentColor")
+	Class string // Additional CSS classes
+}
+
+// iconAliases maps friendly/alt names to the canonical icon names used in the switch.
+var iconAliases = map[string]string{
+	"delete": "trash",
+	"remove": "trash",
+	"edit":   "pencil",
+	"close":  "x",
+}
+
+// resolveIconName returns the canonical name for an icon, expanding aliases.
+func resolveIconName(name string) string {
+	if canonical, ok := iconAliases[name]; ok {
+		return canonical
+	}
+	return name
+}
+
+// Icon renders a Lucide-style inline SVG icon.
+// Unknown icon names render a fallback circle so the UI never breaks silently.
+templ Icon(props IconProps) {
+	{{
+		if props.Size == 0 {
+			props.Size = 24
+		}
+		if props.Color == "" {
+			props.Color = "currentColor"
+		}
+		name := resolveIconName(props.Name)
+	}}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		width={ fmt.Sprintf("%d", props.Size) }
+		height={ fmt.Sprintf("%d", props.Size) }
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke={ props.Color }
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		class={ props.Class }
+	>
+		@iconPath(name)
+	</svg>
+}
+
+// iconPath renders the SVG path elements for a given canonical icon name.
+templ iconPath(name string) {
+	switch name {
+		case "trash":
+			<polyline points="3 6 5 6 21 6"></polyline>
+			<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+		case "pencil":
+			<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+		case "plus":
+			<line x1="12" y1="5" x2="12" y2="19"></line>
+			<line x1="5" y1="12" x2="19" y2="12"></line>
+		case "home":
+			<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+			<polyline points="9 22 9 12 15 12 15 22"></polyline>
+		case "arrow-left":
+			<line x1="19" y1="12" x2="5" y2="12"></line>
+			<polyline points="12 19 5 12 12 5"></polyline>
+		case "check":
+			<polyline points="20 6 9 17 4 12"></polyline>
+		case "x":
+			<line x1="18" y1="6" x2="6" y2="18"></line>
+			<line x1="6" y1="6" x2="18" y2="18"></line>
+		case "calendar":
+			<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+			<line x1="16" y1="2" x2="16" y2="6"></line>
+			<line x1="8" y1="2" x2="8" y2="6"></line>
+			<line x1="3" y1="10" x2="21" y2="10"></line>
+		case "activity":
+			<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+		case "dumbbell":
+			<path d="M6.5 6.5 11 11"></path>
+			<path d="M21 21 16.5 16.5"></path>
+			<path d="m21 3 1 1-4.5 4.5-1-1"></path>
+			<path d="m2 22 1 1 4.5-4.5-1-1"></path>
+			<path d="m17 9 1 1-2.5 2.5-1-1"></path>
+			<path d="m8 15 1 1 2.5-2.5-1-1"></path>
+		case "menu":
+			<line x1="4" y1="12" x2="20" y2="12"></line>
+			<line x1="4" y1="6" x2="20" y2="6"></line>
+			<line x1="4" y1="18" x2="20" y2="18"></line>
+		case "trending-up":
+			<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+			<polyline points="17 6 23 6 23 12"></polyline>
+		case "user":
+			<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+			<circle cx="12" cy="7" r="4"></circle>
+		default:
+			<circle cx="12" cy="12" r="10"></circle>
+			<line x1="12" y1="16" x2="12" y2="12"></line>
+			<line x1="12" y1="8" x2="12.01" y2="8"></line>
+	}
+}

@@ -9,8 +9,8 @@ import (
 templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry) {
 	@Layout(PageData{Title: exerciseName}) {
 		<div class="flex justify-between items-center mb-2">
-			<h1>{ exerciseName }</h1>
-			<a href="/entries/new" role="button">Log Set</a>
+			<h1 class="flex items-center gap-1">@Icon(IconProps{Name: "dumbbell", Size: 24}) { exerciseName }</h1>
+			<a href="/entries/new" role="button" class="flex items-center gap-1">@Icon(IconProps{Name: "plus", Size: 18}) Log Set</a>
 		</div>
 		
 		if len(entries) == 0 {
@@ -20,7 +20,7 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry) {
 				</header>
 				<p>You haven't logged any sets for { exerciseName } yet.</p>
 				<footer>
-					<a href="/entries/new" role="button">Log First Set</a>
+					<a href="/entries/new" role="button" class="flex items-center gap-1">@Icon(IconProps{Name: "plus", Size: 18}) Log First Set</a>
 				</footer>
 			</article>
 		} else {
@@ -49,21 +49,22 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry) {
 							<td>{ entry.Notes }</td>
 							<td>
 								<div class="flex gap-1">
-									<a 
-										href={ templ.SafeURL(fmt.Sprintf("/entries/%d/edit", entry.ID)) } 
-										role="button" 
-										class="secondary"
-										size="small">
-										Edit
+									<a
+										href={ templ.SafeURL(fmt.Sprintf("/entries/%d/edit", entry.ID)) }
+										class="button"
+										role="button"
+										title="Edit"
+									>
+										@Icon(IconProps{Name: "edit", Size: 16})
 									</a>
-									<button 
-										class="secondary"
-										size="small"
+									<button
+										title="Delete"
 										hx-delete={ fmt.Sprintf("/entries/%d", entry.ID) }
 										hx-confirm="Delete this entry?"
 										hx-target={ fmt.Sprintf("#entry-%d", entry.ID) }
-										hx-swap="outerHTML swap:0.3s">
-										Delete
+										hx-swap="outerHTML swap:0.3s"
+									>
+										@Icon(IconProps{Name: "trash", Size: 16})
 									</button>
 								</div>
 							</td>
@@ -74,7 +75,7 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry) {
 		}
 		
 		<div class="mt-2">
-			<a href="/" role="button" class="secondary">← Back to Dashboard</a>
+			<a href="/" role="button" class="secondary flex items-center gap-1">@Icon(IconProps{Name: "arrow-left", Size: 18}) Back to Dashboard</a>
 		</div>
 	}
 }
@@ -83,7 +84,7 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry) {
 templ ExerciseStats(entries []models.ExerciseEntry) {
 	<article>
 		<header>
-			<h3>Stats</h3>
+			<h3 class="flex items-center gap-1">@Icon(IconProps{Name: "trending-up", Size: 20}) Stats</h3>
 		</header>
 		<div class="grid">
 			@StatCard("Personal Best", fmt.Sprintf("%.1f kg", maxWeight(entries)))

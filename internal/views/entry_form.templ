@@ -91,14 +91,15 @@ templ EntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, isEdit
 			</fieldset>
 			
 			<div class="flex gap-1">
-				<button type="submit">
-					if isEdit {
-						Update Entry
-					} else {
-						Save Entry
-					}
-				</button>
-				<a href="/" role="button" class="secondary">Cancel</a>
+			<button type="submit" class="inline-flex items-center gap-1">
+				@Icon(IconProps{Name: "check", Size: 18})
+				if isEdit {
+					Update Entry
+				} else {
+					Save Entry
+				}
+			</button>
+			<a href="/" role="button" class="secondary inline-flex items-center gap-1">@Icon(IconProps{Name: "x", Size: 18}) Cancel</a>
 			</div>
 		</form>
 		
@@ -112,8 +113,8 @@ templ EntryFormSuccess(message string, stayOnPage bool) {
 	
 	if !stayOnPage {
 		<div class="mt-2">
-			<a href="/" role="button">Back to Dashboard</a>
-			<a href="/entries/new" role="button" class="secondary">Add Another</a>
+			<a href="/" role="button" class="flex items-center gap-1">@Icon(IconProps{Name: "arrow-left", Size: 18}) Back to Dashboard</a>
+			<a href="/entries/new" role="button" class="secondary flex items-center gap-1">@Icon(IconProps{Name: "plus", Size: 18}) Add Another</a>
 		</div>
 	} else {
 		<script>

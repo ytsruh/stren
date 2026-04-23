@@ -2,7 +2,7 @@
 
 - [x] Setup air
 - [ ] Add sqlc as DB lib 
-- [ ] Add goose as Migration lib
+- [x] Add goose as Migration lib
 - [ ] Build tags to copy latest htmx/oat files
 - [ ] Add unit tests
 - [x] Turn into PWA
@@ -13,7 +13,7 @@
 
 
 ## UI Changes
-- [ ] Better buttons. Some buttons are just links, not actual buttons
+- [x] Better buttons. Some buttons are just links, not actual buttons
 - [ ] Delete entry modal instead of confirmation
 - [ ] Date formats
 - [ ] After entry redirect to dashbaord

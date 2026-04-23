@@ -12,3 +12,4 @@ stren
 *.dll
 *.so
 *.dylib
+/tmp/*

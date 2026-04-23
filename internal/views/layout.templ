@@ -26,49 +26,36 @@ templ Layout(data PageData) {
 			<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
 			<link rel="manifest" href="/manifest.json"/>
 			<title>{ data.Title } - Strength Tracker</title>
-			
 			<!-- Oat CSS -->
 			<link rel="stylesheet" href="https://unpkg.com/@knadh/oat/oat.min.css"/>
 			<script src="https://unpkg.com/@knadh/oat/oat.min.js" defer></script>
-			
+			<!-- App styles -->
+			<link rel="stylesheet" href="/css/styles.css"/>
 			<!-- htmx -->
 			<script src="https://unpkg.com/htmx.org@1.9.12"></script>
-			
-			<style>
-				html, body { min-height: 100vh; }
-				body { display: flex; flex-direction: column; }
-				main { flex: 1; }
-				.container { max-width: 900px; margin: 0 auto; padding: 2rem; }
-				.mb-2 { margin-bottom: 1rem; }
-				.mt-2 { margin-top: 1rem; }
-				.flex { display: flex; }
-				.justify-between { justify-content: space-between; }
-				.items-center { align-items: center; }
-				.gap-1 { gap: 0.5rem; }
-				.fade-out { animation: fadeOut 0.3s ease-out; }
-				@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-				textarea { width: 100%; min-height: 80px; }
-				select, input:not([type="date"]) { width: 100%; }
-				/* Fix nav styling */
-				nav[data-topnav] { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-4); background-color: var(--background); border-bottom: 1px solid var(--border); box-shadow: var(--shadow-small); }
-				nav[data-topnav] a { text-decoration: none; }
-				nav[data-topnav] ul { display: flex; list-style: none; margin: 0; padding: 0; align-items: center; gap: var(--space-3); }
-				nav[data-topnav] ul:first-child { margin-right: auto; }
-			</style>
 		</head>
 		<body>
 			<header>
 				<nav data-topnav>
 					<ul>
-						<li><strong>Strength Tracker</strong></li>
+						<li><strong>Stren</strong></li>
 					</ul>
 					<ul>
-						<li><a href="/">Dashboard</a></li>
-						<li><a href="/entries/new">New Entry</a></li>
+						<li>
+							<a href="/" class="flex items-center gap-1">
+								@Icon(IconProps{Name: "home", Size: 18})
+								Dashboard
+							</a>
+						</li>
+						<li>
+							<a href="/entries/new" class="flex items-center gap-1">
+								@Icon(IconProps{Name: "plus", Size: 18})
+								New Entry
+							</a>
+						</li>
 					</ul>
 				</nav>
 			</header>
-			
 			<main class="container">
 				{ children... }
 			</main>
@@ -104,7 +91,10 @@ templ EmptyState() {
 		</header>
 		<p>Start tracking your strength journey by adding your first exercise entry.</p>
 		<footer>
-			<a href="/entries/new" role="button">Add First Entry</a>
+			<a href="/entries/new" role="button" class="flex items-center gap-1">
+				@Icon(IconProps{Name: "plus", Size: 18})
+				Add First Entry
+			</a>
 		</footer>
 	</article>
 }

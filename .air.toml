@@ -7,7 +7,7 @@ tmp_dir = "tmp"
 
 [build]
 pre_cmd = ["templ generate"]
-cmd = "go build -o ./tmp/main ./cmd/main.go"
+cmd = "templ generate && go build -o ./tmp/main ./cmd/main.go"
 post_cmd = []
 bin = "tmp/main"
 full_bin = "./tmp/main"
