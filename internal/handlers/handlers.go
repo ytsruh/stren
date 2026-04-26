@@ -17,11 +17,11 @@ import (
 
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
-	repo *models.ExerciseRepository
+	repo models.Repository
 }
 
 // NewHandler creates a new handler instance
-func NewHandler(repo *models.ExerciseRepository) *Handler {
+func NewHandler(repo models.Repository) *Handler {
 	return &Handler{repo: repo}
 }
 

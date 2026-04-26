@@ -89,7 +89,7 @@ func (r *ExerciseRepository) CreateEntry(entry *ExerciseEntry) error {
 		result, err := tx.Exec(
 			`INSERT INTO exercise_entries (exercise_type_id, reps, weight, notes, created_at) 
 			 VALUES (?, ?, ?, ?, ?)`,
-			typeID, entry.Reps, entry.Weight, entry.Notes, entry.CreatedAt,
+			typeID, entry.Reps, entry.Weight, entry.Notes, entry.CreatedAt.Format(time.RFC3339),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create entry: %w", err)
@@ -157,7 +157,7 @@ func (r *ExerciseRepository) UpdateEntryWithDate(entry *ExerciseEntry) error {
 			`UPDATE exercise_entries
 			 SET exercise_type_id = ?, reps = ?, weight = ?, notes = ?, created_at = ?
 			 WHERE id = ?`,
-			typeID, entry.Reps, entry.Weight, entry.Notes, entry.CreatedAt, entry.ID,
+			typeID, entry.Reps, entry.Weight, entry.Notes, entry.CreatedAt.Format(time.RFC3339), entry.ID,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to update entry: %w", err)

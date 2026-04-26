@@ -1,8 +1,11 @@
 package db
 
 import (
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestNewRunsMigrations verifies that db.New applies embedded migrations
@@ -196,5 +199,75 @@ func TestNewWithMemoryDatabase(t *testing.T) {
 	}
 	if count != 10 {
 		t.Fatalf("expected 10 seeded exercise types, got %d", count)
+	}
+}
+
+// TestTransactionCommit verifies that a transaction commits successfully.
+func TestTransactionCommit(t *testing.T) {
+	database, err := New(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create database: %v", err)
+	}
+	defer database.Close()
+
+	err = database.Transaction(func(tx *sql.Tx) error {
+		_, err := tx.Exec("INSERT INTO exercise_types (name) VALUES (?)", "Transaction Test")
+		return err
+	})
+	if err != nil {
+		t.Fatalf("transaction failed: %v", err)
+	}
+
+	var name string
+	err = database.QueryRow("SELECT name FROM exercise_types WHERE name = ?", "Transaction Test").Scan(&name)
+	if err != nil {
+		t.Fatalf("expected committed row not found: %v", err)
+	}
+	if name != "Transaction Test" {
+		t.Fatalf("expected 'Transaction Test', got %q", name)
+	}
+}
+
+// TestTransactionRollback verifies that a transaction rolls back on error.
+func TestTransactionRollback(t *testing.T) {
+	database, err := New(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create database: %v", err)
+	}
+	defer database.Close()
+
+	expectedErr := errors.New("intentional failure")
+	err = database.Transaction(func(tx *sql.Tx) error {
+		_, err := tx.Exec("INSERT INTO exercise_types (name) VALUES (?)", "Rollback Test")
+		if err != nil {
+			return err
+		}
+		return expectedErr
+	})
+	if err == nil {
+		t.Fatal("expected error from transaction, got nil")
+	}
+
+	var count int
+	err = database.QueryRow("SELECT COUNT(*) FROM exercise_types WHERE name = ?", "Rollback Test").Scan(&count)
+	if err != nil {
+		t.Fatalf("failed to query: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 rows after rollback, got %d", count)
+	}
+}
+
+// TestNow verifies that Now returns a string in the expected SQLite datetime format.
+func TestNow(t *testing.T) {
+	got := Now()
+	// Expected format: "2006-01-02 15:04:05"
+	if got == "" {
+		t.Fatal("Now() returned empty string")
+	}
+
+	_, err := time.Parse("2006-01-02 15:04:05", got)
+	if err != nil {
+		t.Fatalf("Now() returned unparsable format %q: %v", got, err)
 	}
 }

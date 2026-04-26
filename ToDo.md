@@ -3,12 +3,12 @@
 - [x] Setup air
 - [ ] Add sqlc as DB lib 
 - [x] Add goose as Migration lib
-- [ ] Add unit tests
+- [x] Add unit tests
 - [x] Turn into PWA
 - [x] Add Dockerfile
 - [ ] Add Auth and scope data to users
 - [ ] Switch to Turso
-- [ ] Make a utils file to check envs at startup
+- [x] Make a utils file to check envs at startup
 
 
 ## UI Changes
