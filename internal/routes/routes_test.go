@@ -1,4 +1,4 @@
-package handlers
+package routes
 
 import (
 	"database/sql"
@@ -15,8 +15,11 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"golang.org/x/crypto/bcrypt"
 
+	"stren/internal/controllers"
 	"stren/internal/models"
+	"stren/internal/utils"
 )
 
 // mockRepository is an in-memory implementation of models.Repository for testing.
@@ -28,16 +31,16 @@ type mockRepository struct {
 	nextTypeID  int64
 	nextEntryID int64
 
-	errCreateType          error
-	errGetTypeByName       error
-	errListTypes           error
-	errCreateEntry         error
-	errGetEntry            error
-	errUpdateEntry         error
-	errUpdateEntryWithDate error
-	errDeleteEntry         error
-	errListEntries         error
-	errGetEntriesByExercise error
+	errCreateType            error
+	errGetTypeByName         error
+	errListTypes             error
+	errCreateEntry           error
+	errGetEntry              error
+	errUpdateEntry           error
+	errUpdateEntryWithDate   error
+	errDeleteEntry           error
+	errListEntries           error
+	errGetEntriesByExercise  error
 	errGetEntriesByDateRange error
 }
 
@@ -117,14 +120,14 @@ func (m *mockRepository) CreateEntry(entry *models.ExerciseEntry) error {
 	return nil
 }
 
-func (m *mockRepository) GetEntry(id int64) (*models.ExerciseEntry, error) {
+func (m *mockRepository) GetEntry(id int64, userID int64) (*models.ExerciseEntry, error) {
 	if m.errGetEntry != nil {
 		return nil, m.errGetEntry
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.entries {
-		if e.ID == id {
+		if e.ID == id && e.UserID == userID {
 			cp := e
 			return &cp, nil
 		}
@@ -132,14 +135,14 @@ func (m *mockRepository) GetEntry(id int64) (*models.ExerciseEntry, error) {
 	return nil, nil
 }
 
-func (m *mockRepository) UpdateEntry(entry *models.ExerciseEntry) error {
+func (m *mockRepository) UpdateEntry(entry *models.ExerciseEntry, userID int64) error {
 	if m.errUpdateEntry != nil {
 		return m.errUpdateEntry
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, e := range m.entries {
-		if e.ID == entry.ID {
+		if e.ID == entry.ID && e.UserID == userID {
 			m.entries[i] = *entry
 			return nil
 		}
@@ -147,14 +150,14 @@ func (m *mockRepository) UpdateEntry(entry *models.ExerciseEntry) error {
 	return nil
 }
 
-func (m *mockRepository) UpdateEntryWithDate(entry *models.ExerciseEntry) error {
+func (m *mockRepository) UpdateEntryWithDate(entry *models.ExerciseEntry, userID int64) error {
 	if m.errUpdateEntryWithDate != nil {
 		return m.errUpdateEntryWithDate
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, e := range m.entries {
-		if e.ID == entry.ID {
+		if e.ID == entry.ID && e.UserID == userID {
 			m.entries[i] = *entry
 			return nil
 		}
@@ -162,14 +165,14 @@ func (m *mockRepository) UpdateEntryWithDate(entry *models.ExerciseEntry) error 
 	return nil
 }
 
-func (m *mockRepository) DeleteEntry(id int64) error {
+func (m *mockRepository) DeleteEntry(id int64, userID int64) error {
 	if m.errDeleteEntry != nil {
 		return m.errDeleteEntry
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, e := range m.entries {
-		if e.ID == id {
+		if e.ID == id && e.UserID == userID {
 			m.entries = append(m.entries[:i], m.entries[i+1:]...)
 			return nil
 		}
@@ -177,21 +180,25 @@ func (m *mockRepository) DeleteEntry(id int64) error {
 	return nil
 }
 
-func (m *mockRepository) ListEntries(limit int) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) ListEntries(userID int64, limit int) ([]models.ExerciseEntry, error) {
 	if m.errListEntries != nil {
 		return nil, m.errListEntries
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	result := make([]models.ExerciseEntry, len(m.entries))
-	copy(result, m.entries)
+	var result []models.ExerciseEntry
+	for _, e := range m.entries {
+		if e.UserID == userID {
+			result = append(result, e)
+		}
+	}
 	if limit > 0 && limit < len(result) {
 		result = result[:limit]
 	}
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByExercise(exerciseName string) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) GetEntriesByExercise(exerciseName string, userID int64) ([]models.ExerciseEntry, error) {
 	if m.errGetEntriesByExercise != nil {
 		return nil, m.errGetEntriesByExercise
 	}
@@ -199,14 +206,14 @@ func (m *mockRepository) GetEntriesByExercise(exerciseName string) ([]models.Exe
 	defer m.mu.Unlock()
 	var result []models.ExerciseEntry
 	for _, e := range m.entries {
-		if e.ExerciseName == exerciseName {
+		if e.ExerciseName == exerciseName && e.UserID == userID {
 			result = append(result, e)
 		}
 	}
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByDateRange(start, end time.Time) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID int64) ([]models.ExerciseEntry, error) {
 	if m.errGetEntriesByDateRange != nil {
 		return nil, m.errGetEntriesByDateRange
 	}
@@ -214,36 +221,100 @@ func (m *mockRepository) GetEntriesByDateRange(start, end time.Time) ([]models.E
 	defer m.mu.Unlock()
 	var result []models.ExerciseEntry
 	for _, e := range m.entries {
-		if !e.CreatedAt.Before(start) && !e.CreatedAt.After(end) {
+		if !e.CreatedAt.Before(start) && !e.CreatedAt.After(end) && e.UserID == userID {
 			result = append(result, e)
 		}
 	}
 	return result, nil
 }
 
-// setupHandler creates a Handler backed by a mock repository for testing.
-func setupHandler(t *testing.T) (*Handler, *mockRepository, *echo.Echo) {
+// mockUserRepository is an in-memory implementation of models.UserRepo for testing.
+type mockUserRepository struct {
+	mu     sync.Mutex
+	users  []models.User
+	nextID int64
+}
+
+func newMockUserRepository() *mockUserRepository {
+	return &mockUserRepository{nextID: 1}
+}
+
+func (m *mockUserRepository) CreateUser(user *models.User) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.users {
+		if u.Email == user.Email {
+			return errors.New("email already exists")
+		}
+	}
+	user.ID = m.nextID
+	m.nextID++
+	m.users = append(m.users, *user)
+	return nil
+}
+
+func (m *mockUserRepository) GetUserByEmail(email string) (*models.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.users {
+		if u.Email == email {
+			cp := u
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockUserRepository) GetUserByID(id int64) (*models.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.users {
+		if u.ID == id {
+			cp := u
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+// setupHandler creates a Handler backed by mock repositories for testing.
+func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository, *echo.Echo) {
 	t.Helper()
 	e := echo.New()
 	mock := newMockRepository()
+	mockUser := newMockUserRepository()
+	jwtService := utils.NewJWTService("test-secret")
 	// Seed with some exercise types so forms render correctly.
 	mock.types = []models.ExerciseType{
 		{ID: 1, Name: "Squat"},
 		{ID: 2, Name: "Bench Press"},
 	}
 	mock.nextTypeID = 3
-	h := NewHandler(mock)
-	return h, mock, e
+	authCtrl := controllers.NewAuthController(mockUser, jwtService)
+	entryCtrl := controllers.NewEntryController(mock)
+	h := NewHandler(authCtrl, entryCtrl, jwtService)
+	return h, mock, mockUser, e
 }
 
-// chdirToProjectRoot changes to the project root when running from internal/handlers.
+// setAuthContext adds an authenticated user to the Echo context for testing.
+func setAuthContext(c echo.Context, userID int64, email, name string, isAdmin bool) {
+	claims := &utils.Claims{
+		UserID:  userID,
+		Email:   email,
+		Name:    name,
+		IsAdmin: isAdmin,
+	}
+	c.Set("auth_claims", claims)
+}
+
+// chdirToProjectRoot changes to the project root when running from internal/routes.
 func chdirToProjectRoot(t *testing.T) {
 	t.Helper()
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Base(wd) == "handlers" {
+	if filepath.Base(wd) == "routes" {
 		if err := os.Chdir("../.."); err != nil {
 			t.Fatal(err)
 		}
@@ -254,14 +325,15 @@ func chdirToProjectRoot(t *testing.T) {
 }
 
 func TestDashboard(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.Dashboard(c); err != nil {
 		t.Fatalf("Dashboard failed: %v", err)
@@ -275,12 +347,13 @@ func TestDashboard(t *testing.T) {
 }
 
 func TestDashboard_RepositoryError(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.errListEntries = errors.New("db error")
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	err := h.Dashboard(c)
 	if err == nil {
@@ -289,11 +362,12 @@ func TestDashboard_RepositoryError(t *testing.T) {
 }
 
 func TestNewEntryForm(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/entries/new", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.NewEntryForm(c); err != nil {
 		t.Fatalf("NewEntryForm failed: %v", err)
@@ -307,7 +381,7 @@ func TestNewEntryForm(t *testing.T) {
 }
 
 func TestCreateEntry(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_name", "Squat")
@@ -318,6 +392,7 @@ func TestCreateEntry(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
@@ -332,7 +407,7 @@ func TestCreateEntry(t *testing.T) {
 }
 
 func TestCreateEntry_HTMX(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_name", "Squat")
@@ -344,6 +419,7 @@ func TestCreateEntry_HTMX(t *testing.T) {
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
@@ -358,7 +434,7 @@ func TestCreateEntry_HTMX(t *testing.T) {
 }
 
 func TestCreateEntry_InvalidReps(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_name", "Squat")
@@ -369,6 +445,7 @@ func TestCreateEntry_InvalidReps(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
@@ -383,7 +460,7 @@ func TestCreateEntry_InvalidReps(t *testing.T) {
 }
 
 func TestCreateEntry_InvalidWeight(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_name", "Squat")
@@ -394,6 +471,7 @@ func TestCreateEntry_InvalidWeight(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
@@ -408,7 +486,7 @@ func TestCreateEntry_InvalidWeight(t *testing.T) {
 }
 
 func TestCreateEntry_MissingName(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_name", "")
@@ -419,6 +497,7 @@ func TestCreateEntry_MissingName(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
@@ -433,7 +512,7 @@ func TestCreateEntry_MissingName(t *testing.T) {
 }
 
 func TestCreateEntry_RepositoryError(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.errCreateEntry = errors.New("db error")
 
 	form := url.Values{}
@@ -445,6 +524,7 @@ func TestCreateEntry_RepositoryError(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
@@ -459,9 +539,9 @@ func TestCreateEntry_RepositoryError(t *testing.T) {
 }
 
 func TestEditEntryForm(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/entries/1/edit", nil)
@@ -469,6 +549,7 @@ func TestEditEntryForm(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("1")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.EditEntryForm(c); err != nil {
 		t.Fatalf("EditEntryForm failed: %v", err)
@@ -482,13 +563,14 @@ func TestEditEntryForm(t *testing.T) {
 }
 
 func TestEditEntryForm_InvalidID(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/entries/abc/edit", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("abc")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	err := h.EditEntryForm(c)
 	if err == nil {
@@ -501,13 +583,14 @@ func TestEditEntryForm_InvalidID(t *testing.T) {
 }
 
 func TestEditEntryForm_NotFound(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/entries/999/edit", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("999")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	err := h.EditEntryForm(c)
 	if err == nil {
@@ -520,9 +603,9 @@ func TestEditEntryForm_NotFound(t *testing.T) {
 }
 
 func TestGetEntry(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/entries/1", nil)
@@ -530,6 +613,7 @@ func TestGetEntry(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("1")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.GetEntry(c); err != nil {
 		t.Fatalf("GetEntry failed: %v", err)
@@ -543,13 +627,14 @@ func TestGetEntry(t *testing.T) {
 }
 
 func TestGetEntry_InvalidID(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/entries/abc", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("abc")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	err := h.GetEntry(c)
 	if err == nil {
@@ -562,13 +647,14 @@ func TestGetEntry_InvalidID(t *testing.T) {
 }
 
 func TestGetEntry_NotFound(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/entries/999", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("999")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	err := h.GetEntry(c)
 	if err == nil {
@@ -581,9 +667,9 @@ func TestGetEntry_NotFound(t *testing.T) {
 }
 
 func TestUpdateEntry(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 
 	form := url.Values{}
@@ -599,6 +685,7 @@ func TestUpdateEntry(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("1")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.UpdateEntry(c); err != nil {
 		t.Fatalf("UpdateEntry failed: %v", err)
@@ -613,9 +700,9 @@ func TestUpdateEntry(t *testing.T) {
 }
 
 func TestUpdateEntry_Redirect(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 
 	form := url.Values{}
@@ -629,6 +716,7 @@ func TestUpdateEntry_Redirect(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("1")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.UpdateEntry(c); err != nil {
 		t.Fatalf("UpdateEntry failed: %v", err)
@@ -643,9 +731,9 @@ func TestUpdateEntry_Redirect(t *testing.T) {
 }
 
 func TestUpdateEntry_InvalidDate(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 
 	form := url.Values{}
@@ -660,6 +748,7 @@ func TestUpdateEntry_InvalidDate(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("1")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.UpdateEntry(c); err != nil {
 		t.Fatalf("UpdateEntry failed: %v", err)
@@ -674,13 +763,14 @@ func TestUpdateEntry_InvalidDate(t *testing.T) {
 }
 
 func TestUpdateEntry_InvalidID(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodPut, "/entries/abc", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("abc")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	err := h.UpdateEntry(c)
 	if err == nil {
@@ -693,9 +783,9 @@ func TestUpdateEntry_InvalidID(t *testing.T) {
 }
 
 func TestDeleteEntry(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/entries/1", nil)
@@ -703,6 +793,7 @@ func TestDeleteEntry(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("1")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.DeleteEntry(c); err != nil {
 		t.Fatalf("DeleteEntry failed: %v", err)
@@ -716,13 +807,14 @@ func TestDeleteEntry(t *testing.T) {
 }
 
 func TestDeleteEntry_InvalidID(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/entries/abc", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("abc")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	err := h.DeleteEntry(c)
 	if err == nil {
@@ -735,10 +827,10 @@ func TestDeleteEntry_InvalidID(t *testing.T) {
 }
 
 func TestExerciseHistory(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
-		{ID: 2, ExerciseName: "Bench Press", Reps: 8, Weight: 80},
+		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: 2, UserID: 1, ExerciseName: "Bench Press", Reps: 8, Weight: 80},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/exercises/Squat", nil)
@@ -746,6 +838,7 @@ func TestExerciseHistory(t *testing.T) {
 	c := e.NewContext(req, rec)
 	c.SetParamNames("name")
 	c.SetParamValues("Squat")
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.ExerciseHistory(c); err != nil {
 		t.Fatalf("ExerciseHistory failed: %v", err)
@@ -759,11 +852,12 @@ func TestExerciseHistory(t *testing.T) {
 }
 
 func TestListExerciseTypes(t *testing.T) {
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/exercises", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.ListExerciseTypes(c); err != nil {
 		t.Fatalf("ListExerciseTypes failed: %v", err)
@@ -785,12 +879,13 @@ func TestListExerciseTypes(t *testing.T) {
 }
 
 func TestListExerciseTypes_RepositoryError(t *testing.T) {
-	h, mock, e := setupHandler(t)
+	h, mock, _, e := setupHandler(t)
 	mock.errListTypes = errors.New("db error")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/exercises", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	err := h.ListExerciseTypes(c)
 	if err == nil {
@@ -801,11 +896,12 @@ func TestListExerciseTypes_RepositoryError(t *testing.T) {
 func TestServeManifest(t *testing.T) {
 	chdirToProjectRoot(t)
 
-	h, _, e := setupHandler(t)
+	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/manifest.json", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
 	if err := h.ServeManifest(c); err != nil {
 		t.Fatalf("ServeManifest failed: %v", err)
@@ -819,21 +915,24 @@ func TestServeManifest(t *testing.T) {
 	}
 }
 
-func TestParseEntryForm_Valid(t *testing.T) {
-	h, _, e := setupHandler(t)
+func newEchoContextWithForm(t *testing.T, form url.Values) echo.Context {
+	t.Helper()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	return e.NewContext(req, rec)
+}
 
+func TestParseEntryForm_Valid(t *testing.T) {
 	form := url.Values{}
 	form.Set("exercise_name", "Deadlift")
 	form.Set("reps", "5")
 	form.Set("weight", "180.5")
 	form.Set("notes", "PR")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	entry, err := h.parseEntryForm(c)
+	c := newEchoContextWithForm(t, form)
+	entry, err := parseEntryForm(c)
 	if err != nil {
 		t.Fatalf("parseEntryForm failed: %v", err)
 	}
@@ -852,19 +951,13 @@ func TestParseEntryForm_Valid(t *testing.T) {
 }
 
 func TestParseEntryForm_MissingName(t *testing.T) {
-	h, _, e := setupHandler(t)
-
 	form := url.Values{}
 	form.Set("exercise_name", "")
 	form.Set("reps", "5")
 	form.Set("weight", "100")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	_, err := h.parseEntryForm(c)
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntryForm(c)
 	if err == nil {
 		t.Fatal("expected error for missing exercise name")
 	}
@@ -886,19 +979,13 @@ func TestParseEntryForm_InvalidReps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h, _, e := setupHandler(t)
-
 			form := url.Values{}
 			form.Set("exercise_name", "Squat")
 			form.Set("reps", tt.reps)
 			form.Set("weight", "100")
 
-			req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			_, err := h.parseEntryForm(c)
+			c := newEchoContextWithForm(t, form)
+			_, err := parseEntryForm(c)
 			if err == nil {
 				t.Fatal("expected error for invalid reps")
 			}
@@ -921,19 +1008,13 @@ func TestParseEntryForm_InvalidWeight(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h, _, e := setupHandler(t)
-
 			form := url.Values{}
 			form.Set("exercise_name", "Squat")
 			form.Set("reps", "5")
 			form.Set("weight", tt.weight)
 
-			req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			_, err := h.parseEntryForm(c)
+			c := newEchoContextWithForm(t, form)
+			_, err := parseEntryForm(c)
 			if err == nil {
 				t.Fatal("expected error for invalid weight")
 			}
@@ -942,5 +1023,162 @@ func TestParseEntryForm_InvalidWeight(t *testing.T) {
 				t.Fatalf("expected bad request error, got %v", err)
 			}
 		})
+	}
+}
+
+// --- Auth Handler Tests ---
+
+func TestLoginForm(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.LoginForm(c); err != nil {
+		t.Fatalf("LoginForm failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Login") {
+		t.Fatalf("expected login form, got %q", body)
+	}
+}
+
+func TestRegisterForm(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/register", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.RegisterForm(c); err != nil {
+		t.Fatalf("RegisterForm failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Register") {
+		t.Fatalf("expected register form, got %q", body)
+	}
+}
+
+func TestRegisterAndLogin(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	// Register
+	form := url.Values{}
+	form.Set("name", "Alice")
+	form.Set("email", "alice@example.com")
+	form.Set("password", "secret123")
+
+	req := httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.Register(c); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect after register, got %d", rec.Code)
+	}
+	loc := rec.Header().Get("Location")
+	if loc != "/" {
+		t.Fatalf("expected redirect to '/', got %q", loc)
+	}
+
+	// Verify cookie was set
+	cookies := rec.Result().Cookies()
+	var hasAuth bool
+	for _, cookie := range cookies {
+		if cookie.Name == utils.CookieName {
+			hasAuth = true
+			break
+		}
+	}
+	if !hasAuth {
+		t.Fatal("expected auth cookie to be set after registration")
+	}
+
+	// Login with same credentials
+	form = url.Values{}
+	form.Set("email", "alice@example.com")
+	form.Set("password", "secret123")
+
+	req = httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec = httptest.NewRecorder()
+	c = e.NewContext(req, rec)
+
+	if err := h.Login(c); err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect after login, got %d", rec.Code)
+	}
+}
+
+func TestLogin_InvalidPassword(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+
+	// Pre-seed a user
+	hash, _ := bcrypt.GenerateFromPassword([]byte("correct"), bcrypt.DefaultCost)
+	mockUser.users = append(mockUser.users, models.User{
+		ID:           1,
+		Name:         "Bob",
+		Email:        "bob@example.com",
+		PasswordHash: string(hash),
+	})
+
+	form := url.Values{}
+	form.Set("email", "bob@example.com")
+	form.Set("password", "wrong")
+
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.Login(c); err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Invalid") {
+		t.Fatalf("expected error message, got %q", body)
+	}
+}
+
+func TestLogout(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
+
+	if err := h.Logout(c); err != nil {
+		t.Fatalf("Logout failed: %v", err)
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect after logout, got %d", rec.Code)
+	}
+	loc := rec.Header().Get("Location")
+	if loc != "/login" {
+		t.Fatalf("expected redirect to '/login', got %q", loc)
+	}
+
+	// Verify cookie is cleared
+	cookies := rec.Result().Cookies()
+	for _, cookie := range cookies {
+		if cookie.Name == utils.CookieName && cookie.MaxAge >= 0 {
+			t.Fatal("expected auth cookie to be cleared")
+		}
 	}
 }

@@ -11,6 +11,7 @@ import (
 type ExerciseEntry struct {
 	ID             int64
 	ExerciseTypeID int64
+	UserID         sql.NullInt64
 	Reps           int64
 	Weight         float64
 	Notes          sql.NullString
@@ -20,4 +21,14 @@ type ExerciseEntry struct {
 type ExerciseType struct {
 	ID   int64
 	Name string
+}
+
+type User struct {
+	ID           int64
+	Name         string
+	Email        string
+	PasswordHash string
+	IsAdmin      int64
+	CreatedAt    sql.NullTime
+	UpdatedAt    sql.NullTime
 }

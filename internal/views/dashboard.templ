@@ -7,8 +7,8 @@ import (
 )
 
 // Dashboard renders the main dashboard page
-templ Dashboard(entries []models.ExerciseEntry) {
-	@Layout(PageData{Title: "Dashboard"}) {
+templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated bool) {
+	@Layout(PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated}) {
 		<div class="flex justify-between items-center mb-2">
 			<h1>Workout History</h1>
 			<a href="/entries/new" role="button" class="flex items-center gap-1">

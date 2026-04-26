@@ -19,6 +19,7 @@ type EnvVar struct {
 	DB_PATH            string `env:"DB_PATH"`
 	TURSO_DATABASE_URL string `env:"TURSO_DATABASE_URL"`
 	TURSO_AUTH_TOKEN   string `env:"TURSO_AUTH_TOKEN"`
+	JWT_SECRET         string `env:"JWT_SECRET"`
 }
 
 var (
@@ -40,6 +41,7 @@ func LoadAndValidateEnv() (*EnvVar, error) {
 		DB_PATH:            os.Getenv("DB_PATH"),
 		TURSO_DATABASE_URL: os.Getenv("TURSO_DATABASE_URL"),
 		TURSO_AUTH_TOKEN:   os.Getenv("TURSO_AUTH_TOKEN"),
+		JWT_SECRET:         os.Getenv("JWT_SECRET"),
 	}
 
 	// Validate that all required environment variables are set

@@ -4,9 +4,11 @@ go 1.25.3
 
 require (
 	github.com/a-h/templ v0.3.1001
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/pressly/goose/v3 v3.27.0
+	golang.org/x/crypto v0.48.0
 	turso.tech/database/tursogo v0.5.3
 )
 
@@ -21,7 +23,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect

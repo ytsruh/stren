@@ -3,10 +3,12 @@ package views
 import "stren/internal/models"
 
 type PageData struct {
-	Title   string
-	Entries []models.ExerciseEntry
-	Types   []models.ExerciseType
-	Entry   *models.ExerciseEntry
+	Title          string
+	Entries        []models.ExerciseEntry
+	Types          []models.ExerciseType
+	Entry          *models.ExerciseEntry
+	UserName       string
+	IsAuthenticated bool
 }
 
 // Layout is the base layout for all pages
@@ -41,18 +43,35 @@ templ Layout(data PageData) {
 						<li><strong>Stren</strong></li>
 					</ul>
 					<ul>
-						<li>
-							<a href="/" class="flex items-center gap-1">
-								@Icon(IconProps{Name: "home", Size: 18})
-								Dashboard
-							</a>
-						</li>
-						<li>
-							<a href="/entries/new" class="flex items-center gap-1">
-								@Icon(IconProps{Name: "plus", Size: 18})
-								New Entry
-							</a>
-						</li>
+						if data.IsAuthenticated {
+							<li>
+								<a href="/" class="flex items-center gap-1">
+									@Icon(IconProps{Name: "home", Size: 18})
+									Dashboard
+								</a>
+							</li>
+							<li>
+								<a href="/entries/new" class="flex items-center gap-1">
+									@Icon(IconProps{Name: "plus", Size: 18})
+									New Entry
+								</a>
+							</li>
+							<li>
+								<form method="POST" action="/logout" style="display: inline;">
+									<button type="submit" class="outline" style="margin: 0;">
+										@Icon(IconProps{Name: "log-out", Size: 18})
+										{ data.UserName }
+									</button>
+								</form>
+							</li>
+						} else {
+							<li>
+								<a href="/login">Login</a>
+							</li>
+							<li>
+								<a href="/register" role="button">Register</a>
+							</li>
+						}
 					</ul>
 				</nav>
 			</header>

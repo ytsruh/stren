@@ -15,6 +15,7 @@ type ExerciseType struct {
 type ExerciseEntry struct {
 	ID             int64
 	ExerciseTypeID int64
+	UserID         int64
 	ExerciseName   string
 	Reps           int
 	Weight         float64

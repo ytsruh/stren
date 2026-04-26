@@ -1,0 +1,65 @@
+package views
+
+// LoginPage renders the login form.
+templ LoginPage(errorMsg string) {
+	@Layout(PageData{Title: "Login", UserName: "", IsAuthenticated: false}) {
+		<article style="max-width: 400px; margin: 2rem auto;">
+			<header>
+				<h2>Login</h2>
+			</header>
+			<form method="POST" action="/login">
+				<fieldset>
+					<label>
+						Email
+						<input type="email" name="email" placeholder="you@example.com" required/>
+					</label>
+					<label>
+						Password
+						<input type="password" name="password" placeholder="Password" required/>
+					</label>
+				</fieldset>
+				if errorMsg != "" {
+					<p class="text-red-600" style="color: #dc2626;">{ errorMsg }</p>
+				}
+				<button type="submit">Login</button>
+			</form>
+			<footer>
+				<p>Don't have an account? <a href="/register">Register</a></p>
+			</footer>
+		</article>
+	}
+}
+
+// RegisterPage renders the registration form.
+templ RegisterPage(errorMsg string) {
+	@Layout(PageData{Title: "Register", UserName: "", IsAuthenticated: false}) {
+		<article style="max-width: 400px; margin: 2rem auto;">
+			<header>
+				<h2>Register</h2>
+			</header>
+			<form method="POST" action="/register">
+				<fieldset>
+					<label>
+						Name
+						<input type="text" name="name" placeholder="Your name" required/>
+					</label>
+					<label>
+						Email
+						<input type="email" name="email" placeholder="you@example.com" required/>
+					</label>
+					<label>
+						Password
+						<input type="password" name="password" placeholder="Min 6 characters" required/>
+					</label>
+				</fieldset>
+				if errorMsg != "" {
+					<p class="text-red-600" style="color: #dc2626;">{ errorMsg }</p>
+				}
+				<button type="submit">Create Account</button>
+			</form>
+			<footer>
+				<p>Already have an account? <a href="/login">Login</a></p>
+			</footer>
+		</article>
+	}
+}

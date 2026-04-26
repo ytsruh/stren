@@ -6,8 +6,8 @@ import (
 )
 
 // ExerciseHistory shows all entries for a specific exercise
-templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry) {
-	@Layout(PageData{Title: exerciseName}) {
+templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userName string, isAuthenticated bool) {
+	@Layout(PageData{Title: exerciseName, UserName: userName, IsAuthenticated: isAuthenticated}) {
 		<div class="flex justify-between items-center mb-2">
 			<h1 class="flex items-center gap-1">@Icon(IconProps{Name: "dumbbell", Size: 24}) { exerciseName }</h1>
 			<a href="/entries/new" role="button" class="flex items-center gap-1">@Icon(IconProps{Name: "plus", Size: 18}) Log Set</a>

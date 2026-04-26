@@ -7,6 +7,7 @@
 ## Code & Development Instructions
 - Use Makefile scripts where possible
 - Add and create unit tests wherever possible
+- Follow go best practices at all time. Particulary using interfaces, packages should create interfaces that they accept.
 - templ is used for templating lanaguage & must be regenerated before running the application. Generated files: `internal/views/*_templ.go` (don't edit directly)
 - Avoid adding new dependancies. If they are needed, discuss with user/developer first. If agreed to use then always wrap dependancies in packages so they are isolated and easily edited, removed, updated without codebase wide changes.
 - Add documentation/annotations to code wherever possible to explain what functions, structs etc do.
@@ -15,9 +16,10 @@
 ## Technology & Architecture
 - **Tech stack**: Go 1.25+, Echo, Templ, Turso Sync (turso.tech/database/tursogo), htmx, Oat CSS
 - **Entry point**: `cmd/main.go`
-- **HTTP handlers**: `internal/handlers/handlers.go` (Echo framework)
-- **Repository**: `internal/models/repository.go` (CRUD operations)
-- **Models**: `internal/models/models.go` (ExerciseType, ExerciseEntry)
+- **HTTP routes**: `internal/routes/*.go` (Echo framework — request parsing, rendering, redirects, middleware)
+- **Controllers**: `internal/controllers/*.go` (business logic — auth, entry CRUD orchestration)
+- **Repository interfaces**: `internal/models/repository.go` (CRUD operations)
+- **Models**: `internal/models/models.go` (ExerciseType, ExerciseEntry, User)
 - **Database**: `internal/db/db.go` (Turso Sync wrapper with local-first reads/writes and background cloud sync)
 - **Migrations**: `internal/db/migrations/*.sql` managed by [goose](https://github.com/pressly/goose) and embedded in the binary via `//go:embed`
 - **Templates**: `internal/views/*.templ` (Templ HTML templates)

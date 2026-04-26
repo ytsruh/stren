@@ -7,8 +7,8 @@ import (
 )
 
 // EntryForm renders the form for creating/editing entries
-templ EntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, isEdit bool) {
-	@Layout(PageData{Title: formTitle(isEdit)}) {
+templ EntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, isEdit bool, userName string, isAuthenticated bool) {
+	@Layout(PageData{Title: formTitle(isEdit), UserName: userName, IsAuthenticated: isAuthenticated}) {
 		<h1>{ formTitle(isEdit) }</h1>
 		
 		<form 

@@ -6,9 +6,10 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"stren/internal/controllers"
 	"stren/internal/db"
-	"stren/internal/handlers"
 	"stren/internal/models"
+	"stren/internal/routes"
 	"stren/internal/utils"
 )
 
@@ -26,11 +27,19 @@ func main() {
 	}
 	defer database.Close()
 
-	// Initialize repository
+	// Initialize repositories
 	repo := models.NewExerciseRepository(database)
+	userRepo := models.NewUserRepository(database)
 
-	// Initialize handlers
-	h := handlers.NewHandler(repo)
+	// Initialize auth service
+	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
+
+	// Initialize controllers
+	authCtrl := controllers.NewAuthController(userRepo, jwtService)
+	entryCtrl := controllers.NewEntryController(repo)
+
+	// Initialize route handlers
+	h := routes.NewHandler(authCtrl, entryCtrl, jwtService)
 
 	// Create Echo instance
 	e := echo.New()

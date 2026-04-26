@@ -73,6 +73,7 @@ func (r *ExerciseRepository) CreateEntry(entry *ExerciseEntry) error {
 
 		id, err := qtx.CreateEntry(ctx, db.CreateEntryParams{
 			ExerciseTypeID: typeID,
+			UserID:         sql.NullInt64{Int64: entry.UserID, Valid: true},
 			Reps:           int64(entry.Reps),
 			Weight:         entry.Weight,
 			Notes:          stringToNullString(entry.Notes),
@@ -89,9 +90,13 @@ func (r *ExerciseRepository) CreateEntry(entry *ExerciseEntry) error {
 }
 
 // GetEntry retrieves a single entry by ID with its exercise type name.
-func (r *ExerciseRepository) GetEntry(id int64) (*ExerciseEntry, error) {
+// Returns nil if not found. Scopes to the given user ID.
+func (r *ExerciseRepository) GetEntry(id int64, userID int64) (*ExerciseEntry, error) {
 	ctx := context.Background()
-	row, err := r.queries.GetEntry(ctx, id)
+	row, err := r.queries.GetEntry(ctx, db.GetEntryParams{
+		ID:     id,
+		UserID: sql.NullInt64{Int64: userID, Valid: true},
+	})
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -102,7 +107,8 @@ func (r *ExerciseRepository) GetEntry(id int64) (*ExerciseEntry, error) {
 }
 
 // UpdateEntry updates an existing entry without changing its created_at date.
-func (r *ExerciseRepository) UpdateEntry(entry *ExerciseEntry) error {
+// Scopes to the given user ID.
+func (r *ExerciseRepository) UpdateEntry(entry *ExerciseEntry, userID int64) error {
 	return r.db.Transaction(func(tx *sql.Tx) error {
 		ctx := context.Background()
 		qtx := r.queries.WithTx(tx)
@@ -118,6 +124,7 @@ func (r *ExerciseRepository) UpdateEntry(entry *ExerciseEntry) error {
 			Weight:         entry.Weight,
 			Notes:          stringToNullString(entry.Notes),
 			ID:             entry.ID,
+			UserID:         sql.NullInt64{Int64: userID, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update entry: %w", err)
@@ -129,7 +136,8 @@ func (r *ExerciseRepository) UpdateEntry(entry *ExerciseEntry) error {
 }
 
 // UpdateEntryWithDate updates an existing entry including its created_at date.
-func (r *ExerciseRepository) UpdateEntryWithDate(entry *ExerciseEntry) error {
+// Scopes to the given user ID.
+func (r *ExerciseRepository) UpdateEntryWithDate(entry *ExerciseEntry, userID int64) error {
 	return r.db.Transaction(func(tx *sql.Tx) error {
 		ctx := context.Background()
 		qtx := r.queries.WithTx(tx)
@@ -146,6 +154,7 @@ func (r *ExerciseRepository) UpdateEntryWithDate(entry *ExerciseEntry) error {
 			Notes:          stringToNullString(entry.Notes),
 			CreatedAt:      timeToNullTime(entry.CreatedAt),
 			ID:             entry.ID,
+			UserID:         sql.NullInt64{Int64: userID, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update entry: %w", err)
@@ -156,10 +165,13 @@ func (r *ExerciseRepository) UpdateEntryWithDate(entry *ExerciseEntry) error {
 	})
 }
 
-// DeleteEntry removes an entry by ID.
-func (r *ExerciseRepository) DeleteEntry(id int64) error {
+// DeleteEntry removes an entry by ID. Scopes to the given user ID.
+func (r *ExerciseRepository) DeleteEntry(id int64, userID int64) error {
 	ctx := context.Background()
-	err := r.queries.DeleteEntry(ctx, id)
+	err := r.queries.DeleteEntry(ctx, db.DeleteEntryParams{
+		ID:     id,
+		UserID: sql.NullInt64{Int64: userID, Valid: true},
+	})
 	if err != nil {
 		return fmt.Errorf("failed to delete entry: %w", err)
 	}
@@ -167,21 +179,26 @@ func (r *ExerciseRepository) DeleteEntry(id int64) error {
 }
 
 // ListEntries returns entries ordered by created_at descending.
-func (r *ExerciseRepository) ListEntries(limit int) ([]ExerciseEntry, error) {
+// If limit > 0, results are capped at that count. Scopes to the given user ID.
+func (r *ExerciseRepository) ListEntries(userID int64, limit int) ([]ExerciseEntry, error) {
 	ctx := context.Background()
 
 	var rows []db.ListEntriesRow
 	var err error
+	uid := sql.NullInt64{Int64: userID, Valid: true}
 	if limit > 0 {
 		var limited []db.ListEntriesWithLimitRow
-		limited, err = r.queries.ListEntriesWithLimit(ctx, int64(limit))
+		limited, err = r.queries.ListEntriesWithLimit(ctx, db.ListEntriesWithLimitParams{
+			UserID: uid,
+			Limit:  int64(limit),
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list entries: %w", err)
 		}
 		return mapListEntriesWithLimitRows(limited), nil
 	}
 
-	rows, err = r.queries.ListEntries(ctx)
+	rows, err = r.queries.ListEntries(ctx, uid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list entries: %w", err)
 	}
@@ -189,9 +206,13 @@ func (r *ExerciseRepository) ListEntries(limit int) ([]ExerciseEntry, error) {
 }
 
 // GetEntriesByExercise returns all entries for a specific exercise.
-func (r *ExerciseRepository) GetEntriesByExercise(exerciseName string) ([]ExerciseEntry, error) {
+// Scopes to the given user ID.
+func (r *ExerciseRepository) GetEntriesByExercise(exerciseName string, userID int64) ([]ExerciseEntry, error) {
 	ctx := context.Background()
-	rows, err := r.queries.GetEntriesByExercise(ctx, exerciseName)
+	rows, err := r.queries.GetEntriesByExercise(ctx, db.GetEntriesByExerciseParams{
+		Name:   exerciseName,
+		UserID: sql.NullInt64{Int64: userID, Valid: true},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get entries by exercise: %w", err)
 	}
@@ -199,11 +220,13 @@ func (r *ExerciseRepository) GetEntriesByExercise(exerciseName string) ([]Exerci
 }
 
 // GetEntriesByDateRange returns entries within an inclusive date range.
-func (r *ExerciseRepository) GetEntriesByDateRange(start, end time.Time) ([]ExerciseEntry, error) {
+// Scopes to the given user ID.
+func (r *ExerciseRepository) GetEntriesByDateRange(start, end time.Time, userID int64) ([]ExerciseEntry, error) {
 	ctx := context.Background()
 	rows, err := r.queries.GetEntriesByDateRange(ctx, db.GetEntriesByDateRangeParams{
-		FromCreatedAt: timeToNullTime(start),
-		ToCreatedAt:   timeToNullTime(end),
+		CreatedAt:   timeToNullTime(start),
+		CreatedAt_2: timeToNullTime(end),
+		UserID:      sql.NullInt64{Int64: userID, Valid: true},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get entries by date range: %w", err)
@@ -217,6 +240,7 @@ func mapGetEntryRow(row db.GetEntryRow) *ExerciseEntry {
 	return &ExerciseEntry{
 		ID:             row.ID,
 		ExerciseTypeID: row.ExerciseTypeID,
+		UserID:         nullInt64ToInt64(row.UserID),
 		ExerciseName:   row.ExerciseName,
 		Reps:           int(row.Reps),
 		Weight:         row.Weight,
@@ -231,6 +255,7 @@ func mapListEntriesRows(rows []db.ListEntriesRow) []ExerciseEntry {
 		entries[i] = ExerciseEntry{
 			ID:             row.ID,
 			ExerciseTypeID: row.ExerciseTypeID,
+			UserID:         nullInt64ToInt64(row.UserID),
 			ExerciseName:   row.ExerciseName,
 			Reps:           int(row.Reps),
 			Weight:         row.Weight,
@@ -247,6 +272,7 @@ func mapListEntriesWithLimitRows(rows []db.ListEntriesWithLimitRow) []ExerciseEn
 		entries[i] = ExerciseEntry{
 			ID:             row.ID,
 			ExerciseTypeID: row.ExerciseTypeID,
+			UserID:         nullInt64ToInt64(row.UserID),
 			ExerciseName:   row.ExerciseName,
 			Reps:           int(row.Reps),
 			Weight:         row.Weight,
@@ -263,6 +289,7 @@ func mapGetEntriesByExerciseRows(rows []db.GetEntriesByExerciseRow) []ExerciseEn
 		entries[i] = ExerciseEntry{
 			ID:             row.ID,
 			ExerciseTypeID: row.ExerciseTypeID,
+			UserID:         nullInt64ToInt64(row.UserID),
 			ExerciseName:   row.ExerciseName,
 			Reps:           int(row.Reps),
 			Weight:         row.Weight,
@@ -279,6 +306,7 @@ func mapGetEntriesByDateRangeRows(rows []db.GetEntriesByDateRangeRow) []Exercise
 		entries[i] = ExerciseEntry{
 			ID:             row.ID,
 			ExerciseTypeID: row.ExerciseTypeID,
+			UserID:         nullInt64ToInt64(row.UserID),
 			ExerciseName:   row.ExerciseName,
 			Reps:           int(row.Reps),
 			Weight:         row.Weight,
@@ -309,4 +337,11 @@ func nullTimeToTime(nt sql.NullTime) time.Time {
 
 func timeToNullTime(t time.Time) sql.NullTime {
 	return sql.NullTime{Time: t, Valid: !t.IsZero()}
+}
+
+func nullInt64ToInt64(ni sql.NullInt64) int64 {
+	if ni.Valid {
+		return ni.Int64
+	}
+	return 0
 }

@@ -8,8 +8,8 @@ import (
 	"stren/internal/db"
 )
 
-// setupTestRepo creates a fresh in-memory database and repository for testing.
-func setupTestRepo(t *testing.T) (*ExerciseRepository, *db.DB) {
+// setupTestRepo creates a fresh in-memory database, a test user, and repositories for testing.
+func setupTestRepo(t *testing.T) (*ExerciseRepository, *UserRepository, *db.DB, int64) {
 	t.Helper()
 
 	database, err := db.NewLocalConnection(":memory:")
@@ -17,12 +17,24 @@ func setupTestRepo(t *testing.T) (*ExerciseRepository, *db.DB) {
 		t.Fatalf("failed to create in-memory database: %v", err)
 	}
 
-	repo := NewExerciseRepository(database)
-	return repo, database
+	userRepo := NewUserRepository(database)
+	exerciseRepo := NewExerciseRepository(database)
+
+	// Create a test user to associate with entries
+	user := &User{
+		Name:         "Test User",
+		Email:        "test@example.com",
+		PasswordHash: "hash",
+	}
+	if err := userRepo.CreateUser(user); err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	return exerciseRepo, userRepo, database, user.ID
 }
 
 func TestExerciseRepository_CreateType(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
 	id, err := repo.CreateType(nil, "Test Create Type")
@@ -44,7 +56,7 @@ func TestExerciseRepository_CreateType(t *testing.T) {
 }
 
 func TestExerciseRepository_CreateType_WithTx(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
 	var createdID int64
@@ -62,7 +74,7 @@ func TestExerciseRepository_CreateType_WithTx(t *testing.T) {
 }
 
 func TestExerciseRepository_GetTypeByName(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
 	// Seeded type should exist.
@@ -88,7 +100,7 @@ func TestExerciseRepository_GetTypeByName(t *testing.T) {
 }
 
 func TestExerciseRepository_ListTypes(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
 	types, err := repo.ListTypes()
@@ -106,11 +118,12 @@ func TestExerciseRepository_ListTypes(t *testing.T) {
 }
 
 func TestExerciseRepository_CreateEntry(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
 	entry := &ExerciseEntry{
 		ExerciseName: "Squat",
+		UserID:       userID,
 		Reps:         5,
 		Weight:       140.0,
 		Notes:        "Test entry",
@@ -127,11 +140,11 @@ func TestExerciseRepository_CreateEntry(t *testing.T) {
 }
 
 func TestExerciseRepository_GetEntry(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
 	// Non-existing entry.
-	entry, err := repo.GetEntry(9999)
+	entry, err := repo.GetEntry(9999, userID)
 	if err != nil {
 		t.Fatalf("GetEntry failed: %v", err)
 	}
@@ -142,6 +155,7 @@ func TestExerciseRepository_GetEntry(t *testing.T) {
 	// Create an entry and retrieve it.
 	created := &ExerciseEntry{
 		ExerciseName: "Bench Press",
+		UserID:       userID,
 		Reps:         8,
 		Weight:       80.0,
 		Notes:        "",
@@ -151,7 +165,7 @@ func TestExerciseRepository_GetEntry(t *testing.T) {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 
-	entry, err = repo.GetEntry(created.ID)
+	entry, err = repo.GetEntry(created.ID, userID)
 	if err != nil {
 		t.Fatalf("GetEntry failed: %v", err)
 	}
@@ -170,11 +184,12 @@ func TestExerciseRepository_GetEntry(t *testing.T) {
 }
 
 func TestExerciseRepository_UpdateEntry(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
 	created := &ExerciseEntry{
 		ExerciseName: "Deadlift",
+		UserID:       userID,
 		Reps:         5,
 		Weight:       180.0,
 		Notes:        "heavy",
@@ -189,11 +204,11 @@ func TestExerciseRepository_UpdateEntry(t *testing.T) {
 	created.Notes = "pr"
 	created.ExerciseName = "Deadlift"
 
-	if err := repo.UpdateEntry(created); err != nil {
+	if err := repo.UpdateEntry(created, userID); err != nil {
 		t.Fatalf("UpdateEntry failed: %v", err)
 	}
 
-	updated, err := repo.GetEntry(created.ID)
+	updated, err := repo.GetEntry(created.ID, userID)
 	if err != nil {
 		t.Fatalf("GetEntry failed: %v", err)
 	}
@@ -209,12 +224,13 @@ func TestExerciseRepository_UpdateEntry(t *testing.T) {
 }
 
 func TestExerciseRepository_UpdateEntryWithDate(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
 	originalTime := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
 	created := &ExerciseEntry{
 		ExerciseName: "Overhead Press",
+		UserID:       userID,
 		Reps:         5,
 		Weight:       60.0,
 		Notes:        "",
@@ -228,11 +244,11 @@ func TestExerciseRepository_UpdateEntryWithDate(t *testing.T) {
 	created.Reps = 6
 	created.CreatedAt = newTime
 
-	if err := repo.UpdateEntryWithDate(created); err != nil {
+	if err := repo.UpdateEntryWithDate(created, userID); err != nil {
 		t.Fatalf("UpdateEntryWithDate failed: %v", err)
 	}
 
-	updated, err := repo.GetEntry(created.ID)
+	updated, err := repo.GetEntry(created.ID, userID)
 	if err != nil {
 		t.Fatalf("GetEntry failed: %v", err)
 	}
@@ -245,11 +261,12 @@ func TestExerciseRepository_UpdateEntryWithDate(t *testing.T) {
 }
 
 func TestExerciseRepository_DeleteEntry(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
 	created := &ExerciseEntry{
 		ExerciseName: "Pull Up",
+		UserID:       userID,
 		Reps:         10,
 		Weight:       0,
 		Notes:        "bw",
@@ -259,11 +276,11 @@ func TestExerciseRepository_DeleteEntry(t *testing.T) {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 
-	if err := repo.DeleteEntry(created.ID); err != nil {
+	if err := repo.DeleteEntry(created.ID, userID); err != nil {
 		t.Fatalf("DeleteEntry failed: %v", err)
 	}
 
-	entry, err := repo.GetEntry(created.ID)
+	entry, err := repo.GetEntry(created.ID, userID)
 	if err != nil {
 		t.Fatalf("GetEntry failed: %v", err)
 	}
@@ -273,13 +290,14 @@ func TestExerciseRepository_DeleteEntry(t *testing.T) {
 }
 
 func TestExerciseRepository_ListEntries(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
 	// Create multiple entries.
 	for i := 0; i < 5; i++ {
 		entry := &ExerciseEntry{
 			ExerciseName: "Dips",
+			UserID:       userID,
 			Reps:         i + 1,
 			Weight:       float64(i * 10),
 			CreatedAt:    time.Now().Add(time.Duration(i) * time.Hour),
@@ -290,7 +308,7 @@ func TestExerciseRepository_ListEntries(t *testing.T) {
 	}
 
 	// With limit.
-	entries, err := repo.ListEntries(3)
+	entries, err := repo.ListEntries(userID, 3)
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -299,7 +317,7 @@ func TestExerciseRepository_ListEntries(t *testing.T) {
 	}
 
 	// Without limit.
-	entries, err = repo.ListEntries(0)
+	entries, err = repo.ListEntries(userID, 0)
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -314,21 +332,21 @@ func TestExerciseRepository_ListEntries(t *testing.T) {
 }
 
 func TestExerciseRepository_GetEntriesByExercise(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
 	// Create entries for different exercises.
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 100, CreatedAt: time.Now()}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Bench Press", Reps: 8, Weight: 80, CreatedAt: time.Now()}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Bench Press", UserID: userID, Reps: 8, Weight: 80, CreatedAt: time.Now()}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", Reps: 5, Weight: 105, CreatedAt: time.Now().Add(time.Hour)}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 105, CreatedAt: time.Now().Add(time.Hour)}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 
-	entries, err := repo.GetEntriesByExercise("Squat")
+	entries, err := repo.GetEntriesByExercise("Squat", userID)
 	if err != nil {
 		t.Fatalf("GetEntriesByExercise failed: %v", err)
 	}
@@ -344,7 +362,7 @@ func TestExerciseRepository_GetEntriesByExercise(t *testing.T) {
 }
 
 func TestExerciseRepository_GetEntriesByDateRange(t *testing.T) {
-	repo, database := setupTestRepo(t)
+	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
 	loc := time.UTC
@@ -352,17 +370,17 @@ func TestExerciseRepository_GetEntriesByDateRange(t *testing.T) {
 	day2 := time.Date(2024, 1, 2, 10, 0, 0, 0, loc)
 	day3 := time.Date(2024, 1, 3, 10, 0, 0, 0, loc)
 
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: day1}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 100, CreatedAt: day1}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", Reps: 5, Weight: 105, CreatedAt: day2}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 105, CreatedAt: day2}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", Reps: 5, Weight: 110, CreatedAt: day3}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 110, CreatedAt: day3}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 
-	entries, err := repo.GetEntriesByDateRange(day1, day2)
+	entries, err := repo.GetEntriesByDateRange(day1, day2, userID)
 	if err != nil {
 		t.Fatalf("GetEntriesByDateRange failed: %v", err)
 	}

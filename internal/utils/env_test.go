@@ -10,6 +10,7 @@ func TestLoadAndValidateEnv_Success(t *testing.T) {
 	t.Setenv("DB_PATH", "test.db")
 	t.Setenv("TURSO_DATABASE_URL", "libsql://test.turso.io")
 	t.Setenv("TURSO_AUTH_TOKEN", "test-token")
+	t.Setenv("JWT_SECRET", "test-secret")
 
 	cfg, err := LoadAndValidateEnv()
 	if err != nil {
@@ -28,6 +29,9 @@ func TestLoadAndValidateEnv_Success(t *testing.T) {
 	if cfg.TURSO_AUTH_TOKEN != "test-token" {
 		t.Errorf("expected TURSO_AUTH_TOKEN to be 'test-token', got: %s", cfg.TURSO_AUTH_TOKEN)
 	}
+	if cfg.JWT_SECRET != "test-secret" {
+		t.Errorf("expected JWT_SECRET to be 'test-secret', got: %s", cfg.JWT_SECRET)
+	}
 }
 
 func TestLoadAndValidateEnv_MissingPort(t *testing.T) {
@@ -35,6 +39,7 @@ func TestLoadAndValidateEnv_MissingPort(t *testing.T) {
 	t.Setenv("DB_PATH", "test.db")
 	t.Setenv("TURSO_DATABASE_URL", "libsql://test.turso.io")
 	t.Setenv("TURSO_AUTH_TOKEN", "test-token")
+	t.Setenv("JWT_SECRET", "test-secret")
 
 	_, err := LoadAndValidateEnv()
 	if err == nil {
@@ -47,6 +52,7 @@ func TestLoadAndValidateEnv_MissingDBPath(t *testing.T) {
 	t.Setenv("DB_PATH", "")
 	t.Setenv("TURSO_DATABASE_URL", "libsql://test.turso.io")
 	t.Setenv("TURSO_AUTH_TOKEN", "test-token")
+	t.Setenv("JWT_SECRET", "test-secret")
 
 	_, err := LoadAndValidateEnv()
 	if err == nil {
@@ -59,6 +65,7 @@ func TestLoadAndValidateEnv_MissingBoth(t *testing.T) {
 	t.Setenv("DB_PATH", "")
 	t.Setenv("TURSO_DATABASE_URL", "")
 	t.Setenv("TURSO_AUTH_TOKEN", "")
+	t.Setenv("JWT_SECRET", "")
 
 	_, err := LoadAndValidateEnv()
 	if err == nil {
@@ -74,33 +81,38 @@ func TestValidateEnvVars(t *testing.T) {
 	}{
 		{
 			name:     "all fields present",
-			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token"},
+			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
 			expected: []string{},
 		},
 		{
 			name:     "missing port",
-			env:      EnvVar{PORT: "", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token"},
+			env:      EnvVar{PORT: "", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
 			expected: []string{"PORT"},
 		},
 		{
 			name:     "missing db_path",
-			env:      EnvVar{PORT: "8080", DB_PATH: "", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token"},
+			env:      EnvVar{PORT: "8080", DB_PATH: "", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
 			expected: []string{"DB_PATH"},
 		},
 		{
 			name:     "missing both",
-			env:      EnvVar{PORT: "", DB_PATH: "", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token"},
+			env:      EnvVar{PORT: "", DB_PATH: "", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
 			expected: []string{"PORT", "DB_PATH"},
 		},
 		{
 			name:     "missing turso url",
-			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "test-token"},
+			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
 			expected: []string{"TURSO_DATABASE_URL"},
 		},
 		{
 			name:     "missing turso token",
-			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: ""},
+			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "", JWT_SECRET: "test-secret"},
 			expected: []string{"TURSO_AUTH_TOKEN"},
+		},
+		{
+			name:     "missing jwt secret",
+			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: ""},
+			expected: []string{"JWT_SECRET"},
 		},
 	}
 
@@ -125,6 +137,7 @@ func TestGetEnvVars(t *testing.T) {
 	t.Setenv("DB_PATH", "getenv.db")
 	t.Setenv("TURSO_DATABASE_URL", "libsql://getenv.turso.io")
 	t.Setenv("TURSO_AUTH_TOKEN", "getenv-token")
+	t.Setenv("JWT_SECRET", "getenv-secret")
 
 	_, err := LoadAndValidateEnv()
 	if err != nil {
@@ -146,6 +159,9 @@ func TestGetEnvVars(t *testing.T) {
 	}
 	if cfg.TURSO_AUTH_TOKEN != "getenv-token" {
 		t.Errorf("expected TURSO_AUTH_TOKEN 'getenv-token', got '%s'", cfg.TURSO_AUTH_TOKEN)
+	}
+	if cfg.JWT_SECRET != "getenv-secret" {
+		t.Errorf("expected JWT_SECRET 'getenv-secret', got '%s'", cfg.JWT_SECRET)
 	}
 }
 

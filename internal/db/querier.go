@@ -6,18 +6,22 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 type Querier interface {
 	CreateEntry(ctx context.Context, arg CreateEntryParams) (int64, error)
 	CreateType(ctx context.Context, name string) (int64, error)
-	DeleteEntry(ctx context.Context, id int64) error
+	CreateUser(ctx context.Context, arg CreateUserParams) (int64, error)
+	DeleteEntry(ctx context.Context, arg DeleteEntryParams) error
 	GetEntriesByDateRange(ctx context.Context, arg GetEntriesByDateRangeParams) ([]GetEntriesByDateRangeRow, error)
-	GetEntriesByExercise(ctx context.Context, name string) ([]GetEntriesByExerciseRow, error)
-	GetEntry(ctx context.Context, id int64) (GetEntryRow, error)
+	GetEntriesByExercise(ctx context.Context, arg GetEntriesByExerciseParams) ([]GetEntriesByExerciseRow, error)
+	GetEntry(ctx context.Context, arg GetEntryParams) (GetEntryRow, error)
 	GetTypeByName(ctx context.Context, name string) (ExerciseType, error)
-	ListEntries(ctx context.Context) ([]ListEntriesRow, error)
-	ListEntriesWithLimit(ctx context.Context, limit int64) ([]ListEntriesWithLimitRow, error)
+	GetUserByEmail(ctx context.Context, email string) (User, error)
+	GetUserByID(ctx context.Context, id int64) (User, error)
+	ListEntries(ctx context.Context, userID sql.NullInt64) ([]ListEntriesRow, error)
+	ListEntriesWithLimit(ctx context.Context, arg ListEntriesWithLimitParams) ([]ListEntriesWithLimitRow, error)
 	ListTypes(ctx context.Context) ([]ExerciseType, error)
 	UpdateEntry(ctx context.Context, arg UpdateEntryParams) error
 	UpdateEntryWithDate(ctx context.Context, arg UpdateEntryWithDateParams) error
