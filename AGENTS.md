@@ -24,5 +24,8 @@
 
 ## Environment Variables
 
-- `PORT` - Server port (default: 8080)
-- `DB_PATH` - SQLite file path (default: strength_tracker.db)
+All environment variables are strictly required and validated on server startup.
+Create a `.env` file based on `.env.example` before running the application.
+
+- `PORT` - Server port
+- `DB_PATH` - SQLite file path

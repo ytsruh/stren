@@ -3,7 +3,6 @@
 - [x] Setup air
 - [ ] Add sqlc as DB lib 
 - [x] Add goose as Migration lib
-- [ ] Build tags to copy latest htmx/oat files
 - [ ] Add unit tests
 - [x] Turn into PWA
 - [x] Add Dockerfile

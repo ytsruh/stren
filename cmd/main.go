@@ -3,24 +3,24 @@ package main
 import (
 	"log"
 	"net"
-	"os"
 
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/db"
 	"stren/internal/handlers"
 	"stren/internal/models"
+	"stren/internal/utils"
 )
 
 func main() {
-	// Get database path from environment or use default
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "strength_tracker.db"
+	// Load and validate environment variables on startup
+	cfg, err := utils.LoadAndValidateEnv()
+	if err != nil {
+		log.Fatalf("Failed to load environment variables: %v", err)
 	}
 
 	// Initialize database
-	database, err := db.New(dbPath)
+	database, err := db.New(cfg.DB_PATH)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
@@ -40,18 +40,13 @@ func main() {
 	h.RegisterRoutes(e)
 
 	// Start server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
 	localIP := getLocalIP()
 	if localIP != "" {
-		log.Printf("Server starting on http://localhost:%s and http://%s:%s", port, localIP, port)
+		log.Printf("Server starting on http://localhost:%s and http://%s:%s", cfg.PORT, localIP, cfg.PORT)
 	} else {
-		log.Printf("Server starting on http://localhost:%s", port)
+		log.Printf("Server starting on http://localhost:%s", cfg.PORT)
 	}
-	if err := e.Start(":" + port); err != nil {
+	if err := e.Start(":" + cfg.PORT); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }
