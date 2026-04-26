@@ -14,6 +14,7 @@ help:
 	@echo "  make build       - Build the application"
 	@echo "  make run         - Build and run the application"
 	@echo "  make dev         - Run with auto-restart (requires entr)"
+	@echo "  make generate    - Regenerate sqlc queries"
 	@echo "  make db-reset    - Delete and recreate database"
 	@echo "  make test        - Run tests"
 	@echo "  make test-cover  - Run tests with coverage report"
@@ -23,7 +24,7 @@ help:
 
 # Build the application
 .PHONY: build
-build: templ
+build: templ generate
 	@echo "Building $(APP_NAME)..."
 	go build -o $(APP_NAME) ./cmd/main.go
 	@echo "✓ Build complete: ./$(APP_NAME)"
@@ -52,6 +53,14 @@ templ:
 	@which templ > /dev/null || (echo "Installing templ..." && go install github.com/a-h/templ/cmd/templ@latest)
 	templ generate
 	@echo "✓ Templates generated"
+
+# Generate sqlc queries
+.PHONY: generate
+generate:
+	@echo "Generating sqlc queries..."
+	@which sqlc > /dev/null || (echo "Installing sqlc..." && go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest)
+	sqlc generate
+	@echo "✓ sqlc queries generated"
 
 # Reset database (delete - migrations run on next startup)
 .PHONY: db-reset

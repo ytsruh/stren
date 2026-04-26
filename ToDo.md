@@ -1,7 +1,7 @@
 # To Do List
 
 - [x] Setup air
-- [ ] Add sqlc as DB lib 
+- [x] Add sqlc as DB lib 
 - [x] Add goose as Migration lib
 - [x] Add unit tests
 - [x] Turn into PWA
