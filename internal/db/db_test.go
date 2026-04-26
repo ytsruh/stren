@@ -105,21 +105,25 @@ func TestResolveDBPath_InMemory(t *testing.T) {
 }
 
 func TestResolveDBPath_RelativePath(t *testing.T) {
-	// Relative paths should resolve to the project root (where go.mod lives)
+	// Relative paths should resolve to the current working directory
 	resolved, err := resolveDBPath("data/strength_tracker.db")
 	if err != nil {
 		t.Fatalf("expected no error for relative path, got: %v", err)
 	}
 
-	// Verify the resolved path ends with the expected suffix
-	expectedSuffix := filepath.Join("stren", "data", "strength_tracker.db")
-	if !strings.HasSuffix(resolved, expectedSuffix) {
-		t.Fatalf("expected path to end with %q, got %q", expectedSuffix, resolved)
-	}
-
 	// Verify the resolved path is absolute
 	if !filepath.IsAbs(resolved) {
 		t.Fatalf("expected resolved path to be absolute, got %q", resolved)
+	}
+
+	// Verify it matches os.Getwd() + the relative path
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	expected := filepath.Join(cwd, "data", "strength_tracker.db")
+	if resolved != expected {
+		t.Fatalf("expected %q, got %q", expected, resolved)
 	}
 }
 
@@ -129,9 +133,13 @@ func TestResolveDBPath_NestedRelativePath(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	expectedSuffix := filepath.Join("stren", "foo", "bar", "baz.db")
-	if !strings.HasSuffix(resolved, expectedSuffix) {
-		t.Fatalf("expected path to end with %q, got %q", expectedSuffix, resolved)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	expected := filepath.Join(cwd, "foo", "bar", "baz.db")
+	if resolved != expected {
+		t.Fatalf("expected %q, got %q", expected, resolved)
 	}
 }
 

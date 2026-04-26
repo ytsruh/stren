@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/pressly/goose/v3"
@@ -20,33 +19,8 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// findProjectRoot returns the absolute path to the project root directory
-// by walking up from the current file's location until it finds go.mod.
-func findProjectRoot() (string, error) {
-	// Start from this file's directory
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("failed to get current file path")
-	}
-
-	dir := filepath.Dir(filename)
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-
-	return "", fmt.Errorf("could not find project root (go.mod not found)")
-}
-
 // resolveDBPath resolves the database path. If the path is relative (does not
-// start with "/"), it is resolved relative to the project root directory.
+// start with "/"), it is resolved relative to the current working directory.
 // Absolute paths and the special ":memory:" string are returned unchanged.
 func resolveDBPath(dbPath string) (string, error) {
 	// In-memory databases and absolute paths need no resolution
@@ -54,12 +28,12 @@ func resolveDBPath(dbPath string) (string, error) {
 		return dbPath, nil
 	}
 
-	root, err := findProjectRoot()
+	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("failed to find project root: %w", err)
+		return "", fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	return filepath.Join(root, dbPath), nil
+	return filepath.Join(cwd, dbPath), nil
 }
 
 // syncInterval defines how often the local database syncs with Turso Cloud.
@@ -78,9 +52,9 @@ type DB struct {
 // runs embedded migrations, pulls the latest remote changes, and starts a
 // background sync goroutine.
 func New(dbPath, tursoURL, tursoAuthToken string) (*DB, error) {
-	// Resolve relative paths against the project root so that
-	// DB_PATH=data/strength_tracker.db always lands in the project root
-	// regardless of the working directory at runtime.
+	// Resolve relative paths against the current working directory so that
+	// DB_PATH=data/strength_tracker.db lands in the working directory
+	// (e.g. /app in the Docker container).
 	resolvedPath, err := resolveDBPath(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve database path: %w", err)
