@@ -22,14 +22,16 @@ type Handler struct {
 	authCtrl   *controllers.AuthController
 	entryCtrl  *controllers.EntryController
 	jwtService *utils.JWTService
+	validator  utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, jwtService *utils.JWTService) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
 		authCtrl:   authCtrl,
 		entryCtrl:  entryCtrl,
 		jwtService: jwtService,
+		validator:  validator,
 	}
 }
 
@@ -111,28 +113,42 @@ func clearAuthCookie(c echo.Context) {
 	c.SetCookie(cookie)
 }
 
-// parseEntryForm extracts and validates form values for an exercise entry.
-func parseEntryForm(c echo.Context) (*models.ExerciseEntry, error) {
-	entry := &models.ExerciseEntry{
+// entryFormInput represents the parsed and validated form data for an exercise entry.
+type entryFormInput struct {
+	ExerciseName string  `validate:"required,min=1,max=100"`
+	Reps         int     `validate:"gte=1,lte=1000"`
+	Weight       float64 `validate:"gte=0,lte=5000"`
+	Notes        string  `validate:"max=500"`
+}
+
+// parseEntryForm extracts form values, converts types, and validates the input.
+// It returns an HTTP error with a user-friendly message if any validation fails.
+func parseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, error) {
+	input := entryFormInput{
 		ExerciseName: c.FormValue("exercise_name"),
 		Notes:        c.FormValue("notes"),
 	}
 
-	if entry.ExerciseName == "" {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, "Exercise name is required")
-	}
-
 	reps, err := strconv.Atoi(c.FormValue("reps"))
-	if err != nil || reps < 1 {
+	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "Reps must be a positive integer")
 	}
-	entry.Reps = reps
+	input.Reps = reps
 
 	weight, err := strconv.ParseFloat(c.FormValue("weight"), 64)
-	if err != nil || weight < 0 {
+	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "Weight must be a valid positive number")
 	}
-	entry.Weight = weight
+	input.Weight = weight
 
-	return entry, nil
+	if err := v.ValidateStruct(&input); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return &models.ExerciseEntry{
+		ExerciseName: input.ExerciseName,
+		Notes:        input.Notes,
+		Reps:         input.Reps,
+		Weight:       input.Weight,
+	}, nil
 }

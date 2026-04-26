@@ -37,7 +37,7 @@ func (h *Handler) NewEntryForm(c echo.Context) error {
 
 // CreateEntry handles the creation of a new entry.
 func (h *Handler) CreateEntry(c echo.Context) error {
-	entry, err := parseEntryForm(c)
+	entry, err := parseEntryForm(c, h.validator)
 	if err != nil {
 		return render(c, views.EntryFormError(err.Error()))
 	}
@@ -106,7 +106,7 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid entry ID")
 	}
 
-	entry, err := parseEntryForm(c)
+	entry, err := parseEntryForm(c, h.validator)
 	if err != nil {
 		return render(c, views.EntryFormError(err.Error()))
 	}

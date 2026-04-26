@@ -292,7 +292,8 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	mock.nextTypeID = 3
 	authCtrl := controllers.NewAuthController(mockUser, jwtService)
 	entryCtrl := controllers.NewEntryController(mock)
-	h := NewHandler(authCtrl, entryCtrl, jwtService)
+	validator := utils.NewValidator()
+	h := NewHandler(authCtrl, entryCtrl, jwtService, validator)
 	return h, mock, mockUser, e
 }
 
@@ -932,7 +933,7 @@ func TestParseEntryForm_Valid(t *testing.T) {
 	form.Set("notes", "PR")
 
 	c := newEchoContextWithForm(t, form)
-	entry, err := parseEntryForm(c)
+	entry, err := parseEntryForm(c, utils.NewValidator())
 	if err != nil {
 		t.Fatalf("parseEntryForm failed: %v", err)
 	}
@@ -957,7 +958,7 @@ func TestParseEntryForm_MissingName(t *testing.T) {
 	form.Set("weight", "100")
 
 	c := newEchoContextWithForm(t, form)
-	_, err := parseEntryForm(c)
+	_, err := parseEntryForm(c, utils.NewValidator())
 	if err == nil {
 		t.Fatal("expected error for missing exercise name")
 	}
@@ -985,7 +986,7 @@ func TestParseEntryForm_InvalidReps(t *testing.T) {
 			form.Set("weight", "100")
 
 			c := newEchoContextWithForm(t, form)
-			_, err := parseEntryForm(c)
+			_, err := parseEntryForm(c, utils.NewValidator())
 			if err == nil {
 				t.Fatal("expected error for invalid reps")
 			}
@@ -1014,7 +1015,7 @@ func TestParseEntryForm_InvalidWeight(t *testing.T) {
 			form.Set("weight", tt.weight)
 
 			c := newEchoContextWithForm(t, form)
-			_, err := parseEntryForm(c)
+			_, err := parseEntryForm(c, utils.NewValidator())
 			if err == nil {
 				t.Fatal("expected error for invalid weight")
 			}
@@ -1152,6 +1153,129 @@ func TestLogin_InvalidPassword(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "Invalid") {
 		t.Fatalf("expected error message, got %q", body)
+	}
+}
+
+func TestLogin_InvalidEmail(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("email", "not-an-email")
+	form.Set("password", "password123")
+
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.Login(c); err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "email") {
+		t.Fatalf("expected email validation error, got %q", body)
+	}
+}
+
+func TestLogin_EmptyFields(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("email", "")
+	form.Set("password", "")
+
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.Login(c); err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "required") {
+		t.Fatalf("expected required field error, got %q", body)
+	}
+}
+
+func TestRegister_InvalidEmail(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("name", "Alice")
+	form.Set("email", "not-an-email")
+	form.Set("password", "secret123")
+
+	req := httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.Register(c); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "email") {
+		t.Fatalf("expected email validation error, got %q", body)
+	}
+}
+
+func TestRegister_ShortPassword(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("name", "Alice")
+	form.Set("email", "alice@example.com")
+	form.Set("password", "short")
+
+	req := httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.Register(c); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Password") {
+		t.Fatalf("expected password validation error, got %q", body)
+	}
+}
+
+func TestRegister_EmptyFields(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("name", "")
+	form.Set("email", "")
+	form.Set("password", "")
+
+	req := httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.Register(c); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "required") {
+		t.Fatalf("expected required field error, got %q", body)
 	}
 }
 

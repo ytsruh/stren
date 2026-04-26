@@ -18,12 +18,24 @@ func (h *Handler) LoginForm(c echo.Context) error {
 	return render(c, views.LoginPage(""))
 }
 
+// loginInput represents the validated login form data.
+type loginInput struct {
+	Email    string `validate:"required,email"`
+	Password string `validate:"required"`
+}
+
 // Login handles login form submission.
 func (h *Handler) Login(c echo.Context) error {
-	email := c.FormValue("email")
-	password := c.FormValue("password")
+	input := loginInput{
+		Email:    c.FormValue("email"),
+		Password: c.FormValue("password"),
+	}
 
-	_, token, err := h.authCtrl.Login(email, password)
+	if err := h.validator.ValidateStruct(&input); err != nil {
+		return render(c, views.LoginPage(err.Error()))
+	}
+
+	_, token, err := h.authCtrl.Login(input.Email, input.Password)
 	if err != nil {
 		if errors.Is(err, controllers.ErrInvalidCredentials) {
 			return render(c, views.LoginPage("Invalid email or password"))
@@ -40,13 +52,26 @@ func (h *Handler) RegisterForm(c echo.Context) error {
 	return render(c, views.RegisterPage(""))
 }
 
+// registerInput represents the validated registration form data.
+type registerInput struct {
+	Name     string `validate:"required,min=1,max=100"`
+	Email    string `validate:"required,email"`
+	Password string `validate:"required,min=6"`
+}
+
 // Register handles registration form submission.
 func (h *Handler) Register(c echo.Context) error {
-	name := c.FormValue("name")
-	email := c.FormValue("email")
-	password := c.FormValue("password")
+	input := registerInput{
+		Name:     c.FormValue("name"),
+		Email:    c.FormValue("email"),
+		Password: c.FormValue("password"),
+	}
 
-	_, token, err := h.authCtrl.Register(name, email, password)
+	if err := h.validator.ValidateStruct(&input); err != nil {
+		return render(c, views.RegisterPage(err.Error()))
+	}
+
+	_, token, err := h.authCtrl.Register(input.Name, input.Email, input.Password)
 	if err != nil {
 		return render(c, views.RegisterPage(err.Error()))
 	}

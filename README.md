@@ -28,7 +28,7 @@ A simple strength tracking application built with Go, Echo, htmx, Oat UI, and SQ
 - [x] Add Auth and scope data to users
 - [x] Switch to Turso
 - [x] Make a utils file to check envs at startup
-- [ ] Add validation library for user input
+- [x] Add validation library for user input
 
 #### UI
 - [x] Better buttons. Some buttons are just links, not actual buttons
