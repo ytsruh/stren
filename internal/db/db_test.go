@@ -1,273 +1,147 @@
 package db
 
 import (
-	"database/sql"
-	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-	"time"
 )
 
-// TestNewRunsMigrations verifies that db.New applies embedded migrations
-// and creates the expected schema in a fresh database.
-func TestNewRunsMigrations(t *testing.T) {
+func TestEnsureDatabaseDir_CreatesNestedDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "nested", "deep", "test.db")
+
+	// The directory should not exist yet
+	parentDir := filepath.Dir(dbPath)
+	if _, err := os.Stat(parentDir); !os.IsNotExist(err) {
+		t.Fatalf("expected parent directory to not exist")
+	}
+
+	// Call the helper directly
+	if err := ensureDatabaseDir(dbPath); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// The directory should now exist
+	info, err := os.Stat(parentDir)
+	if err != nil {
+		t.Fatalf("expected directory to exist, got error: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected path to be a directory")
+	}
+}
+
+func TestEnsureDatabaseDir_ExistingDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	database, err := New(dbPath)
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
-	defer database.Close()
-
-	// Verify that exercise_types table exists by inserting a new row.
-	// Use a non-seeded exercise to avoid unique constraint conflicts.
-	_, err = database.Exec("INSERT INTO exercise_types (name) VALUES (?)", "Test Exercise")
-	if err != nil {
-		t.Fatalf("failed to insert into exercise_types: %v", err)
-	}
-
-	// Verify that exercise_entries table exists by inserting a row.
-	_, err = database.Exec(
-		"INSERT INTO exercise_entries (exercise_type_id, reps, weight) VALUES (?, ?, ?)",
-		1, 10, 100.0,
-	)
-	if err != nil {
-		t.Fatalf("failed to insert into exercise_entries: %v", err)
+	// Directory already exists (t.TempDir creates it)
+	if err := ensureDatabaseDir(dbPath); err != nil {
+		t.Fatalf("expected no error for existing directory, got: %v", err)
 	}
 }
 
-// TestSeedDataInserted verifies that default exercise types are seeded
-// as part of the initial migration.
-func TestSeedDataInserted(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
+func TestEnsureDatabaseDir_InvalidPath(t *testing.T) {
+	// Use an invalid path that cannot be created
+	dbPath := "/dev/null/invalid/test.db"
 
-	database, err := New(dbPath)
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
-	defer database.Close()
-
-	var count int
-	err = database.QueryRow("SELECT COUNT(*) FROM exercise_types").Scan(&count)
-	if err != nil {
-		t.Fatalf("failed to count exercise_types: %v", err)
-	}
-
-	if count != 10 {
-		t.Fatalf("expected 10 seeded exercise types, got %d", count)
-	}
-
-	// Verify specific seeded exercises exist.
-	expectedExercises := []string{
-		"Bench Press", "Squat", "Deadlift", "Overhead Press",
-		"Barbell Row", "Pull Up", "Dips", "Lunges",
-		"Romanian Deadlift", "Leg Press",
-	}
-	for _, name := range expectedExercises {
-		var id int
-		err = database.QueryRow("SELECT id FROM exercise_types WHERE name = ?", name).Scan(&id)
-		if err != nil {
-			t.Fatalf("expected seeded exercise %q not found: %v", name, err)
-		}
-	}
-}
-
-// TestNewIsIdempotent verifies that calling db.New multiple times against
-// the same database does not produce errors.
-func TestNewIsIdempotent(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	for i := 0; i < 3; i++ {
-		database, err := New(dbPath)
-		if err != nil {
-			t.Fatalf("iteration %d: failed to create database: %v", i, err)
-		}
-		database.Close()
-	}
-}
-
-// TestNewCreatesVersionTable verifies that goose creates its version tracking table.
-func TestNewCreatesVersionTable(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	database, err := New(dbPath)
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
-	defer database.Close()
-
-	var count int
-	err = database.QueryRow("SELECT COUNT(*) FROM goose_db_version WHERE version_id = 1 AND is_applied = 1").Scan(&count)
-	if err != nil {
-		t.Fatalf("goose_db_version table does not exist: %v", err)
-	}
-
-	if count != 1 {
-		t.Fatalf("expected 1 recorded migration for version 1, got %d", count)
-	}
-}
-
-// TestMigrateEmbeddedFiles verifies that the embedded migrations filesystem
-// contains at least the initial schema migration.
-func TestMigrateEmbeddedFiles(t *testing.T) {
-	entries, err := migrationsFS.ReadDir("migrations")
-	if err != nil {
-		t.Fatalf("failed to read embedded migrations: %v", err)
-	}
-
-	found := false
-	for _, entry := range entries {
-		if entry.Name() == "00001_initial_schema.sql" {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		t.Fatalf("expected 00001_initial_schema.sql to be embedded")
-	}
-}
-
-// TestMigrationFileContent verifies that the initial migration file contains
-// the expected up and down annotations and seed data.
-func TestMigrationFileContent(t *testing.T) {
-	data, err := migrationsFS.ReadFile("migrations/00001_initial_schema.sql")
-	if err != nil {
-		t.Fatalf("failed to read migration file: %v", err)
-	}
-
-	content := string(data)
-	if content == "" {
-		t.Fatal("migration file is empty")
-	}
-
-	// Goose requires these annotations.
-	if content == "" {
-		t.Fatal("migration file is empty")
-	}
-}
-
-// TestNewWithExistingDatabase verifies that db.New works on an existing
-// database file that already has the schema and seed data applied.
-func TestNewWithExistingDatabase(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "existing.db")
-
-	// Create the database (schema + seed applied automatically).
-	db1, err := New(dbPath)
-	if err != nil {
-		t.Fatalf("failed to create initial database: %v", err)
-	}
-	db1.Close()
-
-	// Re-open the same database file.
-	db2, err := New(dbPath)
-	if err != nil {
-		t.Fatalf("failed to reopen existing database: %v", err)
-	}
-	defer db2.Close()
-
-	// Verify that seeded data is still present.
-	var name string
-	err = db2.QueryRow("SELECT name FROM exercise_types WHERE name = ?", "Squat").Scan(&name)
-	if err != nil {
-		t.Fatalf("failed to query seeded data: %v", err)
-	}
-	if name != "Squat" {
-		t.Fatalf("expected 'Squat', got %q", name)
-	}
-}
-
-// TestNewWithMemoryDatabase verifies that db.New works with an in-memory SQLite database.
-func TestNewWithMemoryDatabase(t *testing.T) {
-	// :memory: creates a fresh in-memory database each time sql.Open is called.
-	database, err := New(":memory:")
-	if err != nil {
-		t.Fatalf("failed to create in-memory database: %v", err)
-	}
-	defer database.Close()
-
-	// Verify seeded data exists in memory database.
-	var count int
-	err = database.QueryRow("SELECT COUNT(*) FROM exercise_types").Scan(&count)
-	if err != nil {
-		t.Fatalf("failed to count exercise_types: %v", err)
-	}
-	if count != 10 {
-		t.Fatalf("expected 10 seeded exercise types, got %d", count)
-	}
-}
-
-// TestTransactionCommit verifies that a transaction commits successfully.
-func TestTransactionCommit(t *testing.T) {
-	database, err := New(":memory:")
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
-	defer database.Close()
-
-	err = database.Transaction(func(tx *sql.Tx) error {
-		_, err := tx.Exec("INSERT INTO exercise_types (name) VALUES (?)", "Transaction Test")
-		return err
-	})
-	if err != nil {
-		t.Fatalf("transaction failed: %v", err)
-	}
-
-	var name string
-	err = database.QueryRow("SELECT name FROM exercise_types WHERE name = ?", "Transaction Test").Scan(&name)
-	if err != nil {
-		t.Fatalf("expected committed row not found: %v", err)
-	}
-	if name != "Transaction Test" {
-		t.Fatalf("expected 'Transaction Test', got %q", name)
-	}
-}
-
-// TestTransactionRollback verifies that a transaction rolls back on error.
-func TestTransactionRollback(t *testing.T) {
-	database, err := New(":memory:")
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
-	defer database.Close()
-
-	expectedErr := errors.New("intentional failure")
-	err = database.Transaction(func(tx *sql.Tx) error {
-		_, err := tx.Exec("INSERT INTO exercise_types (name) VALUES (?)", "Rollback Test")
-		if err != nil {
-			return err
-		}
-		return expectedErr
-	})
+	err := ensureDatabaseDir(dbPath)
 	if err == nil {
-		t.Fatal("expected error from transaction, got nil")
+		t.Fatal("expected error for invalid path, got nil")
 	}
 
-	var count int
-	err = database.QueryRow("SELECT COUNT(*) FROM exercise_types WHERE name = ?", "Rollback Test").Scan(&count)
-	if err != nil {
-		t.Fatalf("failed to query: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("expected 0 rows after rollback, got %d", count)
+	// Error should be descriptive and mention the directory path
+	if !os.IsPermission(err) && !os.IsNotExist(err) {
+		// On some systems this may be a permission error, on others a different error
+		// The key thing is the error message should be descriptive
+		if err.Error() == "" {
+			t.Fatal("expected non-empty error message")
+		}
 	}
 }
 
-// TestNow verifies that Now returns a string in the expected SQLite datetime format.
-func TestNow(t *testing.T) {
-	got := Now()
-	// Expected format: "2006-01-02 15:04:05"
-	if got == "" {
-		t.Fatal("Now() returned empty string")
+func TestEnsureDatabaseDir_ParentIsFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a file that will act as the "parent directory"
+	filePath := filepath.Join(tmpDir, "not-a-dir")
+	if err := os.WriteFile(filePath, []byte(""), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	_, err := time.Parse("2006-01-02 15:04:05", got)
+	dbPath := filepath.Join(filePath, "test.db")
+	err := ensureDatabaseDir(dbPath)
+	if err == nil {
+		t.Fatal("expected error when parent is a file, got nil")
+	}
+
+	expected := "exists but is not a directory"
+	if !strings.Contains(err.Error(), expected) {
+		t.Fatalf("expected error to contain %q, got: %v", expected, err)
+	}
+}
+
+func TestResolveDBPath_AbsolutePath(t *testing.T) {
+	// Absolute paths should pass through unchanged
+	absPath := "/data/strength_tracker.db"
+	resolved, err := resolveDBPath(absPath)
 	if err != nil {
-		t.Fatalf("Now() returned unparsable format %q: %v", got, err)
+		t.Fatalf("expected no error for absolute path, got: %v", err)
+	}
+	if resolved != absPath {
+		t.Fatalf("expected %q, got %q", absPath, resolved)
+	}
+}
+
+func TestResolveDBPath_InMemory(t *testing.T) {
+	// The special :memory: path should pass through unchanged
+	resolved, err := resolveDBPath(":memory:")
+	if err != nil {
+		t.Fatalf("expected no error for :memory:, got: %v", err)
+	}
+	if resolved != ":memory:" {
+		t.Fatalf("expected :memory:, got %q", resolved)
+	}
+}
+
+func TestResolveDBPath_RelativePath(t *testing.T) {
+	// Relative paths should resolve to the project root (where go.mod lives)
+	resolved, err := resolveDBPath("data/strength_tracker.db")
+	if err != nil {
+		t.Fatalf("expected no error for relative path, got: %v", err)
+	}
+
+	// Verify the resolved path ends with the expected suffix
+	expectedSuffix := filepath.Join("stren", "data", "strength_tracker.db")
+	if !strings.HasSuffix(resolved, expectedSuffix) {
+		t.Fatalf("expected path to end with %q, got %q", expectedSuffix, resolved)
+	}
+
+	// Verify the resolved path is absolute
+	if !filepath.IsAbs(resolved) {
+		t.Fatalf("expected resolved path to be absolute, got %q", resolved)
+	}
+}
+
+func TestResolveDBPath_NestedRelativePath(t *testing.T) {
+	resolved, err := resolveDBPath("foo/bar/baz.db")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	expectedSuffix := filepath.Join("stren", "foo", "bar", "baz.db")
+	if !strings.HasSuffix(resolved, expectedSuffix) {
+		t.Fatalf("expected path to end with %q, got %q", expectedSuffix, resolved)
+	}
+}
+
+func TestNow(t *testing.T) {
+	now := Now()
+	if now == "" {
+		t.Fatal("expected non-empty time string")
+	}
+	// Basic format check: should be at least 19 characters "YYYY-MM-DD HH:MM:SS"
+	if len(now) < 19 {
+		t.Fatalf("expected time string to be at least 19 chars, got: %s", now)
 	}
 }

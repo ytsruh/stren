@@ -7,7 +7,7 @@
 - [x] Turn into PWA
 - [x] Add Dockerfile
 - [ ] Add Auth and scope data to users
-- [ ] Switch to Turso
+- [x] Switch to Turso
 - [x] Make a utils file to check envs at startup
 
 

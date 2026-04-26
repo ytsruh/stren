@@ -15,8 +15,10 @@ import (
 // Each field must have an `env` tag matching the environment variable name.
 // These values are loaded from the environment or a local .env file on startup.
 type EnvVar struct {
-	PORT    string `env:"PORT"`
-	DB_PATH string `env:"DB_PATH"`
+	PORT               string `env:"PORT"`
+	DB_PATH            string `env:"DB_PATH"`
+	TURSO_DATABASE_URL string `env:"TURSO_DATABASE_URL"`
+	TURSO_AUTH_TOKEN   string `env:"TURSO_AUTH_TOKEN"`
 }
 
 var (
@@ -34,8 +36,10 @@ func LoadAndValidateEnv() (*EnvVar, error) {
 	_ = godotenv.Load()
 
 	env := EnvVar{
-		PORT:    os.Getenv("PORT"),
-		DB_PATH: os.Getenv("DB_PATH"),
+		PORT:               os.Getenv("PORT"),
+		DB_PATH:            os.Getenv("DB_PATH"),
+		TURSO_DATABASE_URL: os.Getenv("TURSO_DATABASE_URL"),
+		TURSO_AUTH_TOKEN:   os.Getenv("TURSO_AUTH_TOKEN"),
 	}
 
 	// Validate that all required environment variables are set

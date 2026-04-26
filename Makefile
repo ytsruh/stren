@@ -58,6 +58,7 @@ templ:
 db-reset:
 	@echo "Resetting database..."
 	@rm -f $(DB_FILE)
+	@rm -rf /data/*.db
 	@echo "✓ Database deleted. Migrations and seed data will run on next startup."
 
 # Run tests

@@ -13,12 +13,12 @@
 - Make use of `go doc` Go command to fetch documentation for packages/modules
 
 ## Technology & Architecture
-- **Tech stack**: Go 1.25+, Echo, Templ, SQLite (modernc.org/sqlite), htmx, Oat CSS
+- **Tech stack**: Go 1.25+, Echo, Templ, Turso Sync (turso.tech/database/tursogo), htmx, Oat CSS
 - **Entry point**: `cmd/main.go`
 - **HTTP handlers**: `internal/handlers/handlers.go` (Echo framework)
 - **Repository**: `internal/models/repository.go` (CRUD operations)
 - **Models**: `internal/models/models.go` (ExerciseType, ExerciseEntry)
-- **Database**: `internal/db/db.go` (SQLite wrapper)
+- **Database**: `internal/db/db.go` (Turso Sync wrapper with local-first reads/writes and background cloud sync)
 - **Migrations**: `internal/db/migrations/*.sql` managed by [goose](https://github.com/pressly/goose) and embedded in the binary via `//go:embed`
 - **Templates**: `internal/views/*.templ` (Templ HTML templates)
 
@@ -28,4 +28,6 @@ All environment variables are strictly required and validated on server startup.
 Create a `.env` file based on `.env.example` before running the application.
 
 - `PORT` - Server port
-- `DB_PATH` - SQLite file path
+- `DB_PATH` - Local database file path (e.g., `/data/strength_tracker.db`)
+- `TURSO_DATABASE_URL` - Turso Cloud database URL (`libsql://...`)
+- `TURSO_AUTH_TOKEN` - Turso Cloud authentication token

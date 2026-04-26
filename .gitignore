@@ -1,5 +1,6 @@
 internal/views/*_templ.go
 *.env
+/data/*
 *.db
 *.db-journal
 *.db-shm
@@ -8,6 +9,7 @@ internal/views/*_templ.go
 
 # Binaries
 stren
+main
 *.exe
 *.dll
 *.so

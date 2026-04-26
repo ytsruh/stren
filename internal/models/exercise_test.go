@@ -12,7 +12,7 @@ import (
 func setupTestRepo(t *testing.T) (*ExerciseRepository, *db.DB) {
 	t.Helper()
 
-	database, err := db.New(":memory:")
+	database, err := db.NewLocal(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create in-memory database: %v", err)
 	}

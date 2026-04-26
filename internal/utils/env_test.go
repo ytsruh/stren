@@ -5,9 +5,11 @@ import (
 )
 
 func TestLoadAndValidateEnv_Success(t *testing.T) {
-	// Ensure both required variables are set
+	// Ensure all required variables are set
 	t.Setenv("PORT", "8080")
 	t.Setenv("DB_PATH", "test.db")
+	t.Setenv("TURSO_DATABASE_URL", "libsql://test.turso.io")
+	t.Setenv("TURSO_AUTH_TOKEN", "test-token")
 
 	cfg, err := LoadAndValidateEnv()
 	if err != nil {
@@ -20,11 +22,19 @@ func TestLoadAndValidateEnv_Success(t *testing.T) {
 	if cfg.DB_PATH != "test.db" {
 		t.Errorf("expected DB_PATH to be 'test.db', got: %s", cfg.DB_PATH)
 	}
+	if cfg.TURSO_DATABASE_URL != "libsql://test.turso.io" {
+		t.Errorf("expected TURSO_DATABASE_URL to be 'libsql://test.turso.io', got: %s", cfg.TURSO_DATABASE_URL)
+	}
+	if cfg.TURSO_AUTH_TOKEN != "test-token" {
+		t.Errorf("expected TURSO_AUTH_TOKEN to be 'test-token', got: %s", cfg.TURSO_AUTH_TOKEN)
+	}
 }
 
 func TestLoadAndValidateEnv_MissingPort(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("DB_PATH", "test.db")
+	t.Setenv("TURSO_DATABASE_URL", "libsql://test.turso.io")
+	t.Setenv("TURSO_AUTH_TOKEN", "test-token")
 
 	_, err := LoadAndValidateEnv()
 	if err == nil {
@@ -35,6 +45,8 @@ func TestLoadAndValidateEnv_MissingPort(t *testing.T) {
 func TestLoadAndValidateEnv_MissingDBPath(t *testing.T) {
 	t.Setenv("PORT", "8080")
 	t.Setenv("DB_PATH", "")
+	t.Setenv("TURSO_DATABASE_URL", "libsql://test.turso.io")
+	t.Setenv("TURSO_AUTH_TOKEN", "test-token")
 
 	_, err := LoadAndValidateEnv()
 	if err == nil {
@@ -45,6 +57,8 @@ func TestLoadAndValidateEnv_MissingDBPath(t *testing.T) {
 func TestLoadAndValidateEnv_MissingBoth(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("DB_PATH", "")
+	t.Setenv("TURSO_DATABASE_URL", "")
+	t.Setenv("TURSO_AUTH_TOKEN", "")
 
 	_, err := LoadAndValidateEnv()
 	if err == nil {
@@ -60,23 +74,33 @@ func TestValidateEnvVars(t *testing.T) {
 	}{
 		{
 			name:     "all fields present",
-			env:      EnvVar{PORT: "8080", DB_PATH: "test.db"},
+			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token"},
 			expected: []string{},
 		},
 		{
 			name:     "missing port",
-			env:      EnvVar{PORT: "", DB_PATH: "test.db"},
+			env:      EnvVar{PORT: "", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token"},
 			expected: []string{"PORT"},
 		},
 		{
 			name:     "missing db_path",
-			env:      EnvVar{PORT: "8080", DB_PATH: ""},
+			env:      EnvVar{PORT: "8080", DB_PATH: "", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token"},
 			expected: []string{"DB_PATH"},
 		},
 		{
 			name:     "missing both",
-			env:      EnvVar{PORT: "", DB_PATH: ""},
+			env:      EnvVar{PORT: "", DB_PATH: "", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token"},
 			expected: []string{"PORT", "DB_PATH"},
+		},
+		{
+			name:     "missing turso url",
+			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "test-token"},
+			expected: []string{"TURSO_DATABASE_URL"},
+		},
+		{
+			name:     "missing turso token",
+			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: ""},
+			expected: []string{"TURSO_AUTH_TOKEN"},
 		},
 	}
 
@@ -99,6 +123,8 @@ func TestGetEnvVars(t *testing.T) {
 	// Set up a valid config first
 	t.Setenv("PORT", "9090")
 	t.Setenv("DB_PATH", "getenv.db")
+	t.Setenv("TURSO_DATABASE_URL", "libsql://getenv.turso.io")
+	t.Setenv("TURSO_AUTH_TOKEN", "getenv-token")
 
 	_, err := LoadAndValidateEnv()
 	if err != nil {
@@ -114,6 +140,12 @@ func TestGetEnvVars(t *testing.T) {
 	}
 	if cfg.DB_PATH != "getenv.db" {
 		t.Errorf("expected DB_PATH 'getenv.db', got '%s'", cfg.DB_PATH)
+	}
+	if cfg.TURSO_DATABASE_URL != "libsql://getenv.turso.io" {
+		t.Errorf("expected TURSO_DATABASE_URL 'libsql://getenv.turso.io', got '%s'", cfg.TURSO_DATABASE_URL)
+	}
+	if cfg.TURSO_AUTH_TOKEN != "getenv-token" {
+		t.Errorf("expected TURSO_AUTH_TOKEN 'getenv-token', got '%s'", cfg.TURSO_AUTH_TOKEN)
 	}
 }
 

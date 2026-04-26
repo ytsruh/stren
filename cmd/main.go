@@ -20,7 +20,7 @@ func main() {
 	}
 
 	// Initialize database
-	database, err := db.New(cfg.DB_PATH)
+	database, err := db.New(cfg.DB_PATH, cfg.TURSO_DATABASE_URL, cfg.TURSO_AUTH_TOKEN)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
