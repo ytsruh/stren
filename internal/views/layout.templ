@@ -78,6 +78,31 @@ templ Layout(data PageData) {
 			<main class="container">
 				{ children... }
 			</main>
+			<dialog id="confirm-dialog" closedby="any">
+				<form method="dialog">
+					<header>
+						<h3>Confirm</h3>
+						<p id="confirm-message"></p>
+					</header>
+					<footer>
+						<button type="button" commandfor="confirm-dialog" command="close" class="outline">Cancel</button>
+						<button type="button" id="confirm-ok" value="confirm" data-variant="danger">Confirm</button>
+					</footer>
+				</form>
+			</dialog>
+			<script>
+				document.body.addEventListener('htmx:confirm', function(evt) {
+					if (!evt.target.hasAttribute('hx-confirm')) return;
+					evt.preventDefault();
+					var dialog = document.getElementById('confirm-dialog');
+					document.getElementById('confirm-message').textContent = evt.detail.question;
+					document.getElementById('confirm-ok').onclick = function() {
+						dialog.close();
+						evt.detail.issueRequest(true);
+					};
+					dialog.showModal();
+				});
+			</script>
 			<script>
 				if ('serviceWorker' in navigator) {
 					navigator.serviceWorker.register('/sw.js').catch(function(err) {

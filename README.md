@@ -32,8 +32,7 @@ A simple strength tracking application built with Go, Echo, htmx, Oat UI, and SQ
 
 #### UI
 - [x] Better buttons. Some buttons are just links, not actual buttons
-- [ ] Delete entry modal instead of confirmation
+- [x] Delete entry modal instead of confirmation
 - [ ] Date formats
 - [ ] After entry redirect to dashbaord
-- [ ] Add icons
 - [ ] Exercises pages have cards that are not formatted as Cards
