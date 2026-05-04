@@ -1,0 +1,40 @@
+package views
+
+// ProfilePage renders the user profile page.
+templ ProfilePage(userName string, email string, isAdmin bool) {
+	@Layout(PageData{Title: "Profile", UserName: userName, IsAuthenticated: true}) {
+		<h1>Profile</h1>
+		<div class="grid">
+			<div class="mb-2">
+				<article class="card">
+					<header>
+						<h3>Name</h3>
+					</header>
+					<p>{ userName }</p>
+				</article>
+			</div>
+			<div class="mb-2">
+				<article class="card">
+					<header>
+						<h3>Email</h3>
+					</header>
+					<p>{ email }</p>
+				</article>
+			</div>
+			<div>
+				<article class="card">
+					<header>
+						<h3>Role</h3>
+					</header>
+					<p>
+						if isAdmin {
+							Administrator
+						} else {
+							User
+						}
+					</p>
+				</article>
+			</div>
+		</div>
+	}
+}

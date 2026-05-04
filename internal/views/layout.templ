@@ -47,22 +47,30 @@ templ Layout(data PageData) {
 							<li>
 								<a href="/" class="flex items-center gap-1">
 									@Icon(IconProps{Name: "home", Size: 18})
-									Dashboard
+									<span class="hidden-below-sm">Dashboard</span>
 								</a>
 							</li>
 							<li>
 								<a href="/entries/new" class="flex items-center gap-1">
 									@Icon(IconProps{Name: "plus", Size: 18})
-									New Entry
+									<span class="hidden-below-sm">New Entry</span>
 								</a>
 							</li>
 							<li>
-								<form method="POST" action="/logout" style="display: inline;">
-									<button type="submit" class="outline" style="margin: 0;">
-										@Icon(IconProps{Name: "log-out", Size: 18})
-										{ data.UserName }
+								<ot-dropdown>
+									<button popovertarget="user-menu" class="outline" style="margin: 0;">
+										@Icon(IconProps{Name: "user", Size: 18})
+										<span class="hidden-below-sm">{ data.UserName }</span>
+										@Icon(IconProps{Name: "chevron-down", Size: 16})
 									</button>
-								</form>
+									<menu popover id="user-menu">
+										<a href="/profile" role="menuitem">Profile</a>
+										<hr>
+										<form method="POST" action="/logout">
+											<button type="submit" role="menuitem">Logout</button>
+										</form>
+									</menu>
+								</ot-dropdown>
 							</li>
 						} else {
 							<li>

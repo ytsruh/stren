@@ -11,10 +11,6 @@ templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated
 	@Layout(PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated}) {
 		<div class="flex justify-between items-center mb-2">
 			<h1>Workout History</h1>
-			<a href="/entries/new" role="button" class="flex items-center gap-1">
-				@Icon(IconProps{Name: "plus", Size: 18})
-				New Entry
-			</a>
 		</div>
 		if len(entries) == 0 {
 			@EmptyState()

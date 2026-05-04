@@ -59,6 +59,9 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	// Routes
 	e.GET("/", h.Dashboard)
 
+	// User profile
+	e.GET("/profile", h.Profile)
+
 	// Entry CRUD
 	e.GET("/entries/new", h.NewEntryForm)
 	e.POST("/entries", h.CreateEntry)

@@ -49,6 +49,7 @@ templ Icon(props IconProps) {
 		stroke-linecap="round"
 		stroke-linejoin="round"
 		class={ props.Class }
+		style={ fmt.Sprintf("flex-shrink:0;min-width:%dpx;min-height:%dpx", props.Size, props.Size) }
 	>
 		@iconPath(name)
 	</svg>
@@ -100,6 +101,12 @@ templ iconPath(name string) {
 		case "user":
 			<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
 			<circle cx="12" cy="7" r="4"></circle>
+		case "log-out":
+			<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+			<polyline points="16 17 21 12 16 7"></polyline>
+			<line x1="21" y1="12" x2="9" y2="12"></line>
+		case "chevron-down":
+			<path d="m6 9 6 6 6-6"></path>
 		default:
 			<circle cx="12" cy="12" r="10"></circle>
 			<line x1="12" y1="16" x2="12" y2="12"></line>
