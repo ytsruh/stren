@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// EntryForm renders the form for creating/editing entries
-templ EntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, isEdit bool, userName string, isAuthenticated bool) {
-	@Layout(PageData{Title: formTitle(isEdit), UserName: userName, IsAuthenticated: isAuthenticated}) {
-		<h1>{ formTitle(isEdit) }</h1>
+// EntryForm renders the form for creating a new entry
+templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bool) {
+	@Layout(PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated}) {
+		<h1>New Entry</h1>
 		
 		<form 
-			hx-post={ formAction(entry, isEdit) }
+			hx-post="/entries"
 			hx-target="#form-result"
 			hx-swap="innerHTML"
 			class="mt-2">
@@ -24,13 +24,82 @@ templ EntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, isEdit
 						id="exercise-name"
 						name="exercise_name"
 						required>
-						if !isEdit || entry == nil {
-							<option value="">-- Select an exercise --</option>
+						<option value="">-- Select an exercise --</option>
+						for _, t := range types {
+							<option value={ t.Name }>{ t.Name }</option>
 						}
+					</select>
+				</label>
+				
+				<div class="grid">
+					<label for="reps">
+						Reps
+						<input
+							type="number"
+							id="reps"
+							name="reps"
+							min="1"
+							placeholder="8"
+							required/>
+					</label>
+					
+					<label for="weight">
+						Weight (kg)
+						<input 
+							type="number" 
+							id="weight"
+							name="weight"
+							step="0.5"
+							min="0"
+							placeholder="0.0"
+							required/>
+					</label>
+				</div>
+				
+				<label for="notes">
+					Notes (optional)
+					<textarea 
+						id="notes"
+						name="notes"
+						placeholder="How did it feel? Any observations?"></textarea>
+				</label>
+			</fieldset>
+			
+			<div class="flex gap-1">
+			<button type="submit" class="inline-flex items-center gap-1">
+				@Icon(IconProps{Name: "check", Size: 18})
+				Save Entry
+			</button>
+			<a href="/" role="button" class="secondary inline-flex items-center gap-1">@Icon(IconProps{Name: "x", Size: 18}) Cancel</a>
+			</div>
+		</form>
+		
+		<div id="form-result" class="mt-2"></div>
+	}
+}
+
+// EditEntryForm renders the form for editing an existing entry
+templ EditEntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, userName string, isAuthenticated bool) {
+	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated}) {
+		<h1>Edit Entry</h1>
+		
+		<form 
+			hx-put={ fmt.Sprintf("/entries/%d", entry.ID) }
+			hx-target="#form-result"
+			hx-swap="innerHTML"
+			class="mt-2">
+			
+			<fieldset>
+				<label for="exercise-name">
+					Exercise
+					<select 
+						id="exercise-name"
+						name="exercise_name"
+						required>
 						for _, t := range types {
 							<option 
 								value={ t.Name }
-								selected?={ entry != nil && t.Name == entry.ExerciseName }>
+								selected?={ t.Name == entry.ExerciseName }>
 								{ t.Name }
 							</option>
 						}
@@ -45,7 +114,7 @@ templ EntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, isEdit
 							id="reps"
 							name="reps"
 							min="1"
-							value={ entryValue(entry, func(e *models.ExerciseEntry) string { return fmt.Sprintf("%d", e.Reps) }) }
+							value={ fmt.Sprintf("%d", entry.Reps) }
 							placeholder="8"
 							required/>
 					</label>
@@ -58,46 +127,37 @@ templ EntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, isEdit
 							name="weight"
 							step="0.5"
 							min="0"
-							value={ entryValue(entry, func(e *models.ExerciseEntry) string { return fmt.Sprintf("%.1f", e.Weight) }) }
+							value={ fmt.Sprintf("%.1f", entry.Weight) }
 							placeholder="0.0"
 							required/>
 					</label>
 				</div>
 				
-				if isEdit && entry != nil {
-					<label for="date">
-						Date & Time
-						<input 
-							type="datetime-local" 
-							id="date"
-							name="created_at"
-							value={ formatDateTimeLocal(entry.CreatedAt) }
-							required/>
-					</label>
-				}
+				<label for="date">
+					Date & Time
+					<input 
+						type="datetime-local" 
+						id="date"
+						name="created_at"
+						value={ formatDateTimeLocal(entry.CreatedAt) }
+						required/>
+				</label>
 				
 				<label for="notes">
 					Notes (optional)
 					<textarea 
 						id="notes"
 						name="notes"
-						placeholder="How did it feel? Any observations?">{ entryValue(entry, func(e *models.ExerciseEntry) string { return e.Notes }) }</textarea>
+						placeholder="How did it feel? Any observations?">{ entry.Notes }</textarea>
 				</label>
 				
-				if isEdit && entry != nil {
-					<input type="hidden" name="id" value={ fmt.Sprintf("%d", entry.ID) }/>
-					<input type="hidden" name="_method" value="PUT"/>
-				}
+				<input type="hidden" name="id" value={ fmt.Sprintf("%d", entry.ID) }/>
 			</fieldset>
 			
 			<div class="flex gap-1">
 			<button type="submit" class="inline-flex items-center gap-1">
 				@Icon(IconProps{Name: "check", Size: 18})
-				if isEdit {
-					Update Entry
-				} else {
-					Save Entry
-				}
+				Update Entry
 			</button>
 			<a href="/" role="button" class="secondary inline-flex items-center gap-1">@Icon(IconProps{Name: "x", Size: 18}) Cancel</a>
 			</div>
@@ -134,28 +194,6 @@ templ EntryFormSuccess(message string, stayOnPage bool) {
 // EntryFormError shows form validation errors
 templ EntryFormError(message string) {
 	@Toast(message, true)
-}
-
-// Helper functions
-func formTitle(isEdit bool) string {
-	if isEdit {
-		return "Edit Entry"
-	}
-	return "New Entry"
-}
-
-func formAction(entry *models.ExerciseEntry, isEdit bool) string {
-	if isEdit && entry != nil {
-		return fmt.Sprintf("/entries/%d", entry.ID)
-	}
-	return "/entries"
-}
-
-func entryValue(entry *models.ExerciseEntry, getter func(*models.ExerciseEntry) string) string {
-	if entry == nil {
-		return ""
-	}
-	return getter(entry)
 }
 
 func formatDateTimeLocal(t time.Time) string {

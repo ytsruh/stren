@@ -48,38 +48,6 @@ func TestResolveIconName(t *testing.T) {
 	}
 }
 
-func TestFormTitle(t *testing.T) {
-	if got := formTitle(false); got != "New Entry" {
-		t.Errorf("formTitle(false) = %q, want %q", got, "New Entry")
-	}
-	if got := formTitle(true); got != "Edit Entry" {
-		t.Errorf("formTitle(true) = %q, want %q", got, "Edit Entry")
-	}
-}
-
-func TestFormAction(t *testing.T) {
-	entry := &models.ExerciseEntry{ID: 42}
-	if got := formAction(entry, true); got != "/entries/42" {
-		t.Errorf("formAction(entry, true) = %q, want %q", got, "/entries/42")
-	}
-	if got := formAction(nil, false); got != "/entries" {
-		t.Errorf("formAction(nil, false) = %q, want %q", got, "/entries")
-	}
-	if got := formAction(nil, true); got != "/entries" {
-		t.Errorf("formAction(nil, true) = %q, want %q", got, "/entries")
-	}
-}
-
-func TestEntryValue(t *testing.T) {
-	entry := &models.ExerciseEntry{Reps: 8, Notes: "felt good"}
-	if got := entryValue(entry, func(e *models.ExerciseEntry) string { return e.Notes }); got != "felt good" {
-		t.Errorf("entryValue(entry, notes) = %q, want %q", got, "felt good")
-	}
-	if got := entryValue(nil, func(e *models.ExerciseEntry) string { return e.Notes }); got != "" {
-		t.Errorf("entryValue(nil, notes) = %q, want %q", got, "")
-	}
-}
-
 func TestFormatDateTimeLocal(t *testing.T) {
 	tm := time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC)
 	got := formatDateTimeLocal(tm)
@@ -317,7 +285,7 @@ func TestEntryForm_New(t *testing.T) {
 		{ID: 1, Name: "Squat"},
 		{ID: 2, Name: "Bench Press"},
 	}
-	html := renderToString(t, EntryForm(nil, types, false, "Test User", true))
+	html := renderToString(t, EntryForm(types, "Test User", true))
 	if !strings.Contains(html, "New Entry") {
 		t.Error("expected new entry title")
 	}
@@ -329,7 +297,7 @@ func TestEntryForm_New(t *testing.T) {
 	}
 }
 
-func TestEntryForm_Edit(t *testing.T) {
+func TestEditEntryForm(t *testing.T) {
 	entry := &models.ExerciseEntry{
 		ID:           1,
 		ExerciseName: "Squat",
@@ -342,7 +310,7 @@ func TestEntryForm_Edit(t *testing.T) {
 		{ID: 1, Name: "Squat"},
 		{ID: 2, Name: "Bench Press"},
 	}
-	html := renderToString(t, EntryForm(entry, types, true, "Test User", true))
+	html := renderToString(t, EditEntryForm(entry, types, "Test User", true))
 	if !strings.Contains(html, "Edit Entry") {
 		t.Error("expected edit title")
 	}

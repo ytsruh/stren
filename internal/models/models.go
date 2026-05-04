@@ -28,12 +28,7 @@ func (e *ExerciseEntry) FormattedWeight() string {
 	return fmt.Sprintf("%.1f kg", e.Weight)
 }
 
-// FormattedDate returns a human-readable date
+// FormattedDate returns a human-readable date in UK short format
 func (e *ExerciseEntry) FormattedDate() string {
-	return e.CreatedAt.Format("Jan 02, 2006")
-}
-
-// FormattedTime returns a human-readable time
-func (e *ExerciseEntry) FormattedTime() string {
-	return e.CreatedAt.Format("3:04 PM")
+	return e.CreatedAt.Format("02/01/06")
 }

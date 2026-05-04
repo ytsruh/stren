@@ -32,7 +32,7 @@ func (h *Handler) NewEntryForm(c echo.Context) error {
 	}
 
 	claims := GetClaims(c)
-	return render(c, views.EntryForm(nil, types, false, claims.Name, true))
+	return render(c, views.EntryForm(types, claims.Name, true))
 }
 
 // CreateEntry handles the creation of a new entry.
@@ -77,7 +77,7 @@ func (h *Handler) EditEntryForm(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.EntryForm(entry, types, true, claims.Name, true))
+	return render(c, views.EditEntryForm(entry, types, claims.Name, true))
 }
 
 // GetEntry returns a single entry (for API/hx-get).

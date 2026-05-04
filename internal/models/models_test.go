@@ -54,12 +54,12 @@ func TestExerciseEntry_FormattedDate(t *testing.T) {
 		{
 			name:     "january date",
 			input:    time.Date(2024, 1, 15, 0, 0, 0, 0, loc),
-			expected: "Jan 15, 2024",
+			expected: "15/01/24",
 		},
 		{
 			name:     "december date",
 			input:    time.Date(2023, 12, 31, 23, 59, 59, 0, loc),
-			expected: "Dec 31, 2023",
+			expected: "31/12/23",
 		},
 	}
 
@@ -69,46 +69,6 @@ func TestExerciseEntry_FormattedDate(t *testing.T) {
 			got := entry.FormattedDate()
 			if got != tt.expected {
 				t.Errorf("FormattedDate() = %q, want %q", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestExerciseEntry_FormattedTime(t *testing.T) {
-	loc := time.UTC
-	tests := []struct {
-		name     string
-		input    time.Time
-		expected string
-	}{
-		{
-			name:     "morning time",
-			input:    time.Date(2024, 1, 1, 9, 30, 0, 0, loc),
-			expected: "9:30 AM",
-		},
-		{
-			name:     "afternoon time",
-			input:    time.Date(2024, 1, 1, 14, 45, 0, 0, loc),
-			expected: "2:45 PM",
-		},
-		{
-			name:     "midnight",
-			input:    time.Date(2024, 1, 1, 0, 0, 0, 0, loc),
-			expected: "12:00 AM",
-		},
-		{
-			name:     "noon",
-			input:    time.Date(2024, 1, 1, 12, 0, 0, 0, loc),
-			expected: "12:00 PM",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			entry := &ExerciseEntry{CreatedAt: tt.input}
-			got := entry.FormattedTime()
-			if got != tt.expected {
-				t.Errorf("FormattedTime() = %q, want %q", got, tt.expected)
 			}
 		})
 	}

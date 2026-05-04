@@ -48,11 +48,7 @@ templ EntryList(entries []models.ExerciseEntry) {
 // EntryRow renders a single entry row (used for htmx swaps)
 templ EntryRow(entry models.ExerciseEntry) {
 	<tr id={ fmt.Sprintf("entry-%d", entry.ID) }>
-		<td>
-			<strong>{ entry.FormattedDate() }</strong>
-			<br/>
-			<small>{ entry.FormattedTime() }</small>
-		</td>
+		<td>{ entry.FormattedDate() }</td>
 		<td>
 			<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", entry.ExerciseName)) }>
 				{ entry.ExerciseName }
@@ -119,7 +115,7 @@ templ QuickStats(entries []models.ExerciseEntry) {
 
 // StatCard is a single statistic card
 templ StatCard(label string, value string) {
-	<article>
+	<article class="card">
 		<header>
 			<h4>{ value }</h4>
 		</header>

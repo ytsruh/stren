@@ -40,10 +40,7 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 				<tbody>
 					for _, entry := range entries {
 						<tr id={ fmt.Sprintf("entry-%d", entry.ID) }>
-							<td>
-								<strong>{ entry.FormattedDate() }</strong><br/>
-								<small>{ entry.FormattedTime() }</small>
-							</td>
+							<td>{ entry.FormattedDate() }</td>
 							<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
 							<td>{ entry.FormattedWeight() }</td>
 							<td>{ entry.Notes }</td>
@@ -59,6 +56,7 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 									</a>
 									<button
 										title="Delete"
+										data-variant="danger"
 										hx-delete={ fmt.Sprintf("/entries/%d", entry.ID) }
 										hx-confirm="Delete this entry?"
 										hx-target={ fmt.Sprintf("#entry-%d", entry.ID) }
@@ -82,15 +80,11 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 
 // ExerciseStats shows statistics for an exercise
 templ ExerciseStats(entries []models.ExerciseEntry) {
-	<article>
-		<header>
-			<h3 class="flex items-center gap-1">@Icon(IconProps{Name: "trending-up", Size: 20}) Stats</h3>
-		</header>
-		<div class="grid">
-			@StatCard("Personal Best", fmt.Sprintf("%.1f kg", maxWeight(entries)))
-			@StatCard("Last Set", getLastSet(entries))
-		</div>
-	</article>
+	<h3 class="flex items-center gap-1">@Icon(IconProps{Name: "trending-up", Size: 20}) Stats</h3>
+	<div class="flex gap-1">
+		@StatCard("Personal Best", fmt.Sprintf("%.1f kg", maxWeight(entries)))
+		@StatCard("Last Set", getLastSet(entries))
+	</div>
 }
 
 // Helper functions
