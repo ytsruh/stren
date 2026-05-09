@@ -3,11 +3,11 @@ package views
 import "stren/internal/models"
 
 type PageData struct {
-	Title          string
-	Entries        []models.ExerciseEntry
-	Types          []models.ExerciseType
-	Entry          *models.ExerciseEntry
-	UserName       string
+	Title           string
+	Entries         []models.ExerciseEntry
+	Types           []models.ExerciseType
+	Entry           *models.ExerciseEntry
+	UserName        string
 	IsAuthenticated bool
 }
 
@@ -28,12 +28,7 @@ templ Layout(data PageData) {
 			<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
 			<link rel="manifest" href="/manifest.json"/>
 			<title>{ data.Title } - Strength Tracker</title>
-			<!-- Tailwind CSS CDN with dark mode class support -->
-			<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
-			<script>
-				tailwind.config = { darkMode: 'class' }
-			</script>
-			<!-- Theme initialization (must be before page renders) -->
+			<!-- Dark mode: Basecoat uses .dark class on <html> -->
 			<script>
 				(() => {
 					try {
@@ -57,16 +52,14 @@ templ Layout(data PageData) {
 					});
 				})();
 			</script>
-			<!-- Basecoat CSS -->
-			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/basecoat.cdn.min.css">
-			<!-- Basecoat JS (for dropdown-menu, dialog, etc.) -->
-			<script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/js/all.min.js" defer></script>
 			<!-- App styles -->
 			<link rel="stylesheet" href="/css/styles.css"/>
 			<!-- htmx -->
 			<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+			<!-- basecoat -->
+			<script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/js/all.min.js" defer></script>
 		</head>
-		<body>
+		<body class="overflow-x-hidden">
 			<header>
 				<nav class="sticky top-0 z-50 flex items-center gap-4 px-4 bg-background border-b border-border shadow-sm">
 					<ul class="flex list-none m-0 p-0 items-center gap-3">
@@ -88,7 +81,7 @@ templ Layout(data PageData) {
 							</li>
 							<li>
 								<div id="user-dropdown" class="dropdown-menu">
-									<button type="button" id="user-dropdown-trigger" aria-haspopup="menu" aria-controls="user-dropdown-menu" aria-expanded="false" class="btn-outline flex items-center gap-2 m-0">
+									<button type="button" id="user-dropdown-trigger" aria-haspopup="menu" aria-controls="user-dropdown-menu" aria-expanded="false" class="btn-ghost flex items-center gap-2 m-0">
 										@Icon(IconProps{Name: "user", Size: 18})
 										<span class="hidden sm:inline">{ data.UserName }</span>
 										@Icon(IconProps{Name: "chevron-down", Size: 16})
@@ -158,13 +151,13 @@ templ Layout(data PageData) {
 templ Toast(message string, isError bool) {
 	if isError {
 		<div class="alert-destructive" role="alert">
-			<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+			<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
 			<h2>Error</h2>
 			<section>{ message }</section>
 		</div>
 	} else {
 		<div class="alert" role="alert">
-			<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+			<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
 			<h2>Success</h2>
 			<section>{ message }</section>
 		</div>

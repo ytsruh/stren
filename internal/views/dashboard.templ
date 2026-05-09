@@ -22,15 +22,14 @@ templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated
 
 // EntryList renders a table of entries
 templ EntryList(entries []models.ExerciseEntry) {
-	<div class="overflow-x-auto">
-		<table class="table">
+		<table class="table w-full">
 			<thead>
 				<tr>
 					<th>Date</th>
 					<th>Exercise</th>
 					<th>Reps</th>
 					<th>Weight</th>
-					<th>Notes</th>
+					<th class="hidden lg:table-cell">Notes</th>
 					<th>Actions</th>
 				</tr>
 			</thead>
@@ -40,7 +39,6 @@ templ EntryList(entries []models.ExerciseEntry) {
 				}
 			</tbody>
 		</table>
-	</div>
 }
 
 // EntryRow renders a single entry row (used for htmx swaps)
@@ -54,7 +52,7 @@ templ EntryRow(entry models.ExerciseEntry) {
 		</td>
 		<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
 		<td>{ entry.FormattedWeight() }</td>
-		<td>{ entry.Notes }</td>
+		<td class="hidden lg:table-cell">{ entry.Notes }</td>
 		<td>
 			<div class="flex gap-2">
 				<a

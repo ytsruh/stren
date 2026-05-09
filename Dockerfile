@@ -2,8 +2,12 @@ FROM golang:1.25-bookworm AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
+
+# Download and install Tailwind CLI for Linux
+RUN curl -sL "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.0/tailwindcss-linux-x64" -o tailwindcss \
+    && chmod +x tailwindcss
 
 COPY go.mod go.sum ./
 RUN go mod download
@@ -12,6 +16,7 @@ COPY . .
 
 RUN go install github.com/a-h/templ/cmd/templ@latest
 RUN templ generate
+RUN ./tailwindcss -i ./styles/input.css -o ./public/css/styles.css --minify
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o stren ./cmd/main.go
 
 FROM debian:bookworm-slim
