@@ -28,9 +28,39 @@ templ Layout(data PageData) {
 			<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
 			<link rel="manifest" href="/manifest.json"/>
 			<title>{ data.Title } - Strength Tracker</title>
-			<!-- Oat CSS -->
-			<link rel="stylesheet" href="https://unpkg.com/@knadh/oat/oat.min.css"/>
-			<script src="https://unpkg.com/@knadh/oat/oat.min.js" defer></script>
+			<!-- Tailwind CSS CDN with dark mode class support -->
+			<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+			<script>
+				tailwind.config = { darkMode: 'class' }
+			</script>
+			<!-- Theme initialization (must be before page renders) -->
+			<script>
+				(() => {
+					try {
+						const stored = localStorage.getItem('themeMode');
+						if (stored ? stored === 'dark'
+									: matchMedia('(prefers-color-scheme: dark)').matches) {
+							document.documentElement.classList.add('dark');
+						}
+					} catch (_) {}
+
+					const apply = dark => {
+						document.documentElement.classList.toggle('dark', dark);
+						try { localStorage.setItem('themeMode', dark ? 'dark' : 'light'); } catch (_) {}
+					};
+
+					document.addEventListener('basecoat:theme', (event) => {
+						const mode = event.detail?.mode;
+						apply(mode === 'dark' ? true
+								: mode === 'light' ? false
+								: !document.documentElement.classList.contains('dark'));
+					});
+				})();
+			</script>
+			<!-- Basecoat CSS -->
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/basecoat.cdn.min.css">
+			<!-- Basecoat JS (for dropdown-menu, dialog, etc.) -->
+			<script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/js/all.min.js" defer></script>
 			<!-- App styles -->
 			<link rel="stylesheet" href="/css/styles.css"/>
 			<!-- htmx -->
@@ -38,63 +68,65 @@ templ Layout(data PageData) {
 		</head>
 		<body>
 			<header>
-				<nav data-topnav>
-					<ul>
+				<nav class="sticky top-0 z-50 flex items-center gap-4 px-4 bg-background border-b border-border shadow-sm">
+					<ul class="flex list-none m-0 p-0 items-center gap-3">
 						<li><strong>Stren</strong></li>
 					</ul>
-					<ul>
+					<ul class="flex list-none m-0 p-0 items-center gap-3 ml-auto">
 						if data.IsAuthenticated {
 							<li>
-								<a href="/" class="flex items-center gap-1">
+								<a href="/" class="inline-flex items-center gap-2 no-underline">
 									@Icon(IconProps{Name: "home", Size: 18})
-									<span class="hidden-below-sm">Dashboard</span>
+									<span class="hidden sm:inline">Dashboard</span>
 								</a>
 							</li>
 							<li>
-								<a href="/entries/new" class="flex items-center gap-1">
+								<a href="/entries/new" class="inline-flex items-center gap-2 no-underline">
 									@Icon(IconProps{Name: "plus", Size: 18})
-									<span class="hidden-below-sm">New Entry</span>
+									<span class="hidden sm:inline">New Entry</span>
 								</a>
 							</li>
 							<li>
-								<ot-dropdown>
-									<button popovertarget="user-menu" class="outline" style="margin: 0;">
+								<div id="user-dropdown" class="dropdown-menu">
+									<button type="button" id="user-dropdown-trigger" aria-haspopup="menu" aria-controls="user-dropdown-menu" aria-expanded="false" class="btn-outline flex items-center gap-2 m-0">
 										@Icon(IconProps{Name: "user", Size: 18})
-										<span class="hidden-below-sm">{ data.UserName }</span>
+										<span class="hidden sm:inline">{ data.UserName }</span>
 										@Icon(IconProps{Name: "chevron-down", Size: 16})
 									</button>
-									<menu popover id="user-menu">
-										<a href="/profile" role="menuitem">Profile</a>
-										<hr>
-										<form method="POST" action="/logout">
-											<button type="submit" role="menuitem">Logout</button>
-										</form>
-									</menu>
-								</ot-dropdown>
+									<div id="user-dropdown-popover" data-popover aria-hidden="true" class="min-w-40">
+										<div role="menu" id="user-dropdown-menu" aria-labelledby="user-dropdown-trigger">
+											<a href="/profile" role="menuitem" class="block px-4 py-2 no-underline hover:bg-accent">Profile</a>
+											<hr role="separator"/>
+											<form method="POST" action="/logout">
+												<button type="submit" role="menuitem" class="w-full text-left px-4 py-2 hover:bg-accent">Logout</button>
+											</form>
+										</div>
+									</div>
+								</div>
 							</li>
 						} else {
 							<li>
-								<a href="/login">Login</a>
+								<a href="/login" class="no-underline">Login</a>
 							</li>
 							<li>
-								<a href="/register" role="button">Register</a>
+								<a href="/register" class="btn btn-outline">Register</a>
 							</li>
 						}
 					</ul>
 				</nav>
 			</header>
-			<main class="container">
+			<main class="container mx-auto max-w-3xl px-4 py-8 flex-1">
 				{ children... }
 			</main>
-			<dialog id="confirm-dialog" closedby="any">
+			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
 				<form method="dialog">
 					<header>
 						<h3>Confirm</h3>
 						<p id="confirm-message"></p>
 					</header>
 					<footer>
-						<button type="button" commandfor="confirm-dialog" command="close" class="outline">Cancel</button>
-						<button type="button" id="confirm-ok" value="confirm" data-variant="danger">Confirm</button>
+						<button type="button" commandfor="confirm-dialog" command="close" class="btn-outline">Cancel</button>
+						<button type="button" id="confirm-ok" value="confirm" class="btn-destructive">Confirm</button>
 					</footer>
 				</form>
 			</dialog>
@@ -125,28 +157,35 @@ templ Layout(data PageData) {
 // Toast is a notification component
 templ Toast(message string, isError bool) {
 	if isError {
-		<article class="alert alert-danger" role="alert">
-			{ message }
-		</article>
+		<div class="alert-destructive" role="alert">
+			<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+			<h2>Error</h2>
+			<section>{ message }</section>
+		</div>
 	} else {
-		<article class="alert alert-success" role="alert">
-			{ message }
-		</article>
+		<div class="alert" role="alert">
+			<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+			<h2>Success</h2>
+			<section>{ message }</section>
+		</div>
 	}
 }
 
 // EmptyState shows when no entries exist
 templ EmptyState() {
-	<article>
-		<header>
-			<h3>No workouts yet</h3>
+	<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
+		<header class="flex max-w-sm flex-col items-center gap-3 text-center">
+			<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
+				@Icon(IconProps{Name: "dumbbell", Size: 24})
+			</div>
+			<h3 class="text-lg font-semibold">No workouts yet</h3>
+			<p class="text-muted-foreground text-sm">Start tracking your strength journey by adding your first exercise entry.</p>
 		</header>
-		<p>Start tracking your strength journey by adding your first exercise entry.</p>
-		<footer>
-			<a href="/entries/new" role="button" class="flex items-center gap-1">
+		<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
+			<a href="/entries/new" class="btn">
 				@Icon(IconProps{Name: "plus", Size: 18})
 				Add First Entry
 			</a>
-		</footer>
-	</article>
+		</section>
+	</div>
 }

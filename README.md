@@ -1,6 +1,6 @@
 # Strength Tracker
 
-A simple strength tracking application built with Go, Echo, htmx, Oat UI, and SQLite. HTMX and OatCSS give a simple, clean semantic view layer. Built using an MVC architecture and focussed on using as few dependancies as possible.
+A simple strength tracking application built with Go, Echo, htmx, Basecoat UI, and SQLite. HTMX and Basecoat give a simple, clean semantic view layer. Built using an MVC architecture and focused on using as few dependencies as possible.
 
 ## Features
 

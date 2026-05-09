@@ -2,68 +2,19 @@
 html, body { min-height: 100vh; }
 body { display: flex; flex-direction: column; }
 main { flex: 1; }
-.container { max-width: 900px; margin: 0 auto; padding: 2rem; }
-
-/* Utility classes */
-.mb-2 { margin-bottom: 1rem; }
-.mt-2 { margin-top: 1rem; }
-.flex { display: flex; }
-.inline-flex { display: inline-flex; }
-.justify-between { justify-content: space-between; }
-.justify-center { justify-content: center; }
-.items-center { align-items: center; }
-.gap-1 { gap: 0.5rem; }
-
-/* Responsive visibility utilities - hide/show at breakpoints */
-/* sm ≥ 640px, md ≥ 768px, lg ≥ 1024px */
-
-/* Hidden by default, shown at breakpoint+ (like Tailwind's "hidden md:block") */
-.hidden-below-sm  { display: none !important; }
-.hidden-below-md  { display: none !important; }
-.hidden-below-lg  { display: none !important; }
-
-@media (min-width: 640px)  { .hidden-below-sm  { display: revert !important; } }
-@media (min-width: 768px)  { .hidden-below-md  { display: revert !important; } }
-@media (min-width: 1024px) { .hidden-below-lg  { display: revert !important; } }
-
-/* Visible by default, hidden at breakpoint+ (like Tailwind's "block md:hidden") */
-@media (min-width: 640px)  { .hidden-above-sm  { display: none !important; } }
-@media (min-width: 768px)  { .hidden-above-md  { display: none !important; } }
-@media (min-width: 1024px) { .hidden-above-lg  { display: none !important; } }
 
 /* Fade-out animation for htmx deletes */
 .fade-out { animation: fadeOut 0.3s ease-out; }
 @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
 
-/* Form fixes */
+/* Form fixes for Basecoat */
 textarea { width: 100%; min-height: 80px; }
 select, input:not([type="date"]) { width: 100%; }
 
-/* Nav styling */
-nav[data-topnav] {
-	position: sticky;
-	top: 0;
-	z-index: 5;
-	display: flex;
-	align-items: center;
-	gap: var(--space-3);
-	padding: var(--space-2) var(--space-4);
-	background-color: var(--background);
-	border-bottom: 1px solid var(--border);
-	box-shadow: var(--shadow-small);
-}
-nav[data-topnav] a { text-decoration: none; }
-nav[data-topnav] ul {
-	display: flex;
-	list-style: none;
-	margin: 0;
-	padding: 0;
-	align-items: center;
-	gap: var(--space-3);
-}
-nav[data-topnav] ul:first-child { margin-right: auto; }
-
-/* Confirm dialog backdrop */
+/* Dialog backdrop - Basecoat uses ::backdrop */
 dialog::backdrop {
 	background: rgba(0, 0, 0, 0.5);
 }
+
+/* Dropdown menu trigger alignment fix */
+.dropdown-menu button { margin: 0; }

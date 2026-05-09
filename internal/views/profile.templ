@@ -3,29 +3,29 @@ package views
 // ProfilePage renders the user profile page.
 templ ProfilePage(userName string, email string, isAdmin bool) {
 	@Layout(PageData{Title: "Profile", UserName: userName, IsAuthenticated: true}) {
-		<h1>Profile</h1>
-		<div class="grid">
-			<div class="mb-2">
-				<article class="card">
-					<header>
-						<h3>Name</h3>
-					</header>
+		<h1 class="mb-6">Profile</h1>
+		<div class="grid gap-4 max-w-md">
+			<div class="card">
+				<header>
+					<h3>Name</h3>
+				</header>
+				<section>
 					<p>{ userName }</p>
-				</article>
+				</section>
 			</div>
-			<div class="mb-2">
-				<article class="card">
-					<header>
-						<h3>Email</h3>
-					</header>
+			<div class="card">
+				<header>
+					<h3>Email</h3>
+				</header>
+				<section>
 					<p>{ email }</p>
-				</article>
+				</section>
 			</div>
-			<div>
-				<article class="card">
-					<header>
-						<h3>Role</h3>
-					</header>
+			<div class="card">
+				<header>
+					<h3>Role</h3>
+				</header>
+				<section>
 					<p>
 						if isAdmin {
 							Administrator
@@ -33,7 +33,25 @@ templ ProfilePage(userName string, email string, isAdmin bool) {
 							User
 						}
 					</p>
-				</article>
+				</section>
+			</div>
+			<div class="card">
+				<header>
+					<h3>Appearance</h3>
+				</header>
+				<section>
+					<button
+						type="button"
+						aria-label="Toggle dark mode"
+						onclick="document.dispatchEvent(new CustomEvent('basecoat:theme'))"
+						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block dark:hidden"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+						<span class="hidden dark:inline">Light Mode</span>
+						<span class="inline dark:hidden">Dark Mode</span>
+					</button>
+				</section>
 			</div>
 		</div>
 	}
