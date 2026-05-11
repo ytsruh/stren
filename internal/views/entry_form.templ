@@ -10,7 +10,7 @@ import (
 // EntryForm renders the form for creating a new entry
 templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bool) {
 	@Layout(PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated}) {
-		<h1 class="mb-6">New Entry</h1>
+		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Entry"})
 
 		<form
 			hx-post="/entries"
@@ -89,7 +89,7 @@ templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bo
 // EditEntryForm renders the form for editing an existing entry
 templ EditEntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, userName string, isAuthenticated bool) {
 	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated}) {
-		<h1 class="mb-6">Edit Entry</h1>
+		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
 
 		<form
 			hx-put={ fmt.Sprintf("/entries/%d", entry.ID) }

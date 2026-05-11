@@ -61,7 +61,7 @@ templ Layout(data PageData) {
 			if data.IsAuthenticated {
 				<aside class="sidebar" data-side="left" aria-hidden="false">
 					<nav aria-label="Sidebar navigation">
-						<header class="py-2 border-b border-sidebar-border">
+						<header class="border-sidebar-border">
 							<div class="flex items-center gap-3">
 								<div class="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg font-bold">S</div>
 								<span class="font-semibold text-sidebar-foreground truncate">Stren</span>
@@ -111,7 +111,7 @@ templ Layout(data PageData) {
 									</li>
 									<li>
 										<form method="POST" action="/logout">
-											<button type="submit" class="flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:bg-sidebar-accent active:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0">
+											<button type="submit" class="hover:cursor-pointer flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:bg-sidebar-accent active:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0">
 												@components.Icon(components.IconProps{Name: "log-out", Size: 18})
 												<span class="truncate">Logout</span>
 											</button>

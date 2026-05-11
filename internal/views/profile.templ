@@ -5,7 +5,7 @@ import "stren/internal/views/components"
 // ProfilePage renders the user profile page.
 templ ProfilePage(userName string, email string, isAdmin bool) {
 	@Layout(PageData{Title: "Profile", UserName: userName, IsAuthenticated: true}) {
-		<h1 class="mb-6">Profile</h1>
+		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Profile"})
 		<div class="grid gap-4 max-w-md">
 			@components.Card(components.CardProps{}) {
 				@components.CardHeader(components.CardHeaderProps{}) {

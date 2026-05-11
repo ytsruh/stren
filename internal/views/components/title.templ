@@ -1,0 +1,58 @@
+package components
+
+type TitleProps struct {
+    Size     string
+    Color    string
+    Title    string
+    Subtitle string
+}
+
+func Title(props TitleProps) templ.Component {
+    return titleComponent(props)
+}
+
+templ titleComponent(props TitleProps) {
+    switch props.Size {
+    case "sm":
+        <small class={ getTitleClasses(props.Color) }>{ props.Title }</small>
+        if props.Subtitle != "" {
+            <p class="text-sm text-muted-foreground mt-1">{ props.Subtitle }</p>
+        }
+    case "md":
+        <h2 class={ getTitleClasses(props.Color) }>{ props.Title }</h2>
+        if props.Subtitle != "" {
+            <p class="text-sm text-muted-foreground mt-1">{ props.Subtitle }</p>
+        }
+    case "lg":
+        <h1 class={ "text-2xl font-bold " + getTitleColorClass(props.Color) }>{ props.Title }</h1>
+        if props.Subtitle != "" {
+            <p class="text-muted-foreground mt-1">{ props.Subtitle }</p>
+        }
+    case "xl":
+        <h1 class={ "text-4xl font-bold " + getTitleColorClass(props.Color) }>{ props.Title }</h1>
+        if props.Subtitle != "" {
+            <p class="text-muted-foreground mt-1">{ props.Subtitle }</p>
+        }
+    default:
+        <h2 class={ getTitleClasses(props.Color) }>{ props.Title }</h2>
+        if props.Subtitle != "" {
+            <p class="text-sm text-muted-foreground mt-1">{ props.Subtitle }</p>
+        }
+    }
+}
+
+func getTitleClasses(color string) string {
+    base := "font-semibold"
+    return base + " " + getTitleColorClass(color)
+}
+
+func getTitleColorClass(color string) string {
+    switch color {
+    case "muted":
+        return "text-muted-foreground"
+    case "primary":
+        return "text-primary"
+    default:
+        return "text-foreground"
+    }
+}

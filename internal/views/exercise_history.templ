@@ -9,19 +9,14 @@ import (
 // ExerciseHistory shows all entries for a specific exercise
 templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userName string, isAuthenticated bool) {
 	@Layout(PageData{Title: exerciseName, UserName: userName, IsAuthenticated: isAuthenticated}) {
-		<div class="flex justify-between items-center mb-6">
-			<h1 class="flex items-center gap-3">
-				@components.Icon(components.IconProps{Name: "dumbbell", Size: 24})
-				{ exerciseName }
-			</h1>
-		</div>
+		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: exerciseName})
 		if len(entries) == 0 {
 			<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
 				<header class="flex max-w-sm flex-col items-center gap-3 text-center">
 					<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
 						@components.Icon(components.IconProps{Name: "dumbbell", Size: 24})
 					</div>
-					<h3 class="text-lg font-semibold">No entries yet</h3>
+					@components.Title(components.TitleProps{Size: "md", Color: "default", Title: "No entries yet"})
 					<p class="text-muted-foreground text-sm">You haven't logged any sets for { exerciseName } yet.</p>
 				</header>
 				<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
@@ -91,9 +86,9 @@ templ ExerciseStats(entries []models.ExerciseEntry) {
 		@components.Icon(components.IconProps{Name: "trending-up", Size: 20})
 		Stats
 	</h3>
-	<div class="flex gap-4 mb-6">
-		@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
+	<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
 		@components.StatCard(components.StatCardProps{Label: "Last Set", Value: getLastSet(entries)})
+		@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
 	</div>
 }
 
