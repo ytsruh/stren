@@ -17,6 +17,7 @@ type Querier interface {
 	GetEntriesByDateRange(ctx context.Context, arg GetEntriesByDateRangeParams) ([]GetEntriesByDateRangeRow, error)
 	GetEntriesByExercise(ctx context.Context, arg GetEntriesByExerciseParams) ([]GetEntriesByExerciseRow, error)
 	GetEntry(ctx context.Context, arg GetEntryParams) (GetEntryRow, error)
+	GetTypeByID(ctx context.Context, id int64) (ExerciseType, error)
 	GetTypeByName(ctx context.Context, name string) (ExerciseType, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
@@ -25,6 +26,7 @@ type Querier interface {
 	ListTypes(ctx context.Context) ([]ExerciseType, error)
 	UpdateEntry(ctx context.Context, arg UpdateEntryParams) error
 	UpdateEntryWithDate(ctx context.Context, arg UpdateEntryWithDateParams) error
+	UpdateType(ctx context.Context, arg UpdateTypeParams) (ExerciseType, error)
 }
 
 var _ Querier = (*Queries)(nil)

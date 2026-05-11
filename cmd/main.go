@@ -37,10 +37,11 @@ func main() {
 	// Initialize controllers
 	authCtrl := controllers.NewAuthController(userRepo, jwtService)
 	entryCtrl := controllers.NewEntryController(repo)
+	adminCtrl := controllers.NewAdminController(repo)
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
-	h := routes.NewHandler(authCtrl, entryCtrl, jwtService, validator)
+	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, jwtService, validator)
 
 	// Create Echo instance
 	e := echo.New()

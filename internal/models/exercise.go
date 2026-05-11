@@ -60,6 +60,35 @@ func (r *ExerciseRepository) ListTypes() ([]ExerciseType, error) {
 	return types, nil
 }
 
+// GetTypeByID retrieves an exercise type by its ID.
+func (r *ExerciseRepository) GetTypeByID(id int64) (*ExerciseType, error) {
+	ctx := context.Background()
+	row, err := r.queries.GetTypeByID(ctx, id)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get exercise type: %w", err)
+	}
+	return &ExerciseType{ID: row.ID, Name: row.Name}, nil
+}
+
+// CreateTypeNoTx creates a new exercise type without a transaction.
+func (r *ExerciseRepository) CreateTypeNoTx(name string) (int64, error) {
+	ctx := context.Background()
+	return r.queries.CreateType(ctx, name)
+}
+
+// UpdateType updates an exercise type's name.
+func (r *ExerciseRepository) UpdateType(id int64, name string) (*ExerciseType, error) {
+	ctx := context.Background()
+	row, err := r.queries.UpdateType(ctx, db.UpdateTypeParams{Name: name, ID: id})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update exercise type: %w", err)
+	}
+	return &ExerciseType{ID: row.ID, Name: row.Name}, nil
+}
+
 // CreateEntry persists a new exercise entry and links it to its type.
 func (r *ExerciseRepository) CreateEntry(entry *ExerciseEntry) error {
 	return r.db.Transaction(func(tx *sql.Tx) error {

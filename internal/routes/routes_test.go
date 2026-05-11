@@ -33,6 +33,9 @@ type mockRepository struct {
 
 	errCreateType            error
 	errGetTypeByName         error
+	errGetTypeByID           error
+	errUpdateType            error
+	errCreateTypeNoTx        error
 	errListTypes             error
 	errCreateEntry           error
 	errGetEntry              error
@@ -81,6 +84,54 @@ func (m *mockRepository) GetTypeByName(name string) (*models.ExerciseType, error
 		}
 	}
 	return nil, nil
+}
+
+func (m *mockRepository) GetTypeByID(id int64) (*models.ExerciseType, error) {
+	if m.errGetTypeByID != nil {
+		return nil, m.errGetTypeByID
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.types {
+		if t.ID == id {
+			cp := t
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockRepository) UpdateType(id int64, name string) (*models.ExerciseType, error) {
+	if m.errUpdateType != nil {
+		return nil, m.errUpdateType
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, t := range m.types {
+		if t.ID == id {
+			m.types[i].Name = name
+			cp := m.types[i]
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockRepository) CreateTypeNoTx(name string) (int64, error) {
+	if m.errCreateTypeNoTx != nil {
+		return 0, m.errCreateTypeNoTx
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.types {
+		if t.Name == name {
+			return t.ID, nil
+		}
+	}
+	id := m.nextTypeID
+	m.nextTypeID++
+	m.types = append(m.types, models.ExerciseType{ID: id, Name: name})
+	return id, nil
 }
 
 func (m *mockRepository) ListTypes() ([]models.ExerciseType, error) {
@@ -292,8 +343,9 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	mock.nextTypeID = 3
 	authCtrl := controllers.NewAuthController(mockUser, jwtService)
 	entryCtrl := controllers.NewEntryController(mock)
+	adminCtrl := controllers.NewAdminController(mock)
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, jwtService, validator)
+	h := NewHandler(authCtrl, entryCtrl, adminCtrl, jwtService, validator)
 	return h, mock, mockUser, e
 }
 

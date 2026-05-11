@@ -142,7 +142,7 @@ func TestDashboard_WithEntries(t *testing.T) {
 	entries := []models.ExerciseEntry{
 		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
-	html := renderToString(t, Dashboard(entries, "Test User", true))
+	html := renderToString(t, Dashboard(entries, "Test User", true, false))
 	if !strings.Contains(html, "Workout History") {
 		t.Error("expected page title")
 	}
@@ -155,7 +155,7 @@ func TestDashboard_WithEntries(t *testing.T) {
 }
 
 func TestDashboard_Empty(t *testing.T) {
-	html := renderToString(t, Dashboard([]models.ExerciseEntry{}, "Test User", true))
+	html := renderToString(t, Dashboard([]models.ExerciseEntry{}, "Test User", true, false))
 	if !strings.Contains(html, "No workouts yet") {
 		t.Error("expected empty state when no entries")
 	}
@@ -261,7 +261,7 @@ func TestEntryForm_New(t *testing.T) {
 		{ID: 1, Name: "Squat"},
 		{ID: 2, Name: "Bench Press"},
 	}
-	html := renderToString(t, EntryForm(types, "Test User", true))
+	html := renderToString(t, EntryForm(types, "Test User", true, false))
 	if !strings.Contains(html, "New Entry") {
 		t.Error("expected new entry title")
 	}
@@ -286,7 +286,7 @@ func TestEditEntryForm(t *testing.T) {
 		{ID: 1, Name: "Squat"},
 		{ID: 2, Name: "Bench Press"},
 	}
-	html := renderToString(t, EditEntryForm(entry, types, "Test User", true))
+	html := renderToString(t, EditEntryForm(entry, types, "Test User", true, false))
 	if !strings.Contains(html, "Edit Entry") {
 		t.Error("expected edit title")
 	}
@@ -332,7 +332,7 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 	entries := []models.ExerciseEntry{
 		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
-	html := renderToString(t, ExerciseHistory("Squat", entries, "Test User", true))
+	html := renderToString(t, ExerciseHistory("Squat", entries, "Test User", true, false))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected exercise name heading")
 	}
@@ -348,7 +348,7 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 }
 
 func TestExerciseHistory_Empty(t *testing.T) {
-	html := renderToString(t, ExerciseHistory("Squat", []models.ExerciseEntry{}, "Test User", true))
+	html := renderToString(t, ExerciseHistory("Squat", []models.ExerciseEntry{}, "Test User", true, false))
 	if !strings.Contains(html, "No entries yet") {
 		t.Error("expected empty state")
 	}

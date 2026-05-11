@@ -8,8 +8,8 @@ import (
 )
 
 // EntryForm renders the form for creating a new entry
-templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bool) {
-	@Layout(PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated}) {
+templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Entry"})
 
 		<form
@@ -87,8 +87,8 @@ templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bo
 }
 
 // EditEntryForm renders the form for editing an existing entry
-templ EditEntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, userName string, isAuthenticated bool) {
-	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated}) {
+templ EditEntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
 
 		<form

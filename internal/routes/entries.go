@@ -21,7 +21,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.Dashboard(entries, claims.Name, true))
+	return render(c, views.Dashboard(entries, claims.Name, true, claims.IsAdmin))
 }
 
 // NewEntryForm renders the form for creating a new entry.
@@ -32,7 +32,7 @@ func (h *Handler) NewEntryForm(c echo.Context) error {
 	}
 
 	claims := GetClaims(c)
-	return render(c, views.EntryForm(types, claims.Name, true))
+	return render(c, views.EntryForm(types, claims.Name, true, claims.IsAdmin))
 }
 
 // CreateEntry handles the creation of a new entry.
@@ -77,7 +77,7 @@ func (h *Handler) EditEntryForm(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.EditEntryForm(entry, types, claims.Name, true))
+	return render(c, views.EditEntryForm(entry, types, claims.Name, true, claims.IsAdmin))
 }
 
 // GetEntry returns a single entry (for API/hx-get).
@@ -160,7 +160,7 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.ExerciseHistory(name, entries, claims.Name, true))
+	return render(c, views.ExerciseHistory(name, entries, claims.Name, true, claims.IsAdmin))
 }
 
 // ListExerciseTypes returns all exercise types as JSON (for autocomplete).

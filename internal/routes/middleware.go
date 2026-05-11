@@ -78,3 +78,17 @@ func GetClaims(c echo.Context) *utils.Claims {
 	}
 	return claims
 }
+
+// AdminMiddleware returns an Echo middleware function that restricts access
+// to admin users only. It must be used after AuthMiddleware.
+func AdminMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			claims := GetClaims(c)
+			if claims == nil || !claims.IsAdmin {
+				return echo.NewHTTPError(http.StatusForbidden, "Admin access required")
+			}
+			return next(c)
+		}
+	}
+}

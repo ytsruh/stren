@@ -13,3 +13,14 @@ WHERE name = ?;
 SELECT id, name
 FROM exercise_types
 ORDER BY name;
+
+-- name: GetTypeByID :one
+SELECT id, name
+FROM exercise_types
+WHERE id = ?;
+
+-- name: UpdateType :one
+UPDATE exercise_types
+SET name = ?
+WHERE id = ?
+RETURNING id, name;

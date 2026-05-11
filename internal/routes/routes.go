@@ -21,15 +21,17 @@ import (
 type Handler struct {
 	authCtrl   *controllers.AuthController
 	entryCtrl  *controllers.EntryController
+	adminCtrl  *controllers.AdminController
 	jwtService *utils.JWTService
 	validator  utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
 		authCtrl:   authCtrl,
 		entryCtrl:  entryCtrl,
+		adminCtrl:  adminCtrl,
 		jwtService: jwtService,
 		validator:  validator,
 	}
@@ -72,6 +74,14 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 
 	// Exercise history
 	e.GET("/exercises/:name", h.ExerciseHistory)
+
+	// Admin routes
+	admin := e.Group("/admin", AdminMiddleware())
+	admin.GET("/exercises", h.AdminListExercises)
+	admin.GET("/exercises/new", h.AdminNewExerciseForm)
+	admin.POST("/exercises", h.AdminCreateExercise)
+	admin.GET("/exercises/:id/edit", h.AdminEditExerciseForm)
+	admin.POST("/exercises/:id", h.AdminUpdateExercise)
 
 	// API routes for htmx
 	e.GET("/api/exercises", h.ListExerciseTypes)

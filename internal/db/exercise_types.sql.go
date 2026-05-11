@@ -23,6 +23,19 @@ func (q *Queries) CreateType(ctx context.Context, name string) (int64, error) {
 	return id, err
 }
 
+const getTypeByID = `-- name: GetTypeByID :one
+SELECT id, name
+FROM exercise_types
+WHERE id = ?
+`
+
+func (q *Queries) GetTypeByID(ctx context.Context, id int64) (ExerciseType, error) {
+	row := q.db.QueryRowContext(ctx, getTypeByID, id)
+	var i ExerciseType
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
 const getTypeByName = `-- name: GetTypeByName :one
 SELECT id, name
 FROM exercise_types
@@ -63,4 +76,23 @@ func (q *Queries) ListTypes(ctx context.Context) ([]ExerciseType, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateType = `-- name: UpdateType :one
+UPDATE exercise_types
+SET name = ?
+WHERE id = ?
+RETURNING id, name
+`
+
+type UpdateTypeParams struct {
+	Name string
+	ID   int64
+}
+
+func (q *Queries) UpdateType(ctx context.Context, arg UpdateTypeParams) (ExerciseType, error) {
+	row := q.db.QueryRowContext(ctx, updateType, arg.Name, arg.ID)
+	var i ExerciseType
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
 }

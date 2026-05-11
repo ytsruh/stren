@@ -1,0 +1,130 @@
+package views
+
+import (
+	"fmt"
+	"stren/internal/models"
+	"stren/internal/views/components"
+)
+
+// AdminExerciseList renders the admin page listing all exercise types.
+templ AdminExerciseList(types []models.ExerciseType, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "Admin - Exercise Types", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		<div class="flex justify-between items-center mb-6">
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Exercise Types"})
+			<a href="/admin/exercises/new" class="btn">
+				@components.Icon(components.IconProps{Name: "plus", Size: 18})
+				New Exercise
+			</a>
+		</div>
+
+		if len(types) == 0 {
+			<div class="text-center py-12 text-muted-foreground">
+				<p>No exercise types yet.</p>
+			</div>
+		} else {
+			<table class="table w-full">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, t := range types {
+						<tr>
+							<td>{ t.Name }</td>
+							<td>
+								<div class="flex gap-2">
+									<a
+										href={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%d/edit", t.ID)) }
+										class="btn-outline p-2"
+										title="Edit"
+									>
+										@components.Icon(components.IconProps{Name: "edit", Size: 16})
+									</a>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	}
+}
+
+// AdminExerciseFormData holds data for the exercise form.
+type AdminExerciseFormData struct {
+	ExerciseType *models.ExerciseType
+	IsEdit       bool
+}
+
+// AdminExerciseForm renders a form for creating or editing an exercise type.
+templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "Admin - Exercise Types", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		if data.IsEdit {
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Exercise"})
+		} else {
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Exercise"})
+		}
+
+		if data.IsEdit {
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%d", data.ExerciseType.ID)) } class="form grid gap-6">
+				<fieldset class="grid gap-4">
+					<div class="grid gap-2">
+						<label for="name">Exercise Name</label>
+						<input
+							class="input"
+							type="text"
+							id="name"
+							name="name"
+							placeholder="e.g. Bench Press"
+							value={ data.ExerciseType.Name }
+							required/>
+					</div>
+				</fieldset>
+
+				<div class="flex gap-3">
+					<button type="submit" class="btn">
+						@components.Icon(components.IconProps{Name: "check", Size: 18})
+						Update
+					</button>
+					<a href="/admin/exercises" class="btn-outline">
+						@components.Icon(components.IconProps{Name: "x", Size: 18})
+						Cancel
+					</a>
+				</div>
+			</form>
+		} else {
+			<form method="POST" action="/admin/exercises" class="form grid gap-6">
+				<fieldset class="grid gap-4">
+					<div class="grid gap-2">
+						<label for="name">Exercise Name</label>
+						<input
+							class="input"
+							type="text"
+							id="name"
+							name="name"
+							placeholder="e.g. Bench Press"
+							required/>
+					</div>
+				</fieldset>
+
+				<div class="flex gap-3">
+					<button type="submit" class="btn">
+						@components.Icon(components.IconProps{Name: "check", Size: 18})
+						Save
+					</button>
+					<a href="/admin/exercises" class="btn-outline">
+						@components.Icon(components.IconProps{Name: "x", Size: 18})
+						Cancel
+					</a>
+				</div>
+			</form>
+		}
+	}
+}
+
+// AdminExerciseFormError shows validation errors for the exercise form.
+templ AdminExerciseFormError(message string) {
+	@Toast(message, true)
+}

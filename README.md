@@ -18,3 +18,6 @@ A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS +
 
 ## To Do List
 - [ ] Add a HTMX Spinner for form submissions
+- [ ] Add in toasts for success/failure feedback
+- [ ] Add a list of users in admin section
+- [ ] Add a feedback form for users and then list it in the admin section
