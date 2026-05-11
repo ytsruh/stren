@@ -84,7 +84,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	admin.POST("/exercises/:id", h.AdminUpdateExercise)
 
 	// API routes for htmx
-	e.GET("/api/exercises", h.ListExerciseTypes)
+	e.GET("/api/exercises", h.ListExercises)
 }
 
 // ServeManifest serves the web app manifest with the correct MIME type.

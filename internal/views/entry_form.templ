@@ -8,7 +8,7 @@ import (
 )
 
 // EntryForm renders the form for creating a new entry
-templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bool, isAdmin bool) {
+templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Entry"})
 
@@ -27,8 +27,8 @@ templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bo
 						class="select"
 						required>
 						<option value="">-- Select an exercise --</option>
-						for _, t := range types {
-							<option value={ t.Name }>{ t.Name }</option>
+						for _, e := range exercises {
+							<option value={ e.Name }>{ e.Name }</option>
 						}
 					</select>
 				</div>
@@ -87,7 +87,7 @@ templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bo
 }
 
 // EditEntryForm renders the form for editing an existing entry
-templ EditEntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, userName string, isAuthenticated bool, isAdmin bool) {
+templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
 
@@ -105,11 +105,11 @@ templ EditEntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, us
 						name="exercise_name"
 						class="select"
 						required>
-						for _, t := range types {
+						for _, e := range exercises {
 							<option
-								value={ t.Name }
-								selected?={ t.Name == entry.ExerciseName }>
-								{ t.Name }
+								value={ e.Name }
+								selected?={ e.Name == entry.ExerciseName }>
+								{ e.Name }
 							</option>
 						}
 					</select>

@@ -1,4 +1,4 @@
-CREATE TABLE exercise_types (
+CREATE TABLE exercises (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL
 );
@@ -15,16 +15,16 @@ CREATE TABLE users (
 
 CREATE TABLE exercise_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    exercise_type_id INTEGER NOT NULL,
+    exercise_id INTEGER NOT NULL,
     user_id INTEGER REFERENCES users(id),
     reps INTEGER NOT NULL,
     weight REAL NOT NULL,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (exercise_type_id) REFERENCES exercise_types(id)
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id)
 );
 
-CREATE INDEX idx_entries_type ON exercise_entries(exercise_type_id);
+CREATE INDEX idx_entries_exercise ON exercise_entries(exercise_id);
 CREATE INDEX idx_entries_user ON exercise_entries(user_id);
 CREATE INDEX idx_entries_created ON exercise_entries(created_at);
 CREATE INDEX idx_users_email ON users(email);

@@ -65,9 +65,9 @@ func (ec *EntryController) DeleteEntry(id, userID int64) error {
 	return ec.repo.DeleteEntry(id, userID)
 }
 
-// ListTypes returns all exercise types.
-func (ec *EntryController) ListTypes() ([]models.ExerciseType, error) {
-	return ec.repo.ListTypes()
+// List returns all exercises.
+func (ec *EntryController) List() ([]models.Exercise, error) {
+	return ec.repo.List()
 }
 
 // GetEntriesByExercise returns all entries for a specific exercise name.

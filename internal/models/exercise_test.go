@@ -33,35 +33,35 @@ func setupTestRepo(t *testing.T) (*ExerciseRepository, *UserRepository, *db.DB, 
 	return exerciseRepo, userRepo, database, user.ID
 }
 
-func TestExerciseRepository_CreateType(t *testing.T) {
+func TestExerciseRepository_Create(t *testing.T) {
 	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
-	id, err := repo.CreateType(nil, "Test Create Type")
+	id, err := repo.Create(nil, "Test Create")
 	if err != nil {
-		t.Fatalf("CreateType failed: %v", err)
+		t.Fatalf("Create failed: %v", err)
 	}
 	if id == 0 {
 		t.Fatal("expected non-zero id")
 	}
 
-	// Creating the same type again should return the existing ID.
-	id2, err := repo.CreateType(nil, "Test Create Type")
+	// Creating the same exercise again should return the existing ID.
+	id2, err := repo.Create(nil, "Test Create")
 	if err != nil {
-		t.Fatalf("CreateType duplicate failed: %v", err)
+		t.Fatalf("Create duplicate failed: %v", err)
 	}
 	if id2 != id {
 		t.Fatalf("expected same id %d, got %d", id, id2)
 	}
 }
 
-func TestExerciseRepository_CreateType_WithTx(t *testing.T) {
+func TestExerciseRepository_Create_WithTx(t *testing.T) {
 	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
 	var createdID int64
 	err := database.Transaction(func(tx *sql.Tx) error {
-		id, err := repo.CreateType(tx, "Tx Type")
+		id, err := repo.Create(tx, "Tx Exercise")
 		createdID = id
 		return err
 	})
@@ -73,47 +73,65 @@ func TestExerciseRepository_CreateType_WithTx(t *testing.T) {
 	}
 }
 
-func TestExerciseRepository_GetTypeByName(t *testing.T) {
+func TestExerciseRepository_GetByName(t *testing.T) {
 	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
-	// Seeded type should exist.
-	et, err := repo.GetTypeByName("Squat")
+	// Create an exercise first
+	_, err := repo.Create(nil, "Test Exercise")
 	if err != nil {
-		t.Fatalf("GetTypeByName failed: %v", err)
-	}
-	if et == nil {
-		t.Fatal("expected seeded type 'Squat', got nil")
-	}
-	if et.Name != "Squat" {
-		t.Fatalf("expected name 'Squat', got %q", et.Name)
+		t.Fatalf("Create failed: %v", err)
 	}
 
-	// Non-existing type should return nil.
-	et, err = repo.GetTypeByName("NonExistentExercise")
+	// Get should return the exercise
+	et, err := repo.GetByName("Test Exercise")
 	if err != nil {
-		t.Fatalf("GetTypeByName failed: %v", err)
+		t.Fatalf("GetByName failed: %v", err)
+	}
+	if et == nil {
+		t.Fatal("expected exercise, got nil")
+	}
+	if et.Name != "Test Exercise" {
+		t.Fatalf("expected name 'Test Exercise', got %q", et.Name)
+	}
+
+	// Non-existing exercise should return nil.
+	et, err = repo.GetByName("NonExistentExercise")
+	if err != nil {
+		t.Fatalf("GetByName failed: %v", err)
 	}
 	if et != nil {
-		t.Fatalf("expected nil for non-existing type, got %+v", et)
+		t.Fatalf("expected nil for non-existing exercise, got %+v", et)
 	}
 }
 
-func TestExerciseRepository_ListTypes(t *testing.T) {
+func TestExerciseRepository_List(t *testing.T) {
 	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
-	types, err := repo.ListTypes()
+	// Create some exercises
+	_, err := repo.Create(nil, "Alpha")
 	if err != nil {
-		t.Fatalf("ListTypes failed: %v", err)
+		t.Fatalf("Create failed: %v", err)
 	}
-	if len(types) != 10 {
-		t.Fatalf("expected 10 seeded types, got %d", len(types))
+	_, err = repo.Create(nil, "Beta")
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	exercises, err := repo.List()
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+
+	// Should have at least the 2 we created
+	if len(exercises) < 2 {
+		t.Fatalf("expected at least 2 exercises, got %d", len(exercises))
 	}
 
 	// Verify ordering by name.
-	if types[0].Name != "Barbell Row" {
-		t.Fatalf("expected first type to be 'Barbell Row', got %q", types[0].Name)
+	if exercises[0].Name > exercises[1].Name {
+		t.Fatalf("expected exercises ordered by name, got %q then %q", exercises[0].Name, exercises[1].Name)
 	}
 }
 

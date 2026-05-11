@@ -257,7 +257,7 @@ func TestQuickStats(t *testing.T) {
 }
 
 func TestEntryForm_New(t *testing.T) {
-	types := []models.ExerciseType{
+	types := []models.Exercise{
 		{ID: 1, Name: "Squat"},
 		{ID: 2, Name: "Bench Press"},
 	}
@@ -282,7 +282,7 @@ func TestEditEntryForm(t *testing.T) {
 		Notes:        "good",
 		CreatedAt:    time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 	}
-	types := []models.ExerciseType{
+	types := []models.Exercise{
 		{ID: 1, Name: "Squat"},
 		{ID: 2, Name: "Bench Press"},
 	}

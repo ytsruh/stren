@@ -6,7 +6,7 @@ import "stren/internal/views/components"
 type PageData struct {
 	Title           string
 	Entries         []models.ExerciseEntry
-	Types           []models.ExerciseType
+	Exercises       []models.Exercise
 	Entry           *models.ExerciseEntry
 	UserName        string
 	IsAuthenticated bool
@@ -96,6 +96,24 @@ templ Layout(data PageData) {
 									</li>
 								</ul>
 							</div>
+							if data.IsAdmin {
+								<div>
+									<h3>Admin</h3>
+									<ul>
+										<li>
+											<a
+												href="/admin/exercises"
+												if data.CurrentPath == "/admin/exercises" {
+													aria-current="page"
+												}
+											>
+												@components.Icon(components.IconProps{Name: "settings", Size: 18})
+												<span>Exercises</span>
+											</a>
+										</li>
+									</ul>
+								</div>
+							}
 							<div>
 								<h3>Account</h3>
 								<ul>
@@ -120,24 +138,6 @@ templ Layout(data PageData) {
 									</li>
 								</ul>
 							</div>
-							if data.IsAdmin {
-								<div>
-									<h3>Admin</h3>
-									<ul>
-										<li>
-											<a
-												href="/admin/exercises"
-												if data.CurrentPath == "/admin/exercises" {
-													aria-current="page"
-												}
-											>
-												@components.Icon(components.IconProps{Name: "settings", Size: 18})
-												<span>Exercise Types</span>
-											</a>
-										</li>
-									</ul>
-								</div>
-							}
 						</section>
 					</nav>
 				</aside>

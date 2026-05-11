@@ -24,124 +24,110 @@ import (
 
 // mockRepository is an in-memory implementation of models.Repository for testing.
 type mockRepository struct {
-	mu      sync.Mutex
-	types   []models.ExerciseType
-	entries []models.ExerciseEntry
+	mu        sync.Mutex
+	exercises []models.Exercise
+	entries   []models.ExerciseEntry
 
-	nextTypeID  int64
-	nextEntryID int64
+	nextExerciseID int64
+	nextEntryID    int64
 
-	errCreateType            error
-	errGetTypeByName         error
-	errGetTypeByID           error
-	errUpdateType            error
-	errCreateTypeNoTx        error
-	errListTypes             error
-	errCreateEntry           error
-	errGetEntry              error
-	errUpdateEntry           error
-	errUpdateEntryWithDate   error
-	errDeleteEntry           error
-	errListEntries           error
-	errGetEntriesByExercise  error
+	errCreate              error
+	errGetByName           error
+	errGetByID             error
+	errUpdate              error
+	errList                error
+	errCreateEntry         error
+	errGetEntry            error
+	errUpdateEntry         error
+	errUpdateEntryWithDate error
+	errDeleteEntry         error
+	errListEntries         error
+	errGetEntriesByExercise error
 	errGetEntriesByDateRange error
 }
 
 func newMockRepository() *mockRepository {
 	return &mockRepository{
-		nextTypeID:  1,
-		nextEntryID: 1,
+		nextExerciseID: 1,
+		nextEntryID:    1,
 	}
 }
 
-func (m *mockRepository) CreateType(_ *sql.Tx, name string) (int64, error) {
-	if m.errCreateType != nil {
-		return 0, m.errCreateType
+func (m *mockRepository) Create(_ *sql.Tx, name string) (int64, error) {
+	if m.errCreate != nil {
+		return 0, m.errCreate
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, t := range m.types {
-		if t.Name == name {
-			return t.ID, nil
+	for _, e := range m.exercises {
+		if e.Name == name {
+			return e.ID, nil
 		}
 	}
-	id := m.nextTypeID
-	m.nextTypeID++
-	m.types = append(m.types, models.ExerciseType{ID: id, Name: name})
+	id := m.nextExerciseID
+	m.nextExerciseID++
+	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: name})
 	return id, nil
 }
 
-func (m *mockRepository) GetTypeByName(name string) (*models.ExerciseType, error) {
-	if m.errGetTypeByName != nil {
-		return nil, m.errGetTypeByName
+func (m *mockRepository) CreateNoTx(name string) (int64, error) {
+	return m.Create(nil, name)
+}
+
+func (m *mockRepository) GetByID(id int64) (*models.Exercise, error) {
+	if m.errGetByID != nil {
+		return nil, m.errGetByID
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, t := range m.types {
-		if t.Name == name {
-			cp := t
+	for _, e := range m.exercises {
+		if e.ID == id {
+			cp := e
 			return &cp, nil
 		}
 	}
 	return nil, nil
 }
 
-func (m *mockRepository) GetTypeByID(id int64) (*models.ExerciseType, error) {
-	if m.errGetTypeByID != nil {
-		return nil, m.errGetTypeByID
+func (m *mockRepository) GetByName(name string) (*models.Exercise, error) {
+	if m.errGetByName != nil {
+		return nil, m.errGetByName
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, t := range m.types {
-		if t.ID == id {
-			cp := t
+	for _, e := range m.exercises {
+		if e.Name == name {
+			cp := e
 			return &cp, nil
 		}
 	}
 	return nil, nil
 }
 
-func (m *mockRepository) UpdateType(id int64, name string) (*models.ExerciseType, error) {
-	if m.errUpdateType != nil {
-		return nil, m.errUpdateType
+func (m *mockRepository) Update(id int64, name string) (*models.Exercise, error) {
+	if m.errUpdate != nil {
+		return nil, m.errUpdate
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for i, t := range m.types {
-		if t.ID == id {
-			m.types[i].Name = name
-			cp := m.types[i]
+	for i, e := range m.exercises {
+		if e.ID == id {
+			m.exercises[i].Name = name
+			cp := m.exercises[i]
 			return &cp, nil
 		}
 	}
 	return nil, nil
 }
 
-func (m *mockRepository) CreateTypeNoTx(name string) (int64, error) {
-	if m.errCreateTypeNoTx != nil {
-		return 0, m.errCreateTypeNoTx
+func (m *mockRepository) List() ([]models.Exercise, error) {
+	if m.errList != nil {
+		return nil, m.errList
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, t := range m.types {
-		if t.Name == name {
-			return t.ID, nil
-		}
-	}
-	id := m.nextTypeID
-	m.nextTypeID++
-	m.types = append(m.types, models.ExerciseType{ID: id, Name: name})
-	return id, nil
-}
-
-func (m *mockRepository) ListTypes() ([]models.ExerciseType, error) {
-	if m.errListTypes != nil {
-		return nil, m.errListTypes
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	result := make([]models.ExerciseType, len(m.types))
-	copy(result, m.types)
+	result := make([]models.Exercise, len(m.exercises))
+	copy(result, m.exercises)
 	return result, nil
 }
 
@@ -152,19 +138,19 @@ func (m *mockRepository) CreateEntry(entry *models.ExerciseEntry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var typeID int64
-	for _, t := range m.types {
-		if t.Name == entry.ExerciseName {
-			typeID = t.ID
+	var exerciseID int64
+	for _, e := range m.exercises {
+		if e.Name == entry.ExerciseName {
+			exerciseID = e.ID
 			break
 		}
 	}
-	if typeID == 0 {
-		typeID = m.nextTypeID
-		m.nextTypeID++
-		m.types = append(m.types, models.ExerciseType{ID: typeID, Name: entry.ExerciseName})
+	if exerciseID == 0 {
+		exerciseID = m.nextExerciseID
+		m.nextExerciseID++
+		m.exercises = append(m.exercises, models.Exercise{ID: exerciseID, Name: entry.ExerciseName})
 	}
-	entry.ExerciseTypeID = typeID
+	entry.ExerciseID = exerciseID
 	entry.ID = m.nextEntryID
 	m.nextEntryID++
 	m.entries = append(m.entries, *entry)
@@ -335,12 +321,11 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	mock := newMockRepository()
 	mockUser := newMockUserRepository()
 	jwtService := utils.NewJWTService("test-secret")
-	// Seed with some exercise types so forms render correctly.
-	mock.types = []models.ExerciseType{
+	mock.exercises = []models.Exercise{
 		{ID: 1, Name: "Squat"},
 		{ID: 2, Name: "Bench Press"},
 	}
-	mock.nextTypeID = 3
+	mock.nextExerciseID = 3
 	authCtrl := controllers.NewAuthController(mockUser, jwtService)
 	entryCtrl := controllers.NewEntryController(mock)
 	adminCtrl := controllers.NewAdminController(mock)
@@ -904,7 +889,7 @@ func TestExerciseHistory(t *testing.T) {
 	}
 }
 
-func TestListExerciseTypes(t *testing.T) {
+func TestListExercises(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/exercises", nil)
@@ -912,8 +897,8 @@ func TestListExerciseTypes(t *testing.T) {
 	c := e.NewContext(req, rec)
 	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
-	if err := h.ListExerciseTypes(c); err != nil {
-		t.Fatalf("ListExerciseTypes failed: %v", err)
+	if err := h.ListExercises(c); err != nil {
+		t.Fatalf("ListExercises failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", rec.Code)
@@ -922,25 +907,25 @@ func TestListExerciseTypes(t *testing.T) {
 		t.Fatalf("expected JSON content type, got %q", ct)
 	}
 
-	var result []models.ExerciseType
+	var result []models.Exercise
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
 	if len(result) != 2 {
-		t.Fatalf("expected 2 types, got %d", len(result))
+		t.Fatalf("expected 2 exercises, got %d", len(result))
 	}
 }
 
-func TestListExerciseTypes_RepositoryError(t *testing.T) {
+func TestListExercises_RepositoryError(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.errListTypes = errors.New("db error")
+	mock.errList = errors.New("db error")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/exercises", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, 1, "test@example.com", "Test User", false)
 
-	err := h.ListExerciseTypes(c)
+	err := h.ListExercises(c)
 	if err == nil {
 		t.Fatal("expected error from repository, got nil")
 	}

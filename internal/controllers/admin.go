@@ -7,10 +7,10 @@ import (
 	"stren/internal/models"
 )
 
-// ErrNotFound is returned when an exercise type is not found.
-var ErrNotFound = errors.New("exercise type not found")
+// ErrNotFound is returned when an exercise is not found.
+var ErrNotFound = errors.New("exercise not found")
 
-// AdminController handles admin-only exercise type operations.
+// AdminController handles admin-only exercise operations.
 type AdminController struct {
 	repo models.AdminRepository
 }
@@ -20,49 +20,49 @@ func NewAdminController(repo models.AdminRepository) *AdminController {
 	return &AdminController{repo: repo}
 }
 
-// ListTypes returns all exercise types ordered by name.
-func (ac *AdminController) ListTypes() ([]models.ExerciseType, error) {
-	return ac.repo.ListTypes()
+// List returns all exercises ordered by name.
+func (ac *AdminController) List() ([]models.Exercise, error) {
+	return ac.repo.List()
 }
 
-// GetType retrieves a single exercise type by ID.
-func (ac *AdminController) GetType(id int64) (*models.ExerciseType, error) {
-	exerciseType, err := ac.repo.GetTypeByID(id)
+// Get retrieves a single exercise by ID.
+func (ac *AdminController) Get(id int64) (*models.Exercise, error) {
+	exercise, err := ac.repo.GetByID(id)
 	if err != nil {
 		return nil, err
 	}
-	if exerciseType == nil {
+	if exercise == nil {
 		return nil, ErrNotFound
 	}
-	return exerciseType, nil
+	return exercise, nil
 }
 
-// CreateType creates a new exercise type. Returns the created type.
-func (ac *AdminController) CreateType(name string) (*models.ExerciseType, error) {
+// Create creates a new exercise. Returns the created exercise.
+func (ac *AdminController) Create(name string) (*models.Exercise, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("exercise name cannot be empty")
 	}
 
-	id, err := ac.repo.CreateTypeNoTx(name)
+	id, err := ac.repo.CreateNoTx(name)
 	if err != nil {
 		return nil, err
 	}
 
-	return &models.ExerciseType{ID: id, Name: name}, nil
+	return &models.Exercise{ID: id, Name: name}, nil
 }
 
-// UpdateType updates an existing exercise type's name.
-func (ac *AdminController) UpdateType(id int64, name string) (*models.ExerciseType, error) {
+// Update updates an existing exercise's name.
+func (ac *AdminController) Update(id int64, name string) (*models.Exercise, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("exercise name cannot be empty")
 	}
 
-	exerciseType, err := ac.repo.UpdateType(id, name)
+	exercise, err := ac.repo.Update(id, name)
 	if err != nil {
 		return nil, err
 	}
 
-	return exerciseType, nil
+	return exercise, nil
 }

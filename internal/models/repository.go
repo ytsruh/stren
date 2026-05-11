@@ -9,21 +9,21 @@ import (
 // This abstraction allows handlers to be tested with mock implementations
 // without requiring a real database connection.
 type Repository interface {
-	// CreateType creates a new exercise type or returns the existing ID.
+	// Create creates a new exercise or returns the existing ID.
 	// If tx is provided, the operation runs within the transaction.
-	CreateType(tx *sql.Tx, name string) (int64, error)
+	Create(tx *sql.Tx, name string) (int64, error)
 
-	// GetTypeByName retrieves an exercise type by its normalized name.
+	// GetByName retrieves an exercise by its normalized name.
 	// Returns nil if not found.
-	GetTypeByName(name string) (*ExerciseType, error)
+	GetByName(name string) (*Exercise, error)
 
-	// ListTypes returns all exercise types ordered by name.
-	ListTypes() ([]ExerciseType, error)
+	// List returns all exercises ordered by name.
+	List() ([]Exercise, error)
 
-	// CreateEntry persists a new exercise entry and links it to its type.
+	// CreateEntry persists a new exercise entry and links it to its exercise.
 	CreateEntry(entry *ExerciseEntry) error
 
-	// GetEntry retrieves a single entry by ID with its exercise type name.
+	// GetEntry retrieves a single entry by ID with its exercise name.
 	// Returns nil if not found. Scopes to the given user ID.
 	GetEntry(id int64, userID int64) (*ExerciseEntry, error)
 

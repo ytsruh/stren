@@ -8,19 +8,19 @@ import (
 	"database/sql"
 )
 
-type ExerciseEntry struct {
-	ID             int64
-	ExerciseTypeID int64
-	UserID         sql.NullInt64
-	Reps           int64
-	Weight         float64
-	Notes          sql.NullString
-	CreatedAt      sql.NullTime
-}
-
-type ExerciseType struct {
+type Exercise struct {
 	ID   int64
 	Name string
+}
+
+type ExerciseEntry struct {
+	ID         int64
+	ExerciseID int64
+	UserID     sql.NullInt64
+	Reps       int64
+	Weight     float64
+	Notes      sql.NullString
+	CreatedAt  sql.NullTime
 }
 
 type User struct {

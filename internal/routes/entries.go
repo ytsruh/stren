@@ -26,13 +26,13 @@ func (h *Handler) Dashboard(c echo.Context) error {
 
 // NewEntryForm renders the form for creating a new entry.
 func (h *Handler) NewEntryForm(c echo.Context) error {
-	types, err := h.entryCtrl.ListTypes()
+	exercises, err := h.entryCtrl.List()
 	if err != nil {
 		return err
 	}
 
 	claims := GetClaims(c)
-	return render(c, views.EntryForm(types, claims.Name, true, claims.IsAdmin))
+	return render(c, views.EntryForm(exercises, claims.Name, true, claims.IsAdmin))
 }
 
 // CreateEntry handles the creation of a new entry.
@@ -72,12 +72,12 @@ func (h *Handler) EditEntryForm(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Entry not found")
 	}
 
-	types, err := h.entryCtrl.ListTypes()
+	exercises, err := h.entryCtrl.List()
 	if err != nil {
 		return err
 	}
 
-	return render(c, views.EditEntryForm(entry, types, claims.Name, true, claims.IsAdmin))
+	return render(c, views.EditEntryForm(entry, exercises, claims.Name, true, claims.IsAdmin))
 }
 
 // GetEntry returns a single entry (for API/hx-get).
@@ -163,12 +163,12 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 	return render(c, views.ExerciseHistory(name, entries, claims.Name, true, claims.IsAdmin))
 }
 
-// ListExerciseTypes returns all exercise types as JSON (for autocomplete).
-func (h *Handler) ListExerciseTypes(c echo.Context) error {
-	types, err := h.entryCtrl.ListTypes()
+// ListExercises returns all exercises as JSON (for autocomplete).
+func (h *Handler) ListExercises(c echo.Context) error {
+	exercises, err := h.entryCtrl.List()
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, types)
+	return c.JSON(http.StatusOK, exercises)
 }

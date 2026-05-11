@@ -5,22 +5,22 @@ import (
 	"time"
 )
 
-// ExerciseType represents a normalized exercise name
-type ExerciseType struct {
+// Exercise represents a normalized exercise name
+type Exercise struct {
 	ID   int64
 	Name string
 }
 
 // ExerciseEntry represents a single set of an exercise
 type ExerciseEntry struct {
-	ID             int64
-	ExerciseTypeID int64
-	UserID         int64
-	ExerciseName   string
-	Reps           int
-	Weight         float64
-	Notes          string
-	CreatedAt      time.Time
+	ID           int64
+	ExerciseID   int64
+	UserID       int64
+	ExerciseName string
+	Reps         int
+	Weight       float64
+	Notes        string
+	CreatedAt    time.Time
 }
 
 // FormattedWeight returns the weight with unit

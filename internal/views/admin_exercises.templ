@@ -6,20 +6,20 @@ import (
 	"stren/internal/views/components"
 )
 
-// AdminExerciseList renders the admin page listing all exercise types.
-templ AdminExerciseList(types []models.ExerciseType, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Admin - Exercise Types", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+// AdminExerciseList renders the admin page listing all exercises.
+templ AdminExerciseList(exercises []models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "Admin - Exercises", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="flex justify-between items-center mb-6">
-			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Exercise Types"})
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Exercises"})
 			<a href="/admin/exercises/new" class="btn">
 				@components.Icon(components.IconProps{Name: "plus", Size: 18})
 				New Exercise
 			</a>
 		</div>
 
-		if len(types) == 0 {
+		if len(exercises) == 0 {
 			<div class="text-center py-12 text-muted-foreground">
-				<p>No exercise types yet.</p>
+				<p>No exercises yet.</p>
 			</div>
 		} else {
 			<table class="table w-full">
@@ -30,13 +30,13 @@ templ AdminExerciseList(types []models.ExerciseType, userName string, isAuthenti
 					</tr>
 				</thead>
 				<tbody>
-					for _, t := range types {
+					for _, e := range exercises {
 						<tr>
-							<td>{ t.Name }</td>
+							<td>{ e.Name }</td>
 							<td>
 								<div class="flex gap-2">
 									<a
-										href={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%d/edit", t.ID)) }
+										href={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%d/edit", e.ID)) }
 										class="btn-outline p-2"
 										title="Edit"
 									>
@@ -54,13 +54,13 @@ templ AdminExerciseList(types []models.ExerciseType, userName string, isAuthenti
 
 // AdminExerciseFormData holds data for the exercise form.
 type AdminExerciseFormData struct {
-	ExerciseType *models.ExerciseType
-	IsEdit       bool
+	Exercise *models.Exercise
+	IsEdit   bool
 }
 
-// AdminExerciseForm renders a form for creating or editing an exercise type.
+// AdminExerciseForm renders a form for creating or editing an exercise.
 templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Admin - Exercise Types", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@Layout(PageData{Title: "Admin - Exercises", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		if data.IsEdit {
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Exercise"})
 		} else {
@@ -68,7 +68,7 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 		}
 
 		if data.IsEdit {
-			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%d", data.ExerciseType.ID)) } class="form grid gap-6">
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%d", data.Exercise.ID)) } class="form grid gap-6">
 				<fieldset class="grid gap-4">
 					<div class="grid gap-2">
 						<label for="name">Exercise Name</label>
@@ -78,7 +78,7 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 							id="name"
 							name="name"
 							placeholder="e.g. Bench Press"
-							value={ data.ExerciseType.Name }
+							value={ data.Exercise.Name }
 							required/>
 					</div>
 				</fieldset>

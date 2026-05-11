@@ -23,102 +23,102 @@ func NewExerciseRepository(dbConn *db.DB) *ExerciseRepository {
 	}
 }
 
-// CreateType creates a new exercise type or returns the existing ID.
-func (r *ExerciseRepository) CreateType(tx *sql.Tx, name string) (int64, error) {
+// Create creates a new exercise or returns the existing ID.
+func (r *ExerciseRepository) Create(tx *sql.Tx, name string) (int64, error) {
 	ctx := context.Background()
 	if tx != nil {
-		return r.queries.WithTx(tx).CreateType(ctx, name)
+		return r.queries.WithTx(tx).Create(ctx, name)
 	}
-	return r.queries.CreateType(ctx, name)
+	return r.queries.Create(ctx, name)
 }
 
-// GetTypeByName retrieves an exercise type by its normalized name.
-func (r *ExerciseRepository) GetTypeByName(name string) (*ExerciseType, error) {
+// GetByName retrieves an exercise by its normalized name.
+func (r *ExerciseRepository) GetByName(name string) (*Exercise, error) {
 	ctx := context.Background()
-	row, err := r.queries.GetTypeByName(ctx, name)
+	row, err := r.queries.GetByName(ctx, name)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get exercise type: %w", err)
+		return nil, fmt.Errorf("failed to get exercise: %w", err)
 	}
-	return &ExerciseType{ID: row.ID, Name: row.Name}, nil
+	return &Exercise{ID: row.ID, Name: row.Name}, nil
 }
 
-// ListTypes returns all exercise types ordered by name.
-func (r *ExerciseRepository) ListTypes() ([]ExerciseType, error) {
+// List returns all exercises ordered by name.
+func (r *ExerciseRepository) List() ([]Exercise, error) {
 	ctx := context.Background()
-	rows, err := r.queries.ListTypes(ctx)
+	rows, err := r.queries.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list exercise types: %w", err)
+		return nil, fmt.Errorf("failed to list exercises: %w", err)
 	}
 
-	types := make([]ExerciseType, len(rows))
+	exercises := make([]Exercise, len(rows))
 	for i, row := range rows {
-		types[i] = ExerciseType{ID: row.ID, Name: row.Name}
+		exercises[i] = Exercise{ID: row.ID, Name: row.Name}
 	}
-	return types, nil
+	return exercises, nil
 }
 
-// GetTypeByID retrieves an exercise type by its ID.
-func (r *ExerciseRepository) GetTypeByID(id int64) (*ExerciseType, error) {
+// GetByID retrieves an exercise by its ID.
+func (r *ExerciseRepository) GetByID(id int64) (*Exercise, error) {
 	ctx := context.Background()
-	row, err := r.queries.GetTypeByID(ctx, id)
+	row, err := r.queries.GetByID(ctx, id)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get exercise type: %w", err)
+		return nil, fmt.Errorf("failed to get exercise: %w", err)
 	}
-	return &ExerciseType{ID: row.ID, Name: row.Name}, nil
+	return &Exercise{ID: row.ID, Name: row.Name}, nil
 }
 
-// CreateTypeNoTx creates a new exercise type without a transaction.
-func (r *ExerciseRepository) CreateTypeNoTx(name string) (int64, error) {
+// CreateNoTx creates a new exercise without a transaction.
+func (r *ExerciseRepository) CreateNoTx(name string) (int64, error) {
 	ctx := context.Background()
-	return r.queries.CreateType(ctx, name)
+	return r.queries.Create(ctx, name)
 }
 
-// UpdateType updates an exercise type's name.
-func (r *ExerciseRepository) UpdateType(id int64, name string) (*ExerciseType, error) {
+// Update updates an exercise's name.
+func (r *ExerciseRepository) Update(id int64, name string) (*Exercise, error) {
 	ctx := context.Background()
-	row, err := r.queries.UpdateType(ctx, db.UpdateTypeParams{Name: name, ID: id})
+	row, err := r.queries.Update(ctx, db.UpdateParams{Name: name, ID: id})
 	if err != nil {
-		return nil, fmt.Errorf("failed to update exercise type: %w", err)
+		return nil, fmt.Errorf("failed to update exercise: %w", err)
 	}
-	return &ExerciseType{ID: row.ID, Name: row.Name}, nil
+	return &Exercise{ID: row.ID, Name: row.Name}, nil
 }
 
-// CreateEntry persists a new exercise entry and links it to its type.
+// CreateEntry persists a new exercise entry and links it to its exercise.
 func (r *ExerciseRepository) CreateEntry(entry *ExerciseEntry) error {
 	return r.db.Transaction(func(tx *sql.Tx) error {
 		ctx := context.Background()
 		qtx := r.queries.WithTx(tx)
 
-		typeID, err := qtx.CreateType(ctx, entry.ExerciseName)
+		exerciseID, err := qtx.Create(ctx, entry.ExerciseName)
 		if err != nil {
-			return fmt.Errorf("failed to create exercise type: %w", err)
+			return fmt.Errorf("failed to create exercise: %w", err)
 		}
 
 		id, err := qtx.CreateEntry(ctx, db.CreateEntryParams{
-			ExerciseTypeID: typeID,
-			UserID:         sql.NullInt64{Int64: entry.UserID, Valid: true},
-			Reps:           int64(entry.Reps),
-			Weight:         entry.Weight,
-			Notes:          stringToNullString(entry.Notes),
-			CreatedAt:      timeToNullTime(entry.CreatedAt),
+			ExerciseID: exerciseID,
+			UserID:     sql.NullInt64{Int64: entry.UserID, Valid: true},
+			Reps:       int64(entry.Reps),
+			Weight:     entry.Weight,
+			Notes:      stringToNullString(entry.Notes),
+			CreatedAt:  timeToNullTime(entry.CreatedAt),
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create entry: %w", err)
 		}
 
 		entry.ID = id
-		entry.ExerciseTypeID = typeID
+		entry.ExerciseID = exerciseID
 		return nil
 	})
 }
 
-// GetEntry retrieves a single entry by ID with its exercise type name.
+// GetEntry retrieves a single entry by ID with its exercise name.
 // Returns nil if not found. Scopes to the given user ID.
 func (r *ExerciseRepository) GetEntry(id int64, userID int64) (*ExerciseEntry, error) {
 	ctx := context.Background()
@@ -142,24 +142,24 @@ func (r *ExerciseRepository) UpdateEntry(entry *ExerciseEntry, userID int64) err
 		ctx := context.Background()
 		qtx := r.queries.WithTx(tx)
 
-		typeID, err := qtx.CreateType(ctx, entry.ExerciseName)
+		exerciseID, err := qtx.Create(ctx, entry.ExerciseName)
 		if err != nil {
-			return fmt.Errorf("failed to create exercise type: %w", err)
+			return fmt.Errorf("failed to create exercise: %w", err)
 		}
 
 		err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
-			ExerciseTypeID: typeID,
-			Reps:           int64(entry.Reps),
-			Weight:         entry.Weight,
-			Notes:          stringToNullString(entry.Notes),
-			ID:             entry.ID,
-			UserID:         sql.NullInt64{Int64: userID, Valid: true},
+			ExerciseID: exerciseID,
+			Reps:       int64(entry.Reps),
+			Weight:     entry.Weight,
+			Notes:      stringToNullString(entry.Notes),
+			ID:         entry.ID,
+			UserID:     sql.NullInt64{Int64: userID, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update entry: %w", err)
 		}
 
-		entry.ExerciseTypeID = typeID
+		entry.ExerciseID = exerciseID
 		return nil
 	})
 }
@@ -171,25 +171,25 @@ func (r *ExerciseRepository) UpdateEntryWithDate(entry *ExerciseEntry, userID in
 		ctx := context.Background()
 		qtx := r.queries.WithTx(tx)
 
-		typeID, err := qtx.CreateType(ctx, entry.ExerciseName)
+		exerciseID, err := qtx.Create(ctx, entry.ExerciseName)
 		if err != nil {
-			return fmt.Errorf("failed to create exercise type: %w", err)
+			return fmt.Errorf("failed to create exercise: %w", err)
 		}
 
 		err = qtx.UpdateEntryWithDate(ctx, db.UpdateEntryWithDateParams{
-			ExerciseTypeID: typeID,
-			Reps:           int64(entry.Reps),
-			Weight:         entry.Weight,
-			Notes:          stringToNullString(entry.Notes),
-			CreatedAt:      timeToNullTime(entry.CreatedAt),
-			ID:             entry.ID,
-			UserID:         sql.NullInt64{Int64: userID, Valid: true},
+			ExerciseID: exerciseID,
+			Reps:       int64(entry.Reps),
+			Weight:     entry.Weight,
+			Notes:      stringToNullString(entry.Notes),
+			CreatedAt:  timeToNullTime(entry.CreatedAt),
+			ID:         entry.ID,
+			UserID:     sql.NullInt64{Int64: userID, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update entry: %w", err)
 		}
 
-		entry.ExerciseTypeID = typeID
+		entry.ExerciseID = exerciseID
 		return nil
 	})
 }
@@ -267,14 +267,14 @@ func (r *ExerciseRepository) GetEntriesByDateRange(start, end time.Time, userID 
 
 func mapGetEntryRow(row db.GetEntryRow) *ExerciseEntry {
 	return &ExerciseEntry{
-		ID:             row.ID,
-		ExerciseTypeID: row.ExerciseTypeID,
-		UserID:         nullInt64ToInt64(row.UserID),
-		ExerciseName:   row.ExerciseName,
-		Reps:           int(row.Reps),
-		Weight:         row.Weight,
-		Notes:          nullStringToString(row.Notes),
-		CreatedAt:      nullTimeToTime(row.CreatedAt),
+		ID:           row.ID,
+		ExerciseID:   row.ExerciseID,
+		UserID:       nullInt64ToInt64(row.UserID),
+		ExerciseName: row.ExerciseName,
+		Reps:         int(row.Reps),
+		Weight:       row.Weight,
+		Notes:        nullStringToString(row.Notes),
+		CreatedAt:    nullTimeToTime(row.CreatedAt),
 	}
 }
 
@@ -282,14 +282,14 @@ func mapListEntriesRows(rows []db.ListEntriesRow) []ExerciseEntry {
 	entries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
 		entries[i] = ExerciseEntry{
-			ID:             row.ID,
-			ExerciseTypeID: row.ExerciseTypeID,
-			UserID:         nullInt64ToInt64(row.UserID),
-			ExerciseName:   row.ExerciseName,
-			Reps:           int(row.Reps),
-			Weight:         row.Weight,
-			Notes:          nullStringToString(row.Notes),
-			CreatedAt:      nullTimeToTime(row.CreatedAt),
+			ID:           row.ID,
+			ExerciseID:   row.ExerciseID,
+			UserID:       nullInt64ToInt64(row.UserID),
+			ExerciseName: row.ExerciseName,
+			Reps:         int(row.Reps),
+			Weight:       row.Weight,
+			Notes:        nullStringToString(row.Notes),
+			CreatedAt:    nullTimeToTime(row.CreatedAt),
 		}
 	}
 	return entries
@@ -299,14 +299,14 @@ func mapListEntriesWithLimitRows(rows []db.ListEntriesWithLimitRow) []ExerciseEn
 	entries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
 		entries[i] = ExerciseEntry{
-			ID:             row.ID,
-			ExerciseTypeID: row.ExerciseTypeID,
-			UserID:         nullInt64ToInt64(row.UserID),
-			ExerciseName:   row.ExerciseName,
-			Reps:           int(row.Reps),
-			Weight:         row.Weight,
-			Notes:          nullStringToString(row.Notes),
-			CreatedAt:      nullTimeToTime(row.CreatedAt),
+			ID:           row.ID,
+			ExerciseID:   row.ExerciseID,
+			UserID:       nullInt64ToInt64(row.UserID),
+			ExerciseName: row.ExerciseName,
+			Reps:         int(row.Reps),
+			Weight:       row.Weight,
+			Notes:        nullStringToString(row.Notes),
+			CreatedAt:    nullTimeToTime(row.CreatedAt),
 		}
 	}
 	return entries
@@ -316,14 +316,14 @@ func mapGetEntriesByExerciseRows(rows []db.GetEntriesByExerciseRow) []ExerciseEn
 	entries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
 		entries[i] = ExerciseEntry{
-			ID:             row.ID,
-			ExerciseTypeID: row.ExerciseTypeID,
-			UserID:         nullInt64ToInt64(row.UserID),
-			ExerciseName:   row.ExerciseName,
-			Reps:           int(row.Reps),
-			Weight:         row.Weight,
-			Notes:          nullStringToString(row.Notes),
-			CreatedAt:      nullTimeToTime(row.CreatedAt),
+			ID:           row.ID,
+			ExerciseID:   row.ExerciseID,
+			UserID:       nullInt64ToInt64(row.UserID),
+			ExerciseName: row.ExerciseName,
+			Reps:         int(row.Reps),
+			Weight:       row.Weight,
+			Notes:        nullStringToString(row.Notes),
+			CreatedAt:    nullTimeToTime(row.CreatedAt),
 		}
 	}
 	return entries
@@ -333,14 +333,14 @@ func mapGetEntriesByDateRangeRows(rows []db.GetEntriesByDateRangeRow) []Exercise
 	entries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
 		entries[i] = ExerciseEntry{
-			ID:             row.ID,
-			ExerciseTypeID: row.ExerciseTypeID,
-			UserID:         nullInt64ToInt64(row.UserID),
-			ExerciseName:   row.ExerciseName,
-			Reps:           int(row.Reps),
-			Weight:         row.Weight,
-			Notes:          nullStringToString(row.Notes),
-			CreatedAt:      nullTimeToTime(row.CreatedAt),
+			ID:           row.ID,
+			ExerciseID:   row.ExerciseID,
+			UserID:       nullInt64ToInt64(row.UserID),
+			ExerciseName: row.ExerciseName,
+			Reps:         int(row.Reps),
+			Weight:       row.Weight,
+			Notes:        nullStringToString(row.Notes),
+			CreatedAt:    nullTimeToTime(row.CreatedAt),
 		}
 	}
 	return entries
