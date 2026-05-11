@@ -68,13 +68,13 @@ templ Layout(data PageData) {
 					<ul class="flex list-none m-0 p-0 items-center gap-3 ml-auto">
 						if data.IsAuthenticated {
 							<li>
-								<a href="/" class="inline-flex items-center gap-2 no-underline">
+								<a href="/" class="btn-ghost">
 									@Icon(IconProps{Name: "home", Size: 18})
 									<span class="hidden sm:inline">Dashboard</span>
 								</a>
 							</li>
 							<li>
-								<a href="/entries/new" class="inline-flex items-center gap-2 no-underline">
+								<a href="/entries/new" class="btn-ghost">
 									@Icon(IconProps{Name: "plus", Size: 18})
 									<span class="hidden sm:inline">New Entry</span>
 								</a>
@@ -99,10 +99,10 @@ templ Layout(data PageData) {
 							</li>
 						} else {
 							<li>
-								<a href="/login" class="no-underline">Login</a>
+								<a href="/login" class="btn-link">Login</a>
 							</li>
 							<li>
-								<a href="/register" class="btn btn-outline">Register</a>
+								<a href="/register" class="btn-link">Register</a>
 							</li>
 						}
 					</ul>
