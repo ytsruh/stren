@@ -9,6 +9,7 @@ import (
 
 	"github.com/a-h/templ"
 	"stren/internal/models"
+	"stren/internal/views/components"
 )
 
 // renderToString renders a templ component to a string for assertions.
@@ -22,31 +23,6 @@ func renderToString(t *testing.T, component templ.Component) string {
 }
 
 // === Helper function tests ===
-
-func TestResolveIconName(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"trash", "trash"},
-		{"pencil", "pencil"},
-		{"plus", "plus"},
-		{"delete", "trash"},
-		{"remove", "trash"},
-		{"edit", "pencil"},
-		{"close", "x"},
-		{"unknown", "unknown"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := resolveIconName(tt.input)
-			if got != tt.expected {
-				t.Errorf("resolveIconName(%q) = %q, want %q", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
 
 func TestFormatDateTimeLocal(t *testing.T) {
 	tm := time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC)
@@ -257,7 +233,7 @@ func TestRecentEntries_Empty(t *testing.T) {
 }
 
 func TestStatCard(t *testing.T) {
-	html := renderToString(t, StatCard("Total Sets", "42"))
+	html := renderToString(t, components.StatCard(components.StatCardProps{Label: "Total Sets", Value: "42"}))
 	if !strings.Contains(html, "Total Sets") {
 		t.Error("expected label")
 	}
@@ -396,7 +372,7 @@ func TestExerciseStats(t *testing.T) {
 }
 
 func TestIcon_Trash(t *testing.T) {
-	html := renderToString(t, Icon(IconProps{Name: "trash", Size: 16}))
+	html := renderToString(t, components.Icon(components.IconProps{Name: "trash", Size: 16}))
 	if !strings.Contains(html, `<svg`) {
 		t.Error("expected svg element")
 	}
@@ -409,7 +385,7 @@ func TestIcon_Trash(t *testing.T) {
 }
 
 func TestIcon_Unknown(t *testing.T) {
-	html := renderToString(t, Icon(IconProps{Name: "nonexistent"}))
+	html := renderToString(t, components.Icon(components.IconProps{Name: "nonexistent"}))
 	if !strings.Contains(html, `<circle`) {
 		t.Error("expected fallback circle for unknown icon")
 	}
@@ -417,14 +393,14 @@ func TestIcon_Unknown(t *testing.T) {
 
 func TestIcon_Alias(t *testing.T) {
 	// "delete" should resolve to "trash" icon.
-	html := renderToString(t, Icon(IconProps{Name: "delete"}))
+	html := renderToString(t, components.Icon(components.IconProps{Name: "delete"}))
 	if !strings.Contains(html, "polyline") {
 		t.Error("expected trash icon path for 'delete' alias")
 	}
 }
 
 func TestIcon_DefaultSizeAndColor(t *testing.T) {
-	html := renderToString(t, Icon(IconProps{Name: "plus"}))
+	html := renderToString(t, components.Icon(components.IconProps{Name: "plus"}))
 	if !strings.Contains(html, `width="24"`) {
 		t.Error("expected default size 24")
 	}

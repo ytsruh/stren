@@ -1,31 +1,33 @@
 package views
 
+import "stren/internal/views/components"
+
 // ProfilePage renders the user profile page.
 templ ProfilePage(userName string, email string, isAdmin bool) {
 	@Layout(PageData{Title: "Profile", UserName: userName, IsAuthenticated: true}) {
 		<h1 class="mb-6">Profile</h1>
 		<div class="grid gap-4 max-w-md">
-			<div class="card">
-				<header>
+			@components.Card(components.CardProps{}) {
+				@components.CardHeader(components.CardHeaderProps{}) {
 					<h3>Name</h3>
-				</header>
-				<section>
+				}
+				@components.CardSection(components.CardSectionProps{}) {
 					<p>{ userName }</p>
-				</section>
-			</div>
-			<div class="card">
-				<header>
+				}
+			}
+			@components.Card(components.CardProps{}) {
+				@components.CardHeader(components.CardHeaderProps{}) {
 					<h3>Email</h3>
-				</header>
-				<section>
+				}
+				@components.CardSection(components.CardSectionProps{}) {
 					<p>{ email }</p>
-				</section>
-			</div>
-			<div class="card">
-				<header>
+				}
+			}
+			@components.Card(components.CardProps{}) {
+				@components.CardHeader(components.CardHeaderProps{}) {
 					<h3>Role</h3>
-				</header>
-				<section>
+				}
+				@components.CardSection(components.CardSectionProps{}) {
 					<p>
 						if isAdmin {
 							Administrator
@@ -33,13 +35,13 @@ templ ProfilePage(userName string, email string, isAdmin bool) {
 							User
 						}
 					</p>
-				</section>
-			</div>
-			<div class="card">
-				<header>
+				}
+			}
+			@components.Card(components.CardProps{}) {
+				@components.CardHeader(components.CardHeaderProps{}) {
 					<h3>Appearance</h3>
-				</header>
-				<section>
+				}
+				@components.CardSection(components.CardSectionProps{}) {
 					<button
 						type="button"
 						aria-label="Toggle dark mode"
@@ -51,8 +53,8 @@ templ ProfilePage(userName string, email string, isAdmin bool) {
 						<span class="hidden dark:inline">Light Mode</span>
 						<span class="inline dark:hidden">Dark Mode</span>
 					</button>
-				</section>
-			</div>
+				}
+			}
 		</div>
 	}
 }

@@ -1,0 +1,61 @@
+package components
+
+type CardProps struct {
+	ID    string
+	Class string
+}
+
+func Card(props CardProps, children ...templ.Component) templ.Component {
+	return cardComponent(props, children...)
+}
+
+templ cardComponent(props CardProps, children ...templ.Component) {
+	<div id={ props.ID } class={ "card " + props.Class }>
+		{ children... }
+	</div>
+}
+
+type CardHeaderProps struct {
+	Class string
+}
+
+func CardHeader(props CardHeaderProps, children ...templ.Component) templ.Component {
+	return cardHeaderComponent(props, children...)
+}
+
+templ cardHeaderComponent(props CardHeaderProps, children ...templ.Component) {
+	<header class={ props.Class }>
+		{ children... }
+	</header>
+}
+
+type CardSectionProps struct {
+	Class string
+}
+
+func CardSection(props CardSectionProps, children ...templ.Component) templ.Component {
+	return cardSectionComponent(props, children...)
+}
+
+templ cardSectionComponent(props CardSectionProps, children ...templ.Component) {
+	<section class={ props.Class }>
+		{ children... }
+	</section>
+}
+
+type StatCardProps struct {
+	Label string
+	Value string
+	Class string
+}
+
+templ StatCard(props StatCardProps) {
+	<div class={ "card " + props.Class }>
+		<header>
+			<h4>{ props.Value }</h4>
+		</header>
+		<section>
+			<p>{ props.Label }</p>
+		</section>
+	</div>
+}

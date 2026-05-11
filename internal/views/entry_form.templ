@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"stren/internal/models"
+	"stren/internal/views/components"
 	"time"
 )
 
@@ -71,11 +72,11 @@ templ EntryForm(types []models.ExerciseType, userName string, isAuthenticated bo
 
 			<div class="flex gap-3">
 				<button type="submit" class="btn">
-					@Icon(IconProps{Name: "check", Size: 18})
+					@components.Icon(components.IconProps{Name: "check", Size: 18})
 					Save Entry
 				</button>
 				<a href="/" class="btn-outline">
-					@Icon(IconProps{Name: "x", Size: 18})
+					@components.Icon(components.IconProps{Name: "x", Size: 18})
 					Cancel
 				</a>
 			</div>
@@ -168,11 +169,11 @@ templ EditEntryForm(entry *models.ExerciseEntry, types []models.ExerciseType, us
 
 			<div class="flex gap-3">
 				<button type="submit" class="btn">
-					@Icon(IconProps{Name: "check", Size: 18})
+					@components.Icon(components.IconProps{Name: "check", Size: 18})
 					Update Entry
 				</button>
 				<a href="/" class="btn-outline">
-					@Icon(IconProps{Name: "x", Size: 18})
+					@components.Icon(components.IconProps{Name: "x", Size: 18})
 					Cancel
 				</a>
 			</div>
@@ -189,11 +190,11 @@ templ EntryFormSuccess(message string, stayOnPage bool) {
 	if !stayOnPage {
 		<div class="mt-6 flex flex-col gap-3 sm:flex-row">
 			<a href="/" class="btn-outline">
-				@Icon(IconProps{Name: "arrow-left", Size: 18})
+				@components.Icon(components.IconProps{Name: "arrow-left", Size: 18})
 				Back to Dashboard
 			</a>
 			<a href="/entries/new" class="btn">
-				@Icon(IconProps{Name: "plus", Size: 18})
+				@components.Icon(components.IconProps{Name: "plus", Size: 18})
 				Add Another
 			</a>
 		</div>

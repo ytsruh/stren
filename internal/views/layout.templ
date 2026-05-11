@@ -1,6 +1,7 @@
 package views
 
 import "stren/internal/models"
+import "stren/internal/views/components"
 
 type PageData struct {
 	Title           string
@@ -69,22 +70,22 @@ templ Layout(data PageData) {
 						if data.IsAuthenticated {
 							<li>
 								<a href="/" class="btn-ghost">
-									@Icon(IconProps{Name: "home", Size: 18})
+									@components.Icon(components.IconProps{Name: "home", Size: 18})
 									<span class="hidden sm:inline">Dashboard</span>
 								</a>
 							</li>
 							<li>
 								<a href="/entries/new" class="btn-ghost">
-									@Icon(IconProps{Name: "plus", Size: 18})
+									@components.Icon(components.IconProps{Name: "plus", Size: 18})
 									<span class="hidden sm:inline">New Entry</span>
 								</a>
 							</li>
 							<li>
 								<div id="user-dropdown" class="dropdown-menu">
 									<button type="button" id="user-dropdown-trigger" aria-haspopup="menu" aria-controls="user-dropdown-menu" aria-expanded="false" class="btn-ghost flex items-center gap-2 m-0">
-										@Icon(IconProps{Name: "user", Size: 18})
+										@components.Icon(components.IconProps{Name: "user", Size: 18})
 										<span class="hidden sm:inline">{ data.UserName }</span>
-										@Icon(IconProps{Name: "chevron-down", Size: 16})
+										@components.Icon(components.IconProps{Name: "chevron-down", Size: 16})
 									</button>
 									<div id="user-dropdown-popover" data-popover aria-hidden="true" class="min-w-40">
 										<div role="menu" id="user-dropdown-menu" aria-labelledby="user-dropdown-trigger">
@@ -169,14 +170,14 @@ templ EmptyState() {
 	<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
 		<header class="flex max-w-sm flex-col items-center gap-3 text-center">
 			<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
-				@Icon(IconProps{Name: "dumbbell", Size: 24})
+				@components.Icon(components.IconProps{Name: "dumbbell", Size: 24})
 			</div>
 			<h3 class="text-lg font-semibold">No workouts yet</h3>
 			<p class="text-muted-foreground text-sm">Start tracking your strength journey by adding your first exercise entry.</p>
 		</header>
 		<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
 			<a href="/entries/new" class="btn">
-				@Icon(IconProps{Name: "plus", Size: 18})
+				@components.Icon(components.IconProps{Name: "plus", Size: 18})
 				Add First Entry
 			</a>
 		</section>
