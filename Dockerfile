@@ -14,7 +14,7 @@ RUN go mod download
 
 COPY . .
 
-RUN go install github.com/a-h/templ/cmd/templ@latest
+RUN go install github.com/a-h/templ/cmd/templ@v0.3.1001
 RUN templ generate
 RUN ./tailwindcss -i ./styles/input.css -o ./public/css/styles.css --minify
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o stren ./cmd/main.go
