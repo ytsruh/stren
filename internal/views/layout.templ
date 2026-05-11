@@ -10,6 +10,7 @@ type PageData struct {
 	Entry           *models.ExerciseEntry
 	UserName        string
 	IsAuthenticated bool
+	CurrentPath     string
 }
 
 // Layout is the base layout for all pages
@@ -29,7 +30,6 @@ templ Layout(data PageData) {
 			<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
 			<link rel="manifest" href="/manifest.json"/>
 			<title>{ data.Title } - Strength Tracker</title>
-			<!-- Dark mode: Basecoat uses .dark class on <html> -->
 			<script>
 				(() => {
 					try {
@@ -53,64 +53,100 @@ templ Layout(data PageData) {
 					});
 				})();
 			</script>
-			<!-- App styles -->
 			<link rel="stylesheet" href="/css/styles.css"/>
-			<!-- htmx -->
 			<script src="https://unpkg.com/htmx.org@1.9.12"></script>
-			<!-- basecoat -->
 			<script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/js/all.min.js" defer></script>
 		</head>
-		<body class="overflow-x-hidden">
-			<header>
-				<nav class="sticky top-0 z-50 flex items-center gap-4 px-4 bg-background border-b border-border shadow-sm">
-					<ul class="flex list-none m-0 p-0 items-center gap-3">
-						<li><strong>Stren</strong></li>
-					</ul>
-					<ul class="flex list-none m-0 p-0 items-center gap-3 ml-auto">
-						if data.IsAuthenticated {
-							<li>
-								<a href="/" class="btn-ghost">
-									@components.Icon(components.IconProps{Name: "home", Size: 18})
-									<span class="hidden sm:inline">Dashboard</span>
-								</a>
-							</li>
-							<li>
-								<a href="/entries/new" class="btn-ghost">
-									@components.Icon(components.IconProps{Name: "plus", Size: 18})
-									<span class="hidden sm:inline">New Entry</span>
-								</a>
-							</li>
-							<li>
-								<div id="user-dropdown" class="dropdown-menu">
-									<button type="button" id="user-dropdown-trigger" aria-haspopup="menu" aria-controls="user-dropdown-menu" aria-expanded="false" class="btn-ghost flex items-center gap-2 m-0">
-										@components.Icon(components.IconProps{Name: "user", Size: 18})
-										<span class="hidden sm:inline">{ data.UserName }</span>
-										@components.Icon(components.IconProps{Name: "chevron-down", Size: 16})
+		<body>
+			if data.IsAuthenticated {
+				<aside class="sidebar" data-side="left" aria-hidden="false">
+					<nav aria-label="Sidebar navigation">
+						<header class="py-2 border-b border-sidebar-border">
+							<div class="flex items-center gap-3">
+								<div class="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg font-bold">S</div>
+								<span class="font-semibold text-sidebar-foreground truncate">Stren</span>
+							</div>
+						</header>
+						<section class="flex flex-col gap-y-5 py-5 pr-1">
+							<div>
+								<h3>Exercise</h3>
+								<ul>
+									<li>
+										<a
+											href="/"
+											if data.CurrentPath == "/" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "home", Size: 18})
+											<span>Dashboard</span>
+										</a>
+									</li>
+									<li>
+										<a
+											href="/entries/new"
+											if data.CurrentPath == "/entries/new" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "plus", Size: 18})
+											<span>New Entry</span>
+										</a>
+									</li>
+								</ul>
+							</div>
+							<div>
+								<h3>Account</h3>
+								<ul>
+									<li>
+										<a
+											href="/profile"
+											if data.CurrentPath == "/profile" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "user", Size: 18})
+											<span>Profile</span>
+										</a>
+									</li>
+									<li>
+										<form method="POST" action="/logout">
+											<button type="submit" class="flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:bg-sidebar-accent active:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0">
+												@components.Icon(components.IconProps{Name: "log-out", Size: 18})
+												<span class="truncate">Logout</span>
+											</button>
+										</form>
+									</li>
+								</ul>
+							</div>
+						</section>
+					</nav>
+				</aside>
+			}
+			<main>
+				<header>
+					<nav class="sticky top-0 flex items-center gap-4 px-4 py-2 bg-background border-b">
+						<ul class="flex list-none m-0 p-0 items-center">
+							if data.IsAuthenticated {
+								<li>
+									<button type="button" onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar'))" class="btn-ghost" aria-label="Toggle sidebar">
+										@components.Icon(components.IconProps{Name: "menu", Size: 20})
 									</button>
-									<div id="user-dropdown-popover" data-popover aria-hidden="true" class="min-w-40">
-										<div role="menu" id="user-dropdown-menu" aria-labelledby="user-dropdown-trigger">
-											<a href="/profile" role="menuitem" class="block px-4 py-2 no-underline hover:bg-accent">Profile</a>
-											<hr role="separator"/>
-											<form method="POST" action="/logout">
-												<button type="submit" role="menuitem" class="w-full text-left px-4 py-2 hover:bg-accent">Logout</button>
-											</form>
-										</div>
-									</div>
-								</div>
-							</li>
-						} else {
-							<li>
-								<a href="/login" class="btn-link">Login</a>
-							</li>
-							<li>
-								<a href="/register" class="btn-link">Register</a>
-							</li>
+								</li>
+							}
+							<li class="flex md:hidden"><strong>Stren</strong></li>
+						</ul>
+						if !data.IsAuthenticated {
+							<ul class="flex list-none m-0 p-0 items-center gap-3 ml-auto">
+								<li><a href="/login" class="btn-link">Login</a></li>
+								<li><a href="/register" class="btn-link">Register</a></li>
+							</ul>
 						}
-					</ul>
-				</nav>
-			</header>
-			<main class="container mx-auto max-w-3xl px-4 py-8 flex-1">
-				{ children... }
+					</nav>
+				</header>
+				<div class="container mx-auto max-w-3xl px-4 py-8">
+					{ children... }
+				</div>
 			</main>
 			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
 				<form method="dialog">
