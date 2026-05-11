@@ -6,17 +6,17 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-pre_cmd = ["templ generate"]
-cmd = "templ generate && go build -o ./tmp/main ./cmd/main.go"
+pre_cmd = []
+cmd = "./tailwindcss -i ./styles/input.css -o ./public/css/styles.css --minify && templ generate && go build -o ./tmp/main ./cmd/main.go"
 post_cmd = []
 bin = "tmp/main"
 full_bin = "./tmp/main"
 args_bin = []
-include_ext = ["go", "templ"]
+include_ext = ["go", "templ", "css"]
 exclude_dir = ["tmp", "public"]
 include_dir = []
 include_file = []
-exclude_file = []
+exclude_file = ["styles/basecoat.css"]
 exclude_regex = ["_test\\.go", "_templ\\.go"]
 exclude_unchanged = true
 follow_symlink = true

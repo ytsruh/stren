@@ -8,85 +8,89 @@ import (
 // ExerciseHistory shows all entries for a specific exercise
 templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userName string, isAuthenticated bool) {
 	@Layout(PageData{Title: exerciseName, UserName: userName, IsAuthenticated: isAuthenticated}) {
-		<div class="flex justify-between items-center mb-2">
-			<h1 class="flex items-center gap-1">
+		<div class="flex justify-between items-center mb-6">
+			<h1 class="flex items-center gap-3">
 				@Icon(IconProps{Name: "dumbbell", Size: 24})
 				{ exerciseName }
 			</h1>
 		</div>
 		if len(entries) == 0 {
-			<article>
-				<header>
-					<h3>No entries yet</h3>
+			<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
+				<header class="flex max-w-sm flex-col items-center gap-3 text-center">
+					<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
+						@Icon(IconProps{Name: "dumbbell", Size: 24})
+					</div>
+					<h3 class="text-lg font-semibold">No entries yet</h3>
+					<p class="text-muted-foreground text-sm">You haven't logged any sets for { exerciseName } yet.</p>
 				</header>
-				<p>You haven't logged any sets for { exerciseName } yet.</p>
-				<footer>
-					<a href="/entries/new" role="button" class="flex items-center gap-1">
+				<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
+					<a href="/entries/new" class="btn">
 						@Icon(IconProps{Name: "plus", Size: 18})
 						Log First Set
 					</a>
-				</footer>
-			</article>
+				</section>
+			</div>
 		} else {
 			@ExerciseStats(entries)
-			<h3 class="flex items-center gap-1">
+			<h3 class="flex items-center gap-2 mb-4">
 				@Icon(IconProps{Name: "trending-up", Size: 20})
 				History
 			</h3>
-			<table>
-				<thead>
-					<tr>
-						<th>Date</th>
-						<th>Reps</th>
-						<th>Weight</th>
-						<th>Notes</th>
-						<th>Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, entry := range entries {
-						<tr id={ fmt.Sprintf("entry-%d", entry.ID) }>
-							<td>{ entry.FormattedDate() }</td>
-							<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
-							<td>{ entry.FormattedWeight() }</td>
-							<td>{ entry.Notes }</td>
-							<td>
-								<div class="flex gap-1">
-									<a
-										href={ templ.SafeURL(fmt.Sprintf("/entries/%d/edit", entry.ID)) }
-										class="button"
-										role="button"
-										title="Edit"
-									>
-										@Icon(IconProps{Name: "edit", Size: 16})
-									</a>
-									<button
-										title="Delete"
-										data-variant="danger"
-										hx-delete={ fmt.Sprintf("/entries/%d", entry.ID) }
-										hx-confirm="Delete this entry?"
-										hx-target={ fmt.Sprintf("#entry-%d", entry.ID) }
-										hx-swap="outerHTML swap:0.3s"
-									>
-										@Icon(IconProps{Name: "trash", Size: 16})
-									</button>
-								</div>
-							</td>
+			<div class="overflow-x-auto">
+				<table class="table">
+					<thead>
+						<tr>
+							<th>Date</th>
+							<th>Reps</th>
+							<th>Weight</th>
+							<th>Notes</th>
+							<th>Actions</th>
 						</tr>
-					}
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						for _, entry := range entries {
+							<tr id={ fmt.Sprintf("entry-%d", entry.ID) }>
+								<td>{ entry.FormattedDate() }</td>
+								<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
+								<td>{ entry.FormattedWeight() }</td>
+								<td>{ entry.Notes }</td>
+								<td>
+									<div class="flex gap-2">
+										<a
+											href={ templ.SafeURL(fmt.Sprintf("/entries/%d/edit", entry.ID)) }
+											class="btn-outline p-2"
+											title="Edit"
+										>
+											@Icon(IconProps{Name: "edit", Size: 16})
+										</a>
+										<button
+											class="btn-destructive p-2"
+											title="Delete"
+											hx-delete={ fmt.Sprintf("/entries/%d", entry.ID) }
+											hx-confirm="Delete this entry?"
+											hx-target={ fmt.Sprintf("#entry-%d", entry.ID) }
+											hx-swap="outerHTML swap:0.3s"
+										>
+											@Icon(IconProps{Name: "trash", Size: 16})
+										</button>
+									</div>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
 		}
 	}
 }
 
 // ExerciseStats shows statistics for an exercise
 templ ExerciseStats(entries []models.ExerciseEntry) {
-	<h3 class="flex items-center gap-1">
+	<h3 class="flex items-center gap-2 mb-4">
 		@Icon(IconProps{Name: "trending-up", Size: 20})
 		Stats
 	</h3>
-	<div class="flex gap-1">
+	<div class="flex gap-4 mb-6">
 		@StatCard("Personal Best", fmt.Sprintf("%.1f kg", maxWeight(entries)))
 		@StatCard("Last Set", getLastSet(entries))
 	</div>
@@ -110,7 +114,6 @@ func getLastSet(entries []models.ExerciseEntry) string {
 	if len(entries) == 0 {
 		return "No entries"
 	}
-	// Entries are sorted by created_at DESC, so first is the most recent
 	last := entries[0]
 	return fmt.Sprintf("%.1f kg × %d", last.Weight, last.Reps)
 }

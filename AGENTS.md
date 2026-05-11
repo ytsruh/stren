@@ -14,7 +14,7 @@
 - Make use of `go doc` Go command to fetch documentation for packages/modules
 
 ## Technology & Architecture
-- **Tech stack**: Go 1.25+, Echo, Templ, Turso Sync (turso.tech/database/tursogo), htmx, Oat CSS
+- **Tech stack**: Go 1.25+, Echo, Templ, Turso Sync (turso.tech/database/tursogo), htmx, Basecoat CSS
 - **Entry point**: `cmd/main.go`
 - **HTTP routes**: `internal/routes/*.go` (Echo framework — request parsing, rendering, redirects, middleware)
 - **Controllers**: `internal/controllers/*.go` (business logic — auth, entry CRUD orchestration)

@@ -6,28 +6,63 @@ APP_NAME=stren
 DB_FILE=strength_tracker.db
 PORT=8080
 
+# Tailwind binary selection based on OS
+ifeq ($(OS),Linux)
+TAILWIND_BIN=./tailwindcss-linux-x64
+else
+TAILWIND_BIN=./tailwindcss
+endif
+
 # Default target
 .PHONY: help
 help:
 	@echo "Strength Tracker - Available commands:"
 	@echo ""
-	@echo "  make build       - Build the application"
-	@echo "  make run         - Build and run the application"
-	@echo "  make dev         - Run with auto-restart (requires entr)"
-	@echo "  make generate    - Regenerate sqlc queries"
-	@echo "  make db-reset    - Delete and recreate database"
-	@echo "  make test        - Run tests"
-	@echo "  make test-cover  - Run tests with coverage report"
-	@echo "  make templ       - Regenerate Templ templates"
-	@echo "  make clean       - Remove built binary and database"
+	@echo "  make build           - Build the application (includes CSS)"
+	@echo "  make css-build       - Build CSS with Tailwind CLI"
+	@echo "  make css-watch       - Watch and rebuild CSS on changes"
+	@echo "  make download-tailwind - Download Tailwind CLI binaries"
+	@echo "  make run             - Build and run the application"
+	@echo "  make dev             - Run with auto-restart (requires entr)"
+	@echo "  make generate        - Regenerate sqlc queries"
+	@echo "  make db-reset        - Delete and recreate database"
+	@echo "  make test            - Run tests"
+	@echo "  make test-cover      - Run tests with coverage report"
+	@echo "  make templ           - Regenerate Templ templates"
+	@echo "  make clean           - Remove built binary and database"
 	@echo ""
+
+# Download Tailwind CLI binaries for current platform
+.PHONY: download-tailwind
+download-tailwind:
+	@echo "Downloading Tailwind CLI binaries..."
+	@if [ "$(OS)" != "Linux" ]; then \
+		echo "Downloading macOS binary..."; \
+		curl -sL "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.0/tailwindcss-macos-arm64" -o tailwindcss && chmod +x tailwindcss; \
+	fi
+	@echo "Downloading Linux binary..."; \
+	curl -sL "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.0/tailwindcss-linux-x64" -o tailwindcss-linux-x64 && chmod +x tailwindcss-linux-x64
+	@echo "✓ Tailwind CLI binaries downloaded"
 
 # Build the application
 .PHONY: build
-build: templ generate
+build: templ generate css-build
 	@echo "Building $(APP_NAME)..."
 	go build -o $(APP_NAME) ./cmd/main.go
 	@echo "✓ Build complete: ./$(APP_NAME)"
+
+# Build CSS with Tailwind CLI
+.PHONY: css-build
+css-build:
+	@echo "Building CSS..."
+	$(TAILWIND_BIN) -i ./styles/input.css -o ./public/css/styles.css --minify
+	@echo "✓ CSS built: ./public/css/styles.css"
+
+# Watch CSS in development
+.PHONY: css-watch
+css-watch:
+	@echo "Watching CSS for changes..."
+	$(TAILWIND_BIN) -i ./styles/input.css -o ./public/css/styles.css --watch
 
 # Build and run
 .PHONY: run
@@ -40,7 +75,7 @@ run: build
 dev:
 	@if command -v entr >/dev/null 2>&1; then \
 		echo "Watching for changes..."; \
-		find . -name '*.go' -o -name '*.templ' | entr -r $(MAKE) run; \
+		find . -name '*.go' -o -name '*.templ' -o -name 'styles/*.css' | entr -r $(MAKE) run; \
 	else \
 		echo "Error: 'entr' not installed. Install with: brew install entr (macOS) or apt-get install entr (Linux)"; \
 		exit 1; \

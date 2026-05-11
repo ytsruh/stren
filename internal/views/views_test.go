@@ -137,7 +137,7 @@ func TestToast_Error(t *testing.T) {
 	if !strings.Contains(html, "Bad input") {
 		t.Error("expected toast message in output")
 	}
-	if !strings.Contains(html, "alert-danger") {
+	if !strings.Contains(html, "alert-destructive") {
 		t.Error("expected error CSS class in output")
 	}
 }
@@ -147,7 +147,7 @@ func TestToast_Success(t *testing.T) {
 	if !strings.Contains(html, "Saved!") {
 		t.Error("expected toast message in output")
 	}
-	if !strings.Contains(html, "alert-success") {
+	if !strings.Contains(html, "alert") {
 		t.Error("expected success CSS class in output")
 	}
 }
@@ -347,7 +347,7 @@ func TestEntryFormError(t *testing.T) {
 	if !strings.Contains(html, "Invalid reps") {
 		t.Error("expected error message")
 	}
-	if !strings.Contains(html, "alert-danger") {
+	if !strings.Contains(html, "alert-destructive") {
 		t.Error("expected error CSS class")
 	}
 }

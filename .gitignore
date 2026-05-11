@@ -14,4 +14,6 @@ main
 *.dll
 *.so
 *.dylib
+tailwindcss
+tailwindcss-*
 /tmp/*
