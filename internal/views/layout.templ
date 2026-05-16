@@ -94,17 +94,6 @@ templ Layout(data PageData) {
 											<span>New Entry</span>
 										</a>
 									</li>
-									<li>
-										<a
-											href="/feedback"
-											if data.CurrentPath == "/feedback" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "message-square", Size: 18})
-											<span>Feedback</span>
-										</a>
-									</li>
 								</ul>
 							</div>
 							if data.IsAdmin {
@@ -131,6 +120,17 @@ templ Layout(data PageData) {
 											>
 												@components.Icon(components.IconProps{Name: "user", Size: 18})
 												<span>Users</span>
+											</a>
+										</li>
+										<li>
+											<a
+												href="/admin/feedback"
+												if data.CurrentPath == "/admin/feedback" {
+													aria-current="page"
+												}
+											>
+												@components.Icon(components.IconProps{Name: "message", Size: 18})
+												<span>Feedback</span>
 											</a>
 										</li>
 									</ul>
