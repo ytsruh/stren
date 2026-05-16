@@ -12,13 +12,18 @@ import (
 type Querier interface {
 	Create(ctx context.Context, name string) (int64, error)
 	CreateEntry(ctx context.Context, arg CreateEntryParams) (int64, error)
+	CreateFeedback(ctx context.Context, arg CreateFeedbackParams) (Feedback, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (int64, error)
 	DeleteEntry(ctx context.Context, arg DeleteEntryParams) error
+	GetAll(ctx context.Context) ([]GetAllRow, error)
+	GetAllClosed(ctx context.Context) ([]GetAllClosedRow, error)
+	GetAllOpen(ctx context.Context) ([]GetAllOpenRow, error)
 	GetByID(ctx context.Context, id int64) (Exercise, error)
 	GetByName(ctx context.Context, name string) (Exercise, error)
 	GetEntriesByDateRange(ctx context.Context, arg GetEntriesByDateRangeParams) ([]GetEntriesByDateRangeRow, error)
 	GetEntriesByExercise(ctx context.Context, arg GetEntriesByExerciseParams) ([]GetEntriesByExerciseRow, error)
 	GetEntry(ctx context.Context, arg GetEntryParams) (GetEntryRow, error)
+	GetFeedbackByID(ctx context.Context, id int64) (GetFeedbackByIDRow, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	List(ctx context.Context) ([]Exercise, error)
@@ -27,6 +32,7 @@ type Querier interface {
 	Update(ctx context.Context, arg UpdateParams) (Exercise, error)
 	UpdateEntry(ctx context.Context, arg UpdateEntryParams) error
 	UpdateEntryWithDate(ctx context.Context, arg UpdateEntryWithDateParams) error
+	UpdateStatus(ctx context.Context, arg UpdateStatusParams) (Feedback, error)
 }
 
 var _ Querier = (*Queries)(nil)

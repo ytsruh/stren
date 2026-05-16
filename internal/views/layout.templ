@@ -62,8 +62,8 @@ templ Layout(data PageData) {
 			if data.IsAuthenticated {
 				<aside class="sidebar" data-side="left" aria-hidden="false">
 					<nav aria-label="Sidebar navigation">
-						<header class="border-sidebar-border">
-							<div class="flex items-center gap-3">
+						<header class="border-sidebar-border ">
+							<div class="flex items-center gap-3 px-3">
 								<div class="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg font-bold">S</div>
 								<span class="font-semibold text-sidebar-foreground truncate">Stren</span>
 							</div>
@@ -94,6 +94,17 @@ templ Layout(data PageData) {
 											<span>New Entry</span>
 										</a>
 									</li>
+									<li>
+										<a
+											href="/feedback"
+											if data.CurrentPath == "/feedback" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "message-square", Size: 18})
+											<span>Feedback</span>
+										</a>
+									</li>
 								</ul>
 							</div>
 							if data.IsAdmin {
@@ -109,6 +120,17 @@ templ Layout(data PageData) {
 											>
 												@components.Icon(components.IconProps{Name: "settings", Size: 18})
 												<span>Exercises</span>
+											</a>
+										</li>
+										<li>
+											<a
+												href="/admin/feedback"
+												if data.CurrentPath == "/admin/feedback" {
+													aria-current="page"
+												}
+											>
+												@components.Icon(components.IconProps{Name: "message-square", Size: 18})
+												<span>Feedback</span>
 											</a>
 										</li>
 									</ul>

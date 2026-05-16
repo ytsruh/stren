@@ -314,12 +314,97 @@ func (m *mockUserRepository) GetUserByID(id int64) (*models.User, error) {
 	return nil, nil
 }
 
+// mockFeedbackRepository is an in-memory implementation of models.FeedbackRepoInterface for testing.
+type mockFeedbackRepository struct {
+	mu       sync.Mutex
+	feedback []*models.Feedback
+	nextID   int64
+
+	errCreate   error
+	errGetAll   error
+	errGetByID  error
+	errUpdate   error
+}
+
+func newMockFeedbackRepository() *mockFeedbackRepository {
+	return &mockFeedbackRepository{
+		nextID: 1,
+	}
+}
+
+func (m *mockFeedbackRepository) Create(feedback *models.Feedback) error {
+	if m.errCreate != nil {
+		return m.errCreate
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	feedback.ID = m.nextID
+	m.nextID++
+	m.feedback = append(m.feedback, feedback)
+	return nil
+}
+
+func (m *mockFeedbackRepository) GetAll(filter string) ([]*models.Feedback, error) {
+	if m.errGetAll != nil {
+		return nil, m.errGetAll
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result []*models.Feedback
+	for _, f := range m.feedback {
+		switch filter {
+		case "open":
+			if !f.IsClosed {
+				result = append(result, f)
+			}
+		case "closed":
+			if f.IsClosed {
+				result = append(result, f)
+			}
+		default:
+			result = append(result, f)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockFeedbackRepository) GetByID(id int64) (*models.Feedback, error) {
+	if m.errGetByID != nil {
+		return nil, m.errGetByID
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, f := range m.feedback {
+		if f.ID == id {
+			return f, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockFeedbackRepository) UpdateStatus(id int64, isClosed bool) error {
+	if m.errUpdate != nil {
+		return m.errUpdate
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, f := range m.feedback {
+		if f.ID == id {
+			f.IsClosed = isClosed
+			return nil
+		}
+	}
+	return nil
+}
+
 // setupHandler creates a Handler backed by mock repositories for testing.
 func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository, *echo.Echo) {
 	t.Helper()
 	e := echo.New()
 	mock := newMockRepository()
 	mockUser := newMockUserRepository()
+	mockFeedback := newMockFeedbackRepository()
 	jwtService := utils.NewJWTService("test-secret")
 	mock.exercises = []models.Exercise{
 		{ID: 1, Name: "Squat"},
@@ -329,8 +414,9 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	authCtrl := controllers.NewAuthController(mockUser, jwtService)
 	entryCtrl := controllers.NewEntryController(mock)
 	adminCtrl := controllers.NewAdminController(mock)
+	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, jwtService, validator)
+	h := NewHandler(authCtrl, entryCtrl, adminCtrl, feedbackCtrl, jwtService, validator)
 	return h, mock, mockUser, e
 }
 

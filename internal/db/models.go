@@ -23,6 +23,16 @@ type ExerciseEntry struct {
 	CreatedAt  sql.NullTime
 }
 
+type Feedback struct {
+	ID        int64
+	UserID    int64
+	Title     string
+	Message   string
+	IsClosed  int64
+	CreatedAt sql.NullTime
+	UpdatedAt sql.NullTime
+}
+
 type User struct {
 	ID           int64
 	Name         string

@@ -60,3 +60,11 @@ type UserRepo interface {
 
 // Compile-time check to ensure ExerciseRepository implements Repository.
 var _ Repository = (*ExerciseRepository)(nil)
+
+// FeedbackRepoInterface defines the interface for feedback data access (used by controllers).
+type FeedbackRepoInterface interface {
+	Create(feedback *Feedback) error
+	GetAll(filter string) ([]*Feedback, error)
+	GetByID(id int64) (*Feedback, error)
+	UpdateStatus(id int64, isClosed bool) error
+}

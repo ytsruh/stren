@@ -28,3 +28,17 @@ CREATE INDEX idx_entries_exercise ON exercise_entries(exercise_id);
 CREATE INDEX idx_entries_user ON exercise_entries(user_id);
 CREATE INDEX idx_entries_created ON exercise_entries(created_at);
 CREATE INDEX idx_users_email ON users(email);
+
+CREATE TABLE feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_closed INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_feedback_user ON feedback(user_id);
+CREATE INDEX idx_feedback_created ON feedback(created_at);
+CREATE INDEX idx_feedback_closed ON feedback(is_closed);
