@@ -11,13 +11,12 @@ import (
 templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Entry"})
-
 		<form
 			hx-post="/entries"
 			hx-target="#form-result"
 			hx-swap="innerHTML"
-			class="form grid gap-6">
-
+			class="form grid gap-6"
+		>
 			<fieldset class="grid gap-4">
 				<div class="grid gap-2">
 					<label for="exercise-name">Exercise</label>
@@ -25,14 +24,14 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 						id="exercise-name"
 						name="exercise_name"
 						class="select"
-						required>
+						required
+					>
 						<option value="">-- Select an exercise --</option>
 						for _, e := range exercises {
 							<option value={ e.Name }>{ e.Name }</option>
 						}
 					</select>
 				</div>
-
 				<div class="grid grid-cols-2 gap-4">
 					<div class="grid gap-2">
 						<label for="reps">Reps</label>
@@ -43,9 +42,9 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 							name="reps"
 							min="1"
 							placeholder="8"
-							required/>
+							required
+						/>
 					</div>
-
 					<div class="grid gap-2">
 						<label for="weight">Weight (kg)</label>
 						<input
@@ -56,24 +55,29 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 							step="0.5"
 							min="0"
 							placeholder="0.0"
-							required/>
+							required
+						/>
 					</div>
 				</div>
-
 				<div class="grid gap-2">
 					<label for="notes">Notes (optional)</label>
 					<textarea
 						id="notes"
 						name="notes"
 						class="textarea"
-						placeholder="How did it feel? Any observations?"></textarea>
+						placeholder="How did it feel? Any observations?"
+					></textarea>
 				</div>
 			</fieldset>
-
 			<div class="flex gap-3">
-				<button type="submit" class="btn">
-					@components.Icon(components.IconProps{Name: "check", Size: 18})
-					Save Entry
+				<button type="submit" hx-indicator="#entry-spinner" class="btn relative inline-flex">
+					<span class="btn-text flex items-center justify-around gap-2">
+						@components.Icon(components.IconProps{Name: "check", Size: 18})
+						Save Entry
+					</span>
+					<span id="entry-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+						@components.Icon(components.IconProps{Name: "loader", Size: 18})
+					</span>
 				</button>
 				<a href="/" class="btn-outline">
 					@components.Icon(components.IconProps{Name: "x", Size: 18})
@@ -81,7 +85,6 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 				</a>
 			</div>
 		</form>
-
 		<div id="form-result" class="mt-6"></div>
 	}
 }
@@ -90,13 +93,12 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
-
 		<form
 			hx-put={ fmt.Sprintf("/entries/%d", entry.ID) }
 			hx-target="#form-result"
 			hx-swap="innerHTML"
-			class="form grid gap-6">
-
+			class="form grid gap-6"
+		>
 			<fieldset class="grid gap-4">
 				<div class="grid gap-2">
 					<label for="exercise-name">Exercise</label>
@@ -104,17 +106,18 @@ templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, us
 						id="exercise-name"
 						name="exercise_name"
 						class="select"
-						required>
+						required
+					>
 						for _, e := range exercises {
 							<option
 								value={ e.Name }
-								selected?={ e.Name == entry.ExerciseName }>
+								selected?={ e.Name == entry.ExerciseName }
+							>
 								{ e.Name }
 							</option>
 						}
 					</select>
 				</div>
-
 				<div class="grid grid-cols-2 gap-4">
 					<div class="grid gap-2">
 						<label for="reps">Reps</label>
@@ -126,9 +129,9 @@ templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, us
 							min="1"
 							value={ fmt.Sprintf("%d", entry.Reps) }
 							placeholder="8"
-							required/>
+							required
+						/>
 					</div>
-
 					<div class="grid gap-2">
 						<label for="weight">Weight (kg)</label>
 						<input
@@ -140,10 +143,10 @@ templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, us
 							min="0"
 							value={ fmt.Sprintf("%.1f", entry.Weight) }
 							placeholder="0.0"
-							required/>
+							required
+						/>
 					</div>
 				</div>
-
 				<div class="grid gap-2">
 					<label for="date">Date & Time</label>
 					<input
@@ -152,25 +155,29 @@ templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, us
 						id="date"
 						name="created_at"
 						value={ formatDateTimeLocal(entry.CreatedAt) }
-						required/>
+						required
+					/>
 				</div>
-
 				<div class="grid gap-2">
 					<label for="notes">Notes (optional)</label>
 					<textarea
 						id="notes"
 						name="notes"
 						class="textarea"
-						placeholder="How did it feel? Any observations?">{ entry.Notes }</textarea>
+						placeholder="How did it feel? Any observations?"
+					>{ entry.Notes }</textarea>
 				</div>
-
 				<input type="hidden" name="id" value={ fmt.Sprintf("%d", entry.ID) }/>
 			</fieldset>
-
 			<div class="flex gap-3">
-				<button type="submit" class="btn">
-					@components.Icon(components.IconProps{Name: "check", Size: 18})
-					Update Entry
+				<button type="submit" hx-indicator="#entry-spinner" class="btn relative inline-flex">
+					<span class="btn-text flex items-center justify-around gap-2">
+						@components.Icon(components.IconProps{Name: "check", Size: 18})
+						Update Entry
+					</span>
+					<span id="entry-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+						@components.Icon(components.IconProps{Name: "loader", Size: 18})
+					</span>
 				</button>
 				<a href="/" class="btn-outline">
 					@components.Icon(components.IconProps{Name: "x", Size: 18})
@@ -178,7 +185,6 @@ templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, us
 				</a>
 			</div>
 		</form>
-
 		<div id="form-result" class="mt-6"></div>
 	}
 }
@@ -186,7 +192,6 @@ templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, us
 // EntryFormSuccess is shown after successful form submission
 templ EntryFormSuccess(message string, stayOnPage bool) {
 	@Toast(message, false)
-
 	if !stayOnPage {
 		<div class="mt-6 flex flex-col gap-3 sm:flex-row">
 			<a href="/" class="btn-outline">

@@ -206,9 +206,14 @@ templ Layout(data PageData) {
 						<h3>Confirm</h3>
 						<p id="confirm-message"></p>
 					</header>
-					<footer>
+					<footer class="flex items-center gap-3">
 						<button type="button" commandfor="confirm-dialog" command="close" class="btn-outline">Cancel</button>
-						<button type="button" id="confirm-ok" value="confirm" class="btn-destructive">Confirm</button>
+						<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
+							<span class="btn-text">Confirm</span>
+							<span id="confirm-spinner" class="htmx-indicator flex items-center justify-center animate-spin">
+								@components.Icon(components.IconProps{Name: "loader", Size: 18})
+							</span>
+						</button>
 					</footer>
 				</form>
 			</dialog>
@@ -219,10 +224,15 @@ templ Layout(data PageData) {
 					var dialog = document.getElementById('confirm-dialog');
 					document.getElementById('confirm-message').textContent = evt.detail.question;
 					document.getElementById('confirm-ok').onclick = function() {
-						dialog.close();
 						evt.detail.issueRequest(true);
 					};
 					dialog.showModal();
+				});
+				document.body.addEventListener('htmx:afterRequest', function(evt) {
+					var dialog = document.getElementById('confirm-dialog');
+					if (dialog.open) {
+						dialog.close();
+					}
 				});
 			</script>
 			<script>

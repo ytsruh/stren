@@ -17,7 +17,7 @@ A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS +
 - `TURSO_AUTH_TOKEN` - Auth token for Turso
 
 ## To Do List
-- [ ] Add a HTMX Spinner for form submissions
+- [x] Add a HTMX Spinner for form submissions
 - [ ] Add in toasts for success/failure feedback
 - [x] Add a list of users in admin section
 - [x] Add a feedback form for users and then list it in the admin section

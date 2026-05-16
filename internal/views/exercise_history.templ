@@ -64,6 +64,7 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 											title="Delete"
 											hx-delete={ fmt.Sprintf("/entries/%d", entry.ID) }
 											hx-confirm="Delete this entry?"
+											hx-indicator="#confirm-spinner"
 											hx-target={ fmt.Sprintf("#entry-%d", entry.ID) }
 											hx-swap="outerHTML swap:0.3s"
 										>

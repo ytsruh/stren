@@ -32,18 +32,24 @@ func (h *Handler) Login(c echo.Context) error {
 	}
 
 	if err := h.validator.ValidateStruct(&input); err != nil {
-		return render(c, views.LoginPage(err.Error()))
+		return render(c, views.LoginPageError(err.Error()))
 	}
 
 	_, token, err := h.authCtrl.Login(input.Email, input.Password)
 	if err != nil {
 		if errors.Is(err, controllers.ErrInvalidCredentials) {
-			return render(c, views.LoginPage("Invalid email or password"))
+			return render(c, views.LoginPageError("Invalid email or password"))
 		}
-		return render(c, views.LoginPage("Failed to create session"))
+		return render(c, views.LoginPageError("Failed to create session"))
 	}
 
 	setAuthCookie(c, token)
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Redirect", "/")
+		c.Response().WriteHeader(http.StatusSeeOther)
+		return nil
+	}
 	return c.Redirect(http.StatusSeeOther, "/")
 }
 
@@ -68,15 +74,21 @@ func (h *Handler) Register(c echo.Context) error {
 	}
 
 	if err := h.validator.ValidateStruct(&input); err != nil {
-		return render(c, views.RegisterPage(err.Error()))
+		return render(c, views.RegisterPageError(err.Error()))
 	}
 
 	_, token, err := h.authCtrl.Register(input.Name, input.Email, input.Password)
 	if err != nil {
-		return render(c, views.RegisterPage(err.Error()))
+		return render(c, views.RegisterPageError(err.Error()))
 	}
 
 	setAuthCookie(c, token)
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Redirect", "/")
+		c.Response().WriteHeader(http.StatusSeeOther)
+		return nil
+	}
 	return c.Redirect(http.StatusSeeOther, "/")
 }
 

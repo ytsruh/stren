@@ -10,7 +10,11 @@ templ LoginPage(errorMsg string) {
 				<h2>Login</h2>
 			}
 			@components.CardSection(components.CardSectionProps{}) {
-				<form method="POST" action="/login" class="form grid gap-4">
+				<form
+					hx-post="/login"
+					hx-target="#login-result"
+					hx-swap="innerHTML"
+					class="form grid gap-4">
 					<fieldset class="grid gap-3">
 						<div class="grid gap-2">
 							<label for="login-email">Email</label>
@@ -21,13 +25,13 @@ templ LoginPage(errorMsg string) {
 							<input class="input" type="password" id="login-password" name="password" placeholder="Password" required/>
 						</div>
 					</fieldset>
-					if errorMsg != "" {
-						<div class="alert-destructive" role="alert">
-							<h2>Error</h2>
-							<section>{ errorMsg }</section>
-						</div>
-					}
-					<button type="submit" class="btn">Login</button>
+					<div id="login-result"></div>
+					<button type="submit" hx-indicator="#login-spinner" class="btn relative inline-flex">
+						<span class="btn-text">Login</span>
+						<span id="login-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+							@components.Icon(components.IconProps{Name: "loader", Size: 18})
+						</span>
+					</button>
 				</form>
 			}
 			<footer class="text-center text-sm">
@@ -35,6 +39,15 @@ templ LoginPage(errorMsg string) {
 			</footer>
 		}
 	}
+}
+
+// LoginPageError renders an error alert for HTMX responses.
+templ LoginPageError(message string) {
+	<div class="alert-destructive" role="alert">
+		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+		<h2>Error</h2>
+		<section>{ message }</section>
+	</div>
 }
 
 // RegisterPage renders the registration form.
@@ -45,7 +58,11 @@ templ RegisterPage(errorMsg string) {
 				<h2>Register</h2>
 			}
 			@components.CardSection(components.CardSectionProps{}) {
-				<form method="POST" action="/register" class="form grid gap-4">
+				<form
+					hx-post="/register"
+					hx-target="#register-result"
+					hx-swap="innerHTML"
+					class="form grid gap-4">
 					<fieldset class="grid gap-3">
 						<div class="grid gap-2">
 							<label for="register-name">Name</label>
@@ -60,13 +77,13 @@ templ RegisterPage(errorMsg string) {
 							<input class="input" type="password" id="register-password" name="password" placeholder="Min 6 characters" required/>
 						</div>
 					</fieldset>
-					if errorMsg != "" {
-						<div class="alert-destructive" role="alert">
-							<h2>Error</h2>
-							<section>{ errorMsg }</section>
-						</div>
-					}
-					<button type="submit" class="btn">Create Account</button>
+					<div id="register-result"></div>
+					<button type="submit" hx-indicator="#register-spinner" class="btn relative inline-flex">
+						<span class="btn-text">Create Account</span>
+						<span id="register-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+							@components.Icon(components.IconProps{Name: "loader", Size: 18})
+						</span>
+					</button>
 				</form>
 			}
 			<footer class="text-center text-sm">
@@ -74,4 +91,13 @@ templ RegisterPage(errorMsg string) {
 			</footer>
 		}
 	}
+}
+
+// RegisterPageError renders an error alert for HTMX responses.
+templ RegisterPageError(message string) {
+	<div class="alert-destructive" role="alert">
+		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+		<h2>Error</h2>
+		<section>{ message }</section>
+	</div>
 }

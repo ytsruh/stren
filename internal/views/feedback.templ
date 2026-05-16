@@ -47,9 +47,14 @@ templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
 				</div>
 			</fieldset>
 			<div class="flex gap-3">
-				<button type="submit" class="btn">
-					@components.Icon(components.IconProps{Name: "check", Size: 18})
-					Submit Feedback
+				<button type="submit" hx-indicator="#feedback-spinner" class="btn relative inline-flex">
+					<span class="btn-text">
+						@components.Icon(components.IconProps{Name: "check", Size: 18})
+						Submit Feedback
+					</span>
+					<span id="feedback-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+						@components.Icon(components.IconProps{Name: "loader", Size: 18})
+					</span>
 				</button>
 			</div>
 		</form>
@@ -199,17 +204,23 @@ templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenti
 				<button
 					type="button"
 					hx-post={ fmt.Sprintf("/admin/feedback/%d/close", feedback.ID) }
+					hx-indicator="#close-spinner"
 					hx-target="#close-result"
 					hx-swap="innerHTML"
-					class="btn"
+					class="btn relative inline-flex"
 				>
-					if feedback.IsClosed {
-						@components.Icon(components.IconProps{Name: "rotate-ccw", Size: 18})
-						Reopen
-					} else {
-						@components.Icon(components.IconProps{Name: "check", Size: 18})
-						Close
-					}
+					<span class="btn-text">
+						if feedback.IsClosed {
+							@components.Icon(components.IconProps{Name: "rotate-ccw", Size: 18})
+							Reopen
+						} else {
+							@components.Icon(components.IconProps{Name: "check", Size: 18})
+							Close
+						}
+					</span>
+					<span id="close-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+						@components.Icon(components.IconProps{Name: "loader", Size: 18})
+					</span>
 				</button>
 				<div id="close-result"></div>
 			</div>
