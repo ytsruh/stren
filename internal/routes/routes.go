@@ -19,23 +19,25 @@ import (
 
 // Handler holds dependencies for HTTP route handlers.
 type Handler struct {
-	authCtrl     *controllers.AuthController
-	entryCtrl    *controllers.EntryController
-	adminCtrl    *controllers.AdminController
-	feedbackCtrl *controllers.FeedbackController
-	jwtService   *utils.JWTService
-	validator    utils.Validator
+	authCtrl        *controllers.AuthController
+	entryCtrl       *controllers.EntryController
+	adminCtrl       *controllers.AdminController
+	adminUserCtrl   *controllers.AdminUserController
+	feedbackCtrl    *controllers.FeedbackController
+	jwtService      *utils.JWTService
+	validator       utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, feedbackCtrl *controllers.FeedbackController, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
-		authCtrl:     authCtrl,
-		entryCtrl:    entryCtrl,
-		adminCtrl:    adminCtrl,
-		feedbackCtrl: feedbackCtrl,
-		jwtService:   jwtService,
-		validator:    validator,
+		authCtrl:        authCtrl,
+		entryCtrl:       entryCtrl,
+		adminCtrl:       adminCtrl,
+		adminUserCtrl:   adminUserCtrl,
+		feedbackCtrl:    feedbackCtrl,
+		jwtService:      jwtService,
+		validator:       validator,
 	}
 }
 
@@ -91,6 +93,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	admin.GET("/feedback", h.AdminListFeedback)
 	admin.GET("/feedback/:id", h.AdminFeedbackDetail)
 	admin.POST("/feedback/:id/close", h.AdminCloseFeedback)
+	admin.GET("/users", h.AdminListUsers)
 
 	// API routes for htmx
 	e.GET("/api/exercises", h.ListExercises)

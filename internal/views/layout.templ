@@ -124,6 +124,17 @@ templ Layout(data PageData) {
 										</li>
 										<li>
 											<a
+												href="/admin/users"
+												if data.CurrentPath == "/admin/users" {
+													aria-current="page"
+												}
+											>
+												@components.Icon(components.IconProps{Name: "users", Size: 18})
+												<span>Users</span>
+											</a>
+										</li>
+										<li>
+											<a
 												href="/admin/feedback"
 												if data.CurrentPath == "/admin/feedback" {
 													aria-current="page"

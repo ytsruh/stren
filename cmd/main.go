@@ -30,6 +30,7 @@ func main() {
 	// Initialize repositories
 	repo := models.NewExerciseRepository(database)
 	userRepo := models.NewUserRepository(database)
+	adminUserRepo := models.NewUserAdminRepository(database)
 
 	// Initialize auth service
 	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
@@ -38,11 +39,12 @@ func main() {
 	authCtrl := controllers.NewAuthController(userRepo, jwtService)
 	entryCtrl := controllers.NewEntryController(repo)
 	adminCtrl := controllers.NewAdminController(repo)
+	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
-	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, feedbackCtrl, jwtService, validator)
+	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, jwtService, validator)
 
 	// Create Echo instance
 	e := echo.New()

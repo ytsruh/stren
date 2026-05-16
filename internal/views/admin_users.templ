@@ -1,0 +1,51 @@
+package views
+
+import (
+	"fmt"
+	"stren/internal/models"
+	"stren/internal/views/components"
+)
+
+// AdminUserList renders the admin page listing all users.
+templ AdminUserList(users []models.User, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "Admin - Users", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin, CurrentPath: "/admin/users"}) {
+		<div class="flex justify-between items-center mb-6">
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Users"})
+		</div>
+
+		if len(users) == 0 {
+			<div class="text-center py-12 text-muted-foreground">
+				<p>No users yet.</p>
+			</div>
+		} else {
+			<table class="table w-full">
+				<thead>
+					<tr>
+						<th>ID</th>
+						<th>Name</th>
+						<th>Email</th>
+						<th>Admin</th>
+						<th>Created</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, u := range users {
+						<tr>
+							<td>{ fmt.Sprintf("%d", u.ID) }</td>
+							<td>{ u.Name }</td>
+							<td>{ u.Email }</td>
+							<td>
+								if u.IsAdmin {
+									<span class="badge badge-success">Yes</span>
+								} else {
+									<span class="badge">No</span>
+								}
+							</td>
+							<td>{ u.CreatedAt.Format("Jan 02, 2006") }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	}
+}

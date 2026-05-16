@@ -314,6 +314,22 @@ func (m *mockUserRepository) GetUserByID(id int64) (*models.User, error) {
 	return nil, nil
 }
 
+// mockAdminUserRepository is an in-memory implementation of models.AdminUserRepo for testing.
+type mockAdminUserRepository struct {
+	mu    sync.Mutex
+	users []models.User
+}
+
+func newMockAdminUserRepository() *mockAdminUserRepository {
+	return &mockAdminUserRepository{}
+}
+
+func (m *mockAdminUserRepository) ListUsers() ([]models.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.users, nil
+}
+
 // mockFeedbackRepository is an in-memory implementation of models.FeedbackRepoInterface for testing.
 type mockFeedbackRepository struct {
 	mu       sync.Mutex
@@ -404,6 +420,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	e := echo.New()
 	mock := newMockRepository()
 	mockUser := newMockUserRepository()
+	mockAdminUser := newMockAdminUserRepository()
 	mockFeedback := newMockFeedbackRepository()
 	jwtService := utils.NewJWTService("test-secret")
 	mock.exercises = []models.Exercise{
@@ -414,9 +431,10 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	authCtrl := controllers.NewAuthController(mockUser, jwtService)
 	entryCtrl := controllers.NewEntryController(mock)
 	adminCtrl := controllers.NewAdminController(mock)
+	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, feedbackCtrl, jwtService, validator)
+	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, jwtService, validator)
 	return h, mock, mockUser, e
 }
 

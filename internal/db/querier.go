@@ -29,6 +29,7 @@ type Querier interface {
 	List(ctx context.Context) ([]Exercise, error)
 	ListEntries(ctx context.Context, userID sql.NullInt64) ([]ListEntriesRow, error)
 	ListEntriesWithLimit(ctx context.Context, arg ListEntriesWithLimitParams) ([]ListEntriesWithLimitRow, error)
+	ListUsers(ctx context.Context) ([]User, error)
 	Update(ctx context.Context, arg UpdateParams) (Exercise, error)
 	UpdateEntry(ctx context.Context, arg UpdateEntryParams) error
 	UpdateEntryWithDate(ctx context.Context, arg UpdateEntryWithDateParams) error

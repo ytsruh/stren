@@ -11,6 +11,19 @@ import (
 	"stren/internal/views"
 )
 
+// --- Admin User Handlers ---
+
+// AdminListUsers renders the admin page listing all users.
+func (h *Handler) AdminListUsers(c echo.Context) error {
+	claims := GetClaims(c)
+	users, err := h.adminUserCtrl.ListUsers()
+	if err != nil {
+		return err
+	}
+
+	return render(c, views.AdminUserList(users, claims.Name, true, claims.IsAdmin))
+}
+
 // --- Admin Exercise Handlers ---
 
 // AdminListExercises renders the admin page listing all exercises.

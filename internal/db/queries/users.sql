@@ -12,3 +12,8 @@ WHERE email = ?;
 SELECT id, name, email, password_hash, is_admin, created_at, updated_at
 FROM users
 WHERE id = ?;
+
+-- name: ListUsers :many
+SELECT id, name, email, password_hash, is_admin, created_at, updated_at
+FROM users
+ORDER BY created_at DESC;

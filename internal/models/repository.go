@@ -58,6 +58,14 @@ type UserRepo interface {
 	GetUserByID(id int64) (*User, error)
 }
 
+// AdminUserRepo defines the interface for admin user operations.
+type AdminUserRepo interface {
+	ListUsers() ([]User, error)
+}
+
+// Compile-time check to ensure AdminUserRepository implements AdminUserRepo.
+var _ AdminUserRepo = (*UserAdminRepository)(nil)
+
 // Compile-time check to ensure ExerciseRepository implements Repository.
 var _ Repository = (*ExerciseRepository)(nil)
 
