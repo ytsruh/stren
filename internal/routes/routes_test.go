@@ -1076,8 +1076,8 @@ func TestParseEntryForm_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseEntryForm failed: %v", err)
 	}
-	if entry.ExerciseName != "Deadlift" {
-		t.Fatalf("expected exercise name 'Deadlift', got %q", entry.ExerciseName)
+	if entry.ExerciseName != "" {
+		t.Fatalf("expected exercise name '', got %q", entry.ExerciseName)
 	}
 	if entry.Reps != 5 {
 		t.Fatalf("expected reps 5, got %d", entry.Reps)
@@ -1087,23 +1087,6 @@ func TestParseEntryForm_Valid(t *testing.T) {
 	}
 	if entry.Notes != "PR" {
 		t.Fatalf("expected notes 'PR', got %q", entry.Notes)
-	}
-}
-
-func TestParseEntryForm_MissingName(t *testing.T) {
-	form := url.Values{}
-	form.Set("exercise_name", "")
-	form.Set("reps", "5")
-	form.Set("weight", "100")
-
-	c := newEchoContextWithForm(t, form)
-	_, err := parseEntryForm(c, utils.NewValidator())
-	if err == nil {
-		t.Fatal("expected error for missing exercise name")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusBadRequest {
-		t.Fatalf("expected bad request error, got %v", err)
 	}
 }
 

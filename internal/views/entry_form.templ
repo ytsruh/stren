@@ -90,7 +90,7 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 }
 
 // EditEntryForm renders the form for editing an existing entry
-templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
+templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
 		<form
@@ -103,21 +103,14 @@ templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, us
 			<fieldset class="grid gap-4">
 				<div class="grid gap-2">
 					<label for="exercise-name">Exercise</label>
-					<select
+					<input
+						type="text"
 						id="exercise-name"
 						name="exercise_name"
-						class="select"
-						required
-					>
-						for _, e := range exercises {
-							<option
-								value={ e.Name }
-								selected?={ e.Name == entry.ExerciseName }
-							>
-								{ e.Name }
-							</option>
-						}
-					</select>
+						class="input"
+						value={ entry.ExerciseName }
+						disabled
+					/>
 				</div>
 				<div class="grid grid-cols-2 gap-4">
 					<div class="grid gap-2">

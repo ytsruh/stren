@@ -43,7 +43,11 @@ func (h *Handler) CreateEntry(c echo.Context) error {
 	}
 
 	claims := GetClaims(c)
-	_, err = h.entryCtrl.CreateEntry(claims.UserID, entry.ExerciseName, entry.Notes, entry.Reps, entry.Weight)
+	exerciseName := c.FormValue("exercise_name")
+	if exerciseName == "" {
+		return render(c, views.EntryFormError("Exercise name is required"))
+	}
+	_, err = h.entryCtrl.CreateEntry(claims.UserID, exerciseName, entry.Notes, entry.Reps, entry.Weight)
 	if err != nil {
 		return render(c, views.EntryFormError("Failed to save entry: "+err.Error()))
 	}
@@ -74,12 +78,7 @@ func (h *Handler) EditEntryForm(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Entry not found")
 	}
 
-	exercises, err := h.entryCtrl.List()
-	if err != nil {
-		return err
-	}
-
-	return render(c, views.EditEntryForm(entry, exercises, claims.Name, true, claims.IsAdmin))
+	return render(c, views.EditEntryForm(entry, claims.Name, true, claims.IsAdmin))
 }
 
 // GetEntry returns a single entry (for API/hx-get).
@@ -108,15 +107,23 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid entry ID")
 	}
 
+	claims := GetClaims(c)
+
+	existing, err := h.entryCtrl.GetEntry(id, claims.UserID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "Entry not found")
+	}
+
 	entry, err := parseEntryForm(c, h.validator)
 	if err != nil {
 		return render(c, views.EntryFormError(friendlyError(err)))
 	}
 
-	claims := GetClaims(c)
 	createdAt := time.Now()
 
-	// Parse date if provided (for edits)
 	if dateStr := c.FormValue("created_at"); dateStr != "" {
 		createdAt, err = time.Parse("2006-01-02T15:04", dateStr)
 		if err != nil {
@@ -124,7 +131,7 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 		}
 	}
 
-	_, err = h.entryCtrl.UpdateEntry(id, claims.UserID, entry.ExerciseName, entry.Notes, entry.Reps, entry.Weight, createdAt)
+	_, err = h.entryCtrl.UpdateEntry(id, claims.UserID, existing.ExerciseName, entry.Notes, entry.Reps, entry.Weight, createdAt)
 	if err != nil {
 		return render(c, views.EntryFormError("Failed to update entry: "+err.Error()))
 	}

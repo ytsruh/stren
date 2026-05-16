@@ -282,11 +282,7 @@ func TestEditEntryForm(t *testing.T) {
 		Notes:        "good",
 		CreatedAt:    time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 	}
-	types := []models.Exercise{
-		{ID: 1, Name: "Squat"},
-		{ID: 2, Name: "Bench Press"},
-	}
-	html := renderToString(t, EditEntryForm(entry, types, "Test User", true, false))
+	html := renderToString(t, EditEntryForm(entry, "Test User", true, false))
 	if !strings.Contains(html, "Edit Entry") {
 		t.Error("expected edit title")
 	}

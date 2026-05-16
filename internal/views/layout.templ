@@ -118,7 +118,7 @@ templ Layout(data PageData) {
 													aria-current="page"
 												}
 											>
-												@components.Icon(components.IconProps{Name: "settings", Size: 18})
+												@components.Icon(components.IconProps{Name: "dumbbell", Size: 18})
 												<span>Exercises</span>
 											</a>
 										</li>
@@ -129,19 +129,8 @@ templ Layout(data PageData) {
 													aria-current="page"
 												}
 											>
-												@components.Icon(components.IconProps{Name: "users", Size: 18})
+												@components.Icon(components.IconProps{Name: "user", Size: 18})
 												<span>Users</span>
-											</a>
-										</li>
-										<li>
-											<a
-												href="/admin/feedback"
-												if data.CurrentPath == "/admin/feedback" {
-													aria-current="page"
-												}
-											>
-												@components.Icon(components.IconProps{Name: "message-square", Size: 18})
-												<span>Feedback</span>
 											</a>
 										</li>
 									</ul>
@@ -178,13 +167,25 @@ templ Layout(data PageData) {
 			<main>
 				<header>
 					<nav class="sticky top-0 flex items-center gap-4 px-4 py-2 bg-background border-b">
-						<ul class="flex list-none m-0 p-0 items-center">
+						<ul class="w-full flex justify-between list-none m-0 p-0 items-center">
 							if data.IsAuthenticated {
 								<li>
 									<button type="button" onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar'))" class="btn-ghost" aria-label="Toggle sidebar">
 										@components.Icon(components.IconProps{Name: "menu", Size: 20})
 									</button>
 								</li>
+								<div class="flex gap-1">
+									<li>
+										<a href="/entries-new" class="btn-ghost">
+											@components.Icon(components.IconProps{Name: "plus", Size: 20})
+										</a>
+									</li>
+									<li>
+										<a href="/feedback" class="btn-ghost">
+											@components.Icon(components.IconProps{Name: "message", Size: 20})
+										</a>
+									</li>
+								</div>
 							}
 							<li class="flex md:hidden"><strong>Stren</strong></li>
 						</ul>

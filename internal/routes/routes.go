@@ -141,7 +141,7 @@ func clearAuthCookie(c echo.Context) {
 
 // entryFormInput represents the parsed and validated form data for an exercise entry.
 type entryFormInput struct {
-	ExerciseName string  `validate:"required,min=1,max=100"`
+	ExerciseName string  `validate:"omitempty,min=1,max=100"`
 	Reps         int     `validate:"gte=1,lte=1000"`
 	Weight       float64 `validate:"gte=0,lte=5000"`
 	Notes        string  `validate:"max=500"`
@@ -151,8 +151,7 @@ type entryFormInput struct {
 // It returns an HTTP error with a user-friendly message if any validation fails.
 func parseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, error) {
 	input := entryFormInput{
-		ExerciseName: c.FormValue("exercise_name"),
-		Notes:        c.FormValue("notes"),
+		Notes: c.FormValue("notes"),
 	}
 
 	reps, err := strconv.Atoi(c.FormValue("reps"))
