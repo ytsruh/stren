@@ -21,4 +21,4 @@ A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS +
 - [ ] Add in toasts for success/failure feedback
 - [x] Add a list of users in admin section
 - [x] Add a feedback form for users and then list it in the admin section
-- [ ] 404 & 500 errors are returning JSON
+- [x] 404 & 500 errors are returning JSON

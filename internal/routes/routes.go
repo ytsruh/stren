@@ -49,9 +49,6 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.Use(middleware.Gzip())
 	e.Use(AuthMiddleware(h.jwtService))
 
-	// Static files (PWA assets, icons, etc.)
-	e.Static("/", "public")
-
 	// Serve manifest with correct MIME type for PWA compatibility
 	e.GET("/manifest.json", h.ServeManifest)
 
@@ -97,6 +94,9 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 
 	// API routes for htmx
 	e.GET("/api/exercises", h.ListExercises)
+
+	// Static files (PWA assets, icons, etc.) - registered last as catch-all
+	e.Static("/", "public")
 }
 
 // ServeManifest serves the web app manifest with the correct MIME type.

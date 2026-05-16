@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"net/http"
 
 	"github.com/labstack/echo/v4"
 
@@ -11,6 +12,7 @@ import (
 	"stren/internal/models"
 	"stren/internal/routes"
 	"stren/internal/utils"
+	"stren/internal/views"
 )
 
 func main() {
@@ -49,6 +51,24 @@ func main() {
 	// Create Echo instance
 	e := echo.New()
 	e.HideBanner = true
+
+	// Custom HTTP error handler - renders error pages instead of JSON
+	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		code := http.StatusInternalServerError
+		message := "Something went wrong"
+
+		if he, ok := err.(*echo.HTTPError); ok {
+			code = he.Code
+			if he.Message != nil {
+				if msg, ok := he.Message.(string); ok {
+					message = msg
+				}
+			}
+		}
+
+		data := views.NewErrorData(code, message)
+		views.ErrorPage(data).Render(c.Request().Context(), c.Response())
+	}
 
 	// Register routes
 	h.RegisterRoutes(e)

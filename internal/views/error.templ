@@ -1,0 +1,79 @@
+package views
+
+import (
+	"strconv"
+
+	"stren/internal/views/components"
+)
+
+type ErrorData struct {
+	Code            int
+	Message         string
+	IsAuthenticated bool
+	IsAdmin         bool
+	Title           string
+}
+
+func NewErrorData(code int, message string) ErrorData {
+	return ErrorData{
+		Code:    code,
+		Message: message,
+		Title:   strconv.Itoa(code),
+	}
+}
+
+templ ErrorPage(data ErrorData) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ data.Title } - Strength Tracker</title>
+			<link rel="icon" type="image/png" href="/icons/favicon-96x96.png" sizes="96x96"/>
+			<link rel="icon" type="image/svg+xml" href="/icons/favicon.svg"/>
+			<link rel="shortcut icon" href="/favicon.ico"/>
+			<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
+			<link rel="manifest" href="/manifest.json"/>
+			<link rel="stylesheet" href="/css/styles.css"/>
+			<script>
+				(() => {
+					try {
+						const stored = localStorage.getItem('themeMode');
+						if (stored ? stored === 'dark'
+									: matchMedia('(prefers-color-scheme: dark)').matches) {
+							document.documentElement.classList.add('dark');
+						}
+					} catch (_) {}
+				})();
+			</script>
+		</head>
+		<body>
+			<main class="flex min-h-screen flex-col items-center justify-center p-8">
+				<div class="text-center max-w-md">
+					<div class="mb-6 flex justify-center">
+						<div class="bg-destructive/10 text-destructive flex size-16 items-center justify-center rounded-full">
+							@components.Icon(components.IconProps{Name: "dumbbell", Size: 32})
+						</div>
+					</div>
+					<h1 class="text-6xl font-bold text-foreground mb-2">{ data.Title }</h1>
+					<h2 class="text-2xl font-semibold text-foreground mb-4">{ data.Message }</h2>
+					<p class="text-muted-foreground mb-8">
+						if data.Code == 404 {
+							The page you're looking for doesn't exist or has been moved.
+						} else if data.Code == 403 {
+							You don't have permission to access this resource.
+						} else if data.Code == 500 {
+							Something went wrong on our end. Please try again later.
+						} else {
+							An error occurred while processing your request.
+						}
+					</p>
+					<a href="/" class="btn">
+						@components.Icon(components.IconProps{Name: "home", Size: 18})
+						Go Home
+					</a>
+				</div>
+			</main>
+		</body>
+	</html>
+}
