@@ -126,5 +126,5 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 
 // AdminExerciseFormError shows validation errors for the exercise form.
 templ AdminExerciseFormError(message string) {
-	@Toast(message, true)
+	@Toast("error", "Error", message)
 }

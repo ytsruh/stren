@@ -7,6 +7,7 @@ package routes
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
@@ -167,7 +168,7 @@ func parseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, e
 	input.Weight = weight
 
 	if err := v.ValidateStruct(&input); err != nil {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return nil, echo.NewHTTPError(http.StatusBadRequest, friendlyValidationError(err))
 	}
 
 	return &models.ExerciseEntry{
@@ -176,4 +177,33 @@ func parseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, e
 		Reps:         input.Reps,
 		Weight:       input.Weight,
 	}, nil
+}
+
+// friendlyValidationError converts validation error messages to user-friendly strings.
+func friendlyValidationError(err error) string {
+	return friendlyError(err)
+}
+
+// friendlyError extracts the message from Echo HTTP errors and makes validation errors user-friendly.
+func friendlyError(err error) string {
+	msg := err.Error()
+	// Strip "code=XXX, message=" prefix if present
+	if strings.HasPrefix(msg, "code=") {
+		if idx := strings.Index(msg, ", message="); idx != -1 {
+			msg = msg[idx+len(", message="):]
+		}
+	}
+	if strings.Contains(msg, "Reps") && strings.Contains(msg, "lte") {
+		return "Reps must be 1000 or less"
+	}
+	if strings.Contains(msg, "Weight") && strings.Contains(msg, "lte") {
+		return "Weight must be 5000 or less"
+	}
+	if strings.Contains(msg, "ExerciseName") && strings.Contains(msg, "min") {
+		return "Exercise name is required"
+	}
+	if strings.Contains(msg, "Notes") && strings.Contains(msg, "max") {
+		return "Notes must be 500 characters or less"
+	}
+	return msg
 }

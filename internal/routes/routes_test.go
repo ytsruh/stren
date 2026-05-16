@@ -539,12 +539,11 @@ func TestCreateEntry(t *testing.T) {
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "saved") {
-		t.Fatalf("expected success message containing 'saved', got %q", body)
+	if loc := rec.Header().Get("Location"); loc != "/" {
+		t.Fatalf("expected redirect to /, got %q", loc)
 	}
 }
 
@@ -566,12 +565,11 @@ func TestCreateEntry_HTMX(t *testing.T) {
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "saved") {
-		t.Fatalf("expected success message containing 'saved', got %q", body)
+	if hxRedir := rec.Header().Get("HX-Redirect"); hxRedir != "/" {
+		t.Fatalf("expected HX-Redirect to /, got %q", hxRedir)
 	}
 }
 

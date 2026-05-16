@@ -37,7 +37,13 @@ func (h *Handler) SubmitFeedback(c echo.Context) error {
 		return render(c, views.FeedbackFormError("Failed to submit feedback: "+err.Error()))
 	}
 
-	return render(c, views.FeedbackFormSuccess("Thank you for your feedback!"))
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Redirect", "/")
+		c.Response().WriteHeader(http.StatusSeeOther)
+		return nil
+	}
+
+	return c.Redirect(http.StatusSeeOther, "/")
 }
 
 func (h *Handler) AdminListFeedback(c echo.Context) error {

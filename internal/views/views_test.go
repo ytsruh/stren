@@ -109,22 +109,22 @@ func TestGetLastSet(t *testing.T) {
 // === Component rendering tests ===
 
 func TestToast_Error(t *testing.T) {
-	html := renderToString(t, Toast("Bad input", true))
+	html := renderToString(t, Toast("error", "Error", "Bad input"))
 	if !strings.Contains(html, "Bad input") {
 		t.Error("expected toast message in output")
 	}
-	if !strings.Contains(html, "alert-destructive") {
-		t.Error("expected error CSS class in output")
+	if !strings.Contains(html, "data-category=\"error\"") {
+		t.Error("expected error data-category in output")
 	}
 }
 
 func TestToast_Success(t *testing.T) {
-	html := renderToString(t, Toast("Saved!", false))
+	html := renderToString(t, Toast("success", "Success", "Saved!"))
 	if !strings.Contains(html, "Saved!") {
 		t.Error("expected toast message in output")
 	}
-	if !strings.Contains(html, "alert") {
-		t.Error("expected success CSS class in output")
+	if !strings.Contains(html, "data-category=\"success\"") {
+		t.Error("expected success data-category in output")
 	}
 }
 
@@ -303,8 +303,8 @@ func TestEntryFormSuccess_StayOnPage(t *testing.T) {
 	if !strings.Contains(html, "Saved!") {
 		t.Error("expected success message")
 	}
-	if !strings.Contains(html, "reset()") {
-		t.Error("expected form reset script for stay-on-page")
+	if !strings.Contains(html, "data-category=\"success\"") {
+		t.Error("expected success toast category")
 	}
 }
 
@@ -313,8 +313,8 @@ func TestEntryFormSuccess_Redirect(t *testing.T) {
 	if !strings.Contains(html, "Back to Dashboard") {
 		t.Error("expected back link when not staying on page")
 	}
-	if strings.Contains(html, "reset()") {
-		t.Error("did not expect form reset script for redirect")
+	if !strings.Contains(html, "data-category=\"success\"") {
+		t.Error("expected success toast category")
 	}
 }
 
@@ -323,8 +323,8 @@ func TestEntryFormError(t *testing.T) {
 	if !strings.Contains(html, "Invalid reps") {
 		t.Error("expected error message")
 	}
-	if !strings.Contains(html, "alert-destructive") {
-		t.Error("expected error CSS class")
+	if !strings.Contains(html, "data-category=\"error\"") {
+		t.Error("expected error data-category")
 	}
 }
 

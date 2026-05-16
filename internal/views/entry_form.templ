@@ -12,9 +12,10 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 	@Layout(PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Entry"})
 		<form
+			id="entry-form"
 			hx-post="/entries"
-			hx-target="#form-result"
-			hx-swap="innerHTML"
+			hx-target="#toaster"
+			hx-swap="beforeend"
 			class="form grid gap-6"
 		>
 			<fieldset class="grid gap-4">
@@ -85,7 +86,6 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 				</a>
 			</div>
 		</form>
-		<div id="form-result" class="mt-6"></div>
 	}
 }
 
@@ -94,9 +94,10 @@ templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, us
 	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
 		<form
+			id="entry-form"
 			hx-put={ fmt.Sprintf("/entries/%d", entry.ID) }
-			hx-target="#form-result"
-			hx-swap="innerHTML"
+			hx-target="#toaster"
+			hx-swap="beforeend"
 			class="form grid gap-6"
 		>
 			<fieldset class="grid gap-4">
@@ -185,13 +186,12 @@ templ EditEntryForm(entry *models.ExerciseEntry, exercises []models.Exercise, us
 				</a>
 			</div>
 		</form>
-		<div id="form-result" class="mt-6"></div>
 	}
 }
 
 // EntryFormSuccess is shown after successful form submission
 templ EntryFormSuccess(message string, stayOnPage bool) {
-	@Toast(message, false)
+	@Toast("success", "Entry saved!", message)
 	if !stayOnPage {
 		<div class="mt-6 flex flex-col gap-3 sm:flex-row">
 			<a href="/" class="btn-outline">
@@ -203,22 +203,17 @@ templ EntryFormSuccess(message string, stayOnPage bool) {
 				Add Another
 			</a>
 		</div>
-	} else {
-		<script>
-			document.querySelector('form').reset();
-			const exerciseSelect = document.getElementById('exercise-name');
-			if (exerciseSelect) {
-				const selectedExercise = exerciseSelect.value;
-				document.querySelector('form').reset();
-				exerciseSelect.value = selectedExercise;
-			}
-		</script>
 	}
 }
 
 // EntryFormError shows form validation errors
 templ EntryFormError(message string) {
-	@Toast(message, true)
+	@Toast("error", "Error", message)
+}
+
+// EntryFormSuccessToast returns only the toast (for HTMX responses)
+templ EntryFormSuccessToast(message string) {
+	@Toast("success", "Entry saved!", message)
 }
 
 func formatDateTimeLocal(t time.Time) string {

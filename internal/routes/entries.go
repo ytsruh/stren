@@ -39,7 +39,7 @@ func (h *Handler) NewEntryForm(c echo.Context) error {
 func (h *Handler) CreateEntry(c echo.Context) error {
 	entry, err := parseEntryForm(c, h.validator)
 	if err != nil {
-		return render(c, views.EntryFormError(err.Error()))
+		return render(c, views.EntryFormError(friendlyError(err)))
 	}
 
 	claims := GetClaims(c)
@@ -50,10 +50,12 @@ func (h *Handler) CreateEntry(c echo.Context) error {
 
 	// Check if htmx request
 	if c.Request().Header.Get("HX-Request") == "true" {
-		return render(c, views.EntryFormSuccess("Entry saved! Form reset for next set.", true))
+		c.Response().Header().Set("HX-Redirect", "/")
+		c.Response().WriteHeader(http.StatusSeeOther)
+		return nil
 	}
 
-	return render(c, views.EntryFormSuccess("Entry saved successfully!", false))
+	return c.Redirect(http.StatusSeeOther, "/")
 }
 
 // EditEntryForm renders the form for editing an entry.
@@ -108,7 +110,7 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 
 	entry, err := parseEntryForm(c, h.validator)
 	if err != nil {
-		return render(c, views.EntryFormError(err.Error()))
+		return render(c, views.EntryFormError(friendlyError(err)))
 	}
 
 	claims := GetClaims(c)
@@ -128,7 +130,7 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		return render(c, views.EntryFormSuccess("Entry updated!", false))
+		return render(c, views.EntryFormSuccessToast("Entry updated!"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/")

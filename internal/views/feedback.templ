@@ -12,8 +12,8 @@ templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
 		<p class="text-muted-foreground mb-6">Have feedback or found a bug? Let us know!</p>
 		<form
 			hx-post="/feedback"
-			hx-target="#form-result"
-			hx-swap="innerHTML"
+			hx-target="#toaster"
+			hx-swap="beforeend"
 			class="form grid gap-6 max-w-[600px]"
 		>
 			<fieldset class="grid gap-4">
@@ -25,8 +25,6 @@ templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
 						id="title"
 						name="title"
 						placeholder="Brief summary of your feedback"
-						minlength="5"
-						maxlength="100"
 						required
 					/>
 					<p class="text-sm text-muted-foreground">5-100 characters</p>
@@ -39,8 +37,6 @@ templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
 						class="textarea"
 						placeholder="Please describe your feedback in detail..."
 						rows="6"
-						minlength="10"
-						maxlength="1000"
 						required
 					></textarea>
 					<p class="text-sm text-muted-foreground">10-1000 characters</p>
@@ -48,7 +44,7 @@ templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
 			</fieldset>
 			<div class="flex gap-3">
 				<button type="submit" hx-indicator="#feedback-spinner" class="btn relative inline-flex">
-					<span class="btn-text">
+					<span class="btn-text flex items-center gap-2 justify-between">
 						@components.Icon(components.IconProps{Name: "check", Size: 18})
 						Submit Feedback
 					</span>
@@ -58,16 +54,17 @@ templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
 				</button>
 			</div>
 		</form>
-		<div id="form-result" class="mt-6"></div>
 	}
 }
 
+// FeedbackFormSuccess shows success message
 templ FeedbackFormSuccess(message string) {
-	@Toast(message, false)
+	@Toast("success", "Success", message)
 }
 
+// FeedbackFormError shows validation errors
 templ FeedbackFormError(message string) {
-	@Toast(message, true)
+	@Toast("error", "Error", message)
 }
 
 templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName string, isAuthenticated bool, isAdmin bool) {
@@ -105,8 +102,8 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 					<thead>
 						<tr>
 							<th>Title</th>
-							<th>Submitted By</th>
-							<th>Date</th>
+							<th class="hidden sm:table-cell">Submitted By</th>
+							<th class="hidden sm:table-cell">Date</th>
 							<th>Status</th>
 							<th></th>
 						</tr>
@@ -114,9 +111,9 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 					<tbody>
 						for _, f := range feedback {
 							<tr>
-								<td class="font-medium">{ f.Title }</td>
-								<td>{ f.UserName }</td>
-								<td class="text-muted-foreground">{ f.CreatedAt.Format("02 Jan 2006") }</td>
+								<td class="font-medium truncate max-w-[150px] sm:max-w-[300px]">{ f.Title }</td>
+								<td class="hidden sm:table-cell">{ f.UserName }</td>
+								<td class="text-muted-foreground hidden sm:table-cell">{ f.CreatedAt.Format("02 Jan 2006") }</td>
 								<td>
 									if f.IsClosed {
 										<span class="badge badge-secondary">Closed</span>
@@ -229,7 +226,7 @@ templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenti
 }
 
 templ AdminFeedbackClosedSuccess() {
-	@Toast("Feedback status updated", false)
+	@Toast("success", "Feedback status updated", "")
 }
 
 func getFilterBtnClass(currentFilter, targetFilter string) string {
