@@ -56,6 +56,7 @@ type UserRepo interface {
 	CreateUser(user *User) error
 	GetUserByEmail(email string) (*User, error)
 	GetUserByID(id int64) (*User, error)
+	UpdateUser(user *User) error
 }
 
 // AdminUserRepo defines the interface for admin user operations.

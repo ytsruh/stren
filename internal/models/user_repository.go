@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"stren/internal/db"
 )
@@ -66,6 +67,20 @@ func (r *UserRepository) GetUserByID(id int64) (*User, error) {
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
 	return mapUser(row), nil
+}
+
+// UpdateUser updates an existing user's name.
+func (r *UserRepository) UpdateUser(user *User) error {
+	ctx := context.Background()
+	err := r.queries.UpdateUser(ctx, db.UpdateUserParams{
+		Name:      user.Name,
+		UpdatedAt: sql.NullTime{Time: time.Now(), Valid: true},
+		ID:        user.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
 }
 
 func mapUser(row db.User) *User {

@@ -314,6 +314,18 @@ func (m *mockUserRepository) GetUserByID(id int64) (*models.User, error) {
 	return nil, nil
 }
 
+func (m *mockUserRepository) UpdateUser(user *models.User) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, u := range m.users {
+		if u.ID == user.ID {
+			m.users[i] = *user
+			return nil
+		}
+	}
+	return errors.New("user not found")
+}
+
 // mockAdminUserRepository is an in-memory implementation of models.AdminUserRepo for testing.
 type mockAdminUserRepository struct {
 	mu    sync.Mutex
@@ -434,7 +446,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, jwtService, validator)
+	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, mockUser, jwtService, validator)
 	return h, mock, mockUser, e
 }
 

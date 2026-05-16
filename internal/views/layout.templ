@@ -62,8 +62,8 @@ templ Layout(data PageData) {
 			if data.IsAuthenticated {
 				<aside class="sidebar" data-side="left" aria-hidden="false">
 					<nav aria-label="Sidebar navigation">
-						<header class="border-sidebar-border ">
-							<div class="flex items-center gap-3 px-3">
+						<header class="border-sidebar-border">
+							<div class="flex items-center px-2 gap-2">
 								<div class="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg font-bold">S</div>
 								<span class="font-semibold text-sidebar-foreground truncate">Stren</span>
 							</div>
@@ -169,11 +169,14 @@ templ Layout(data PageData) {
 					<nav class="sticky top-0 flex items-center gap-4 px-4 py-2 bg-background border-b">
 						<ul class="w-full flex justify-between list-none m-0 p-0 items-center">
 							if data.IsAuthenticated {
-								<li>
-									<button type="button" onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar'))" class="btn-ghost" aria-label="Toggle sidebar">
-										@components.Icon(components.IconProps{Name: "menu", Size: 20})
-									</button>
-								</li>
+								<div class="flex items-center gap-1">
+									<li>
+										<button type="button" onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar'))" class="btn-ghost" aria-label="Toggle sidebar">
+											@components.Icon(components.IconProps{Name: "menu", Size: 20})
+										</button>
+									</li>
+									<li class="flex lg:hidden">Stren</li>
+								</div>
 								<div class="flex gap-1">
 									<li>
 										<a href="/entries-new" class="btn-ghost">
@@ -186,15 +189,16 @@ templ Layout(data PageData) {
 										</a>
 									</li>
 								</div>
+							} else {
+								<div class="w-full flex items-center justify-between">
+									<span>Stren</span>
+									<div class="flex gap-1">
+										<a href="/login" class="btn-ghost">Login</a>
+										<a href="/register" class="btn-ghost">Register</a>
+									</div>
+								</div>
 							}
-							<li class="flex md:hidden"><strong>Stren</strong></li>
 						</ul>
-						if !data.IsAuthenticated {
-							<ul class="flex list-none m-0 p-0 items-center gap-3 ml-auto">
-								<li><a href="/login" class="btn-link">Login</a></li>
-								<li><a href="/register" class="btn-link">Register</a></li>
-							</ul>
-						}
 					</nav>
 				</header>
 				<div class="container mx-auto max-w-3xl px-4 py-8">

@@ -25,20 +25,22 @@ type Handler struct {
 	adminCtrl       *controllers.AdminController
 	adminUserCtrl   *controllers.AdminUserController
 	feedbackCtrl    *controllers.FeedbackController
+	userRepo        models.UserRepo
 	jwtService      *utils.JWTService
 	validator       utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
 		authCtrl:        authCtrl,
 		entryCtrl:       entryCtrl,
 		adminCtrl:       adminCtrl,
 		adminUserCtrl:   adminUserCtrl,
 		feedbackCtrl:    feedbackCtrl,
-		jwtService:      jwtService,
-		validator:       validator,
+		userRepo:         userRepo,
+		jwtService:       jwtService,
+		validator:        validator,
 	}
 }
 
@@ -65,6 +67,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 
 	// User profile
 	e.GET("/profile", h.Profile)
+	e.POST("/profile", h.UpdateProfile)
 
 	// Entry CRUD
 	e.GET("/entries/new", h.NewEntryForm)

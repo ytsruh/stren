@@ -60,6 +60,18 @@ func (m *mockUserRepository) GetUserByID(id int64) (*models.User, error) {
 	return nil, nil
 }
 
+func (m *mockUserRepository) UpdateUser(user *models.User) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, u := range m.users {
+		if u.ID == user.ID {
+			m.users[i] = *user
+			return nil
+		}
+	}
+	return errors.New("user not found")
+}
+
 func setupAuthController(t *testing.T) (*AuthController, *mockUserRepository) {
 	t.Helper()
 	mockUser := newMockUserRepository()

@@ -23,23 +23,23 @@ templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated
 
 // EntryList renders a table of entries
 templ EntryList(entries []models.ExerciseEntry) {
-		<table class="table w-full">
-			<thead>
-				<tr>
-					<th>Date</th>
-					<th>Exercise</th>
-					<th>Reps</th>
-					<th>Weight</th>
-					<th class="hidden lg:table-cell">Notes</th>
-					<th>Actions</th>
-				</tr>
-			</thead>
-			<tbody id="entries-table">
-				for _, entry := range entries {
-					@EntryRow(entry)
-				}
-			</tbody>
-		</table>
+	<table class="table w-full">
+		<thead>
+			<tr>
+				<th>Date</th>
+				<th>Exercise</th>
+				<th>Reps</th>
+				<th>Weight</th>
+				<th class="hidden lg:table-cell">Notes</th>
+				<th>Actions</th>
+			</tr>
+		</thead>
+		<tbody id="entries-table">
+			for _, entry := range entries {
+				@EntryRow(entry)
+			}
+		</tbody>
+	</table>
 }
 
 // EntryRow renders a single entry row (used for htmx swaps)
@@ -47,7 +47,8 @@ templ EntryRow(entry models.ExerciseEntry) {
 	<tr id={ fmt.Sprintf("entry-%d", entry.ID) }>
 		<td>{ entry.FormattedDate() }</td>
 		<td>
-			<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", entry.ExerciseName)) } class="underline-offset-4 hover:underline">
+			<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", entry.ExerciseName)) } class="underline-offset-4 hover:underline inline-flex items-center gap-1">
+				@components.Icon(components.IconProps{Name: "eye", Size: 14})
 				{ entry.ExerciseName }
 			</a>
 		</td>

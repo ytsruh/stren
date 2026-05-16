@@ -130,6 +130,13 @@ func (m *mockFeedbackUserRepository) GetUserByID(id int64) (*models.User, error)
 	return nil, nil
 }
 
+func (m *mockFeedbackUserRepository) UpdateUser(user *models.User) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.users[user.ID] = user
+	return nil
+}
+
 func TestFeedbackController_Submit_Success(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	ctrl := NewFeedbackController(mock)

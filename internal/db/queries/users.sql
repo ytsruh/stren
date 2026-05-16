@@ -17,3 +17,6 @@ WHERE id = ?;
 SELECT id, name, email, password_hash, is_admin, created_at, updated_at
 FROM users
 ORDER BY created_at DESC;
+
+-- name: UpdateUser :exec
+UPDATE users SET name = ?, updated_at = ? WHERE id = ?;

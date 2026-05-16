@@ -6,42 +6,40 @@ import "stren/internal/views/components"
 templ ProfilePage(userName string, email string, isAdmin bool) {
 	@Layout(PageData{Title: "Profile", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Profile"})
-		<div class="grid gap-4 max-w-md">
-			@components.Card(components.CardProps{}) {
-				@components.CardHeader(components.CardHeaderProps{}) {
-					<h3>Name</h3>
-				}
-				@components.CardSection(components.CardSectionProps{}) {
-					<p>{ userName }</p>
-				}
-			}
-			@components.Card(components.CardProps{}) {
-				@components.CardHeader(components.CardHeaderProps{}) {
-					<h3>Email</h3>
-				}
-				@components.CardSection(components.CardSectionProps{}) {
-					<p>{ email }</p>
-				}
-			}
-			@components.Card(components.CardProps{}) {
-				@components.CardHeader(components.CardHeaderProps{}) {
-					<h3>Role</h3>
-				}
-				@components.CardSection(components.CardSectionProps{}) {
-					<p>
-						if isAdmin {
-							Administrator
-						} else {
-							User
-						}
-					</p>
-				}
-			}
-			@components.Card(components.CardProps{}) {
-				@components.CardHeader(components.CardHeaderProps{}) {
-					<h3>Appearance</h3>
-				}
-				@components.CardSection(components.CardSectionProps{}) {
+		<form
+			hx-post="/profile"
+			hx-target="#toaster"
+			hx-swap="beforeend"
+			class="form grid gap-6 my-5"
+		>
+			<div class="grid gap-2">
+				<label for="name">Name</label>
+				<input class="input" type="text" id="name" name="name" value={ userName } required/>
+			</div>
+			<div class="grid gap-2">
+				<label for="email">Email</label>
+				<input class="input bg-muted" type="email" id="email" name="email" value={ email } disabled/>
+			</div>
+			<div class="grid gap-2">
+				<label for="role">Role</label>
+				<input
+					class="input bg-muted"
+					type="text"
+					id="role"
+					name="role"
+					value={ roleLabel(isAdmin) }
+					disabled
+				/>
+			</div>
+			<button type="submit" class="btn-primary">
+				<span class="btn-spinner hidden absolute animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent"></span>
+				Save
+			</button>
+		</form>
+		@components.Card(components.CardProps{}) {
+			@components.CardSection(components.CardSectionProps{}) {
+				<div class="flex items-center justify-between">
+					<h3>Appearance:</h3>
 					<button
 						type="button"
 						aria-label="Toggle dark mode"
@@ -53,8 +51,26 @@ templ ProfilePage(userName string, email string, isAdmin bool) {
 						<span class="hidden dark:inline">Light Mode</span>
 						<span class="inline dark:hidden">Dark Mode</span>
 					</button>
-				}
+				</div>
 			}
-		</div>
+		}
 	}
+}
+
+// roleLabel returns a human-readable role label.
+func roleLabel(isAdmin bool) string {
+	if isAdmin {
+		return "Administrator"
+	}
+	return "User"
+}
+
+// ProfileUpdateSuccess renders a success toast for HTMX responses.
+templ ProfileUpdateSuccess() {
+	@Toast("success", "Profile updated", "")
+}
+
+// ProfileUpdateError renders an error toast for HTMX responses.
+templ ProfileUpdateError(message string) {
+	@Toast("error", "Error", message)
 }

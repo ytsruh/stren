@@ -46,7 +46,7 @@ func main() {
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
-	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, jwtService, validator)
+	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, userRepo, jwtService, validator)
 
 	// Create Echo instance
 	e := echo.New()

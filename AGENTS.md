@@ -12,6 +12,7 @@
 - Avoid adding new dependancies. If they are needed, discuss with user/developer first. If agreed to use then always wrap dependancies in packages so they are isolated and easily edited, removed, updated without codebase wide changes.
 - Add documentation/annotations to code wherever possible to explain what functions, structs etc do.
 - Make use of `go doc` Go command to fetch documentation for packages/modules
+- When using HTMX, use existing patterns such as loading spinners and confirmation modals/dialogs
 
 ## Technology & Architecture
 - **Tech stack**: Go 1.25+, Echo, Templ, Turso Sync (turso.tech/database/tursogo), htmx, Basecoat CSS
