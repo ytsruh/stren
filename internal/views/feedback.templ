@@ -1,0 +1,229 @@
+package views
+
+import (
+	"fmt"
+	"stren/internal/models"
+	"stren/internal/views/components"
+)
+
+templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "Submit Feedback", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Submit Feedback"})
+		<p class="text-muted-foreground mb-6">Have feedback or found a bug? Let us know!</p>
+		<form
+			hx-post="/feedback"
+			hx-target="#form-result"
+			hx-swap="innerHTML"
+			class="form grid gap-6 max-w-[600px]"
+		>
+			<fieldset class="grid gap-4">
+				<div class="grid gap-2">
+					<label for="title">Title</label>
+					<input
+						class="input"
+						type="text"
+						id="title"
+						name="title"
+						placeholder="Brief summary of your feedback"
+						minlength="5"
+						maxlength="100"
+						required
+					/>
+					<p class="text-sm text-muted-foreground">5-100 characters</p>
+				</div>
+				<div class="grid gap-2">
+					<label for="message">Message</label>
+					<textarea
+						id="message"
+						name="message"
+						class="textarea"
+						placeholder="Please describe your feedback in detail..."
+						rows="6"
+						minlength="10"
+						maxlength="1000"
+						required
+					></textarea>
+					<p class="text-sm text-muted-foreground">10-1000 characters</p>
+				</div>
+			</fieldset>
+			<div class="flex gap-3">
+				<button type="submit" class="btn">
+					@components.Icon(components.IconProps{Name: "check", Size: 18})
+					Submit Feedback
+				</button>
+			</div>
+		</form>
+		<div id="form-result" class="mt-6"></div>
+	}
+}
+
+templ FeedbackFormSuccess(message string) {
+	@Toast(message, false)
+}
+
+templ FeedbackFormError(message string) {
+	@Toast(message, true)
+}
+
+templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "Admin - Feedback", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		<div class="flex justify-between items-center mb-6">
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Feedback"})
+		</div>
+		<div class="flex gap-2 mb-6">
+			<a
+				href="/admin/feedback?filter=open"
+				class={ getFilterBtnClass(filter, "open") }
+			>
+				Open
+			</a>
+			<a
+				href="/admin/feedback?filter=closed"
+				class={ getFilterBtnClass(filter, "closed") }
+			>
+				Closed
+			</a>
+			<a
+				href="/admin/feedback"
+				class={ getFilterBtnClass(filter, "all") }
+			>
+				All
+			</a>
+		</div>
+		if len(feedback) == 0 {
+			<div class="card p-6 text-center">
+				<p class="text-muted-foreground">No feedback found</p>
+			</div>
+		} else {
+			<div class="card overflow-hidden">
+				<table class="table">
+					<thead>
+						<tr>
+							<th>Title</th>
+							<th>Submitted By</th>
+							<th>Date</th>
+							<th>Status</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, f := range feedback {
+							<tr>
+								<td class="font-medium">{ f.Title }</td>
+								<td>{ f.UserName }</td>
+								<td class="text-muted-foreground">{ f.CreatedAt.Format("02 Jan 2006") }</td>
+								<td>
+									if f.IsClosed {
+										<span class="badge badge-secondary">Closed</span>
+									} else {
+										<span class="badge">Open</span>
+									}
+								</td>
+								<td>
+									<a href={ templ.URL(fmt.Sprintf("/admin/feedback/%d", f.ID)) } class="btn-outline text-sm py-1">
+										View
+									</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "Admin - Feedback Detail", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		<a href="/admin/feedback" class="btn-outline mb-4 inline-flex">
+			@components.Icon(components.IconProps{Name: "arrow-left", Size: 18})
+			Back
+		</a>
+		<form class="">
+			<fieldset class="grid gap-4">
+				<div class="grid gap-2">
+					<label for="submitted-by">Submitted By</label>
+					<input
+						class="input bg-muted"
+						type="text"
+						id="submitted-by"
+						value={ feedback.UserName }
+						disabled
+					/>
+				</div>
+				<div class="grid gap-2">
+					<label for="date">Date</label>
+					<input
+						class="input bg-muted"
+						type="text"
+						id="date"
+						value={ feedback.CreatedAt.Format("02 January 2006 at 15:04") }
+						disabled
+					/>
+				</div>
+				<div class="grid gap-2">
+					<label for="title">Title</label>
+					<input
+						class="input bg-muted"
+						type="text"
+						id="title"
+						value={ feedback.Title }
+						disabled
+					/>
+				</div>
+				<div class="grid gap-2">
+					<label for="message">Message</label>
+					<textarea
+						class="textarea bg-muted"
+						id="message"
+						rows="6"
+						disabled
+					>{ feedback.Message }</textarea>
+				</div>
+				<div class="grid gap-2">
+					<label for="status">Status</label>
+					<input
+						class="input bg-muted"
+						type="text"
+						id="status"
+						if feedback.IsClosed {
+							value="Closed"
+						} else {
+							value="Open"
+						}
+						disabled
+					/>
+				</div>
+			</fieldset>
+			<div class="flex gap-3 py-5 justify-between">
+				<button
+					type="button"
+					hx-post={ fmt.Sprintf("/admin/feedback/%d/close", feedback.ID) }
+					hx-target="#close-result"
+					hx-swap="innerHTML"
+					class="btn"
+				>
+					if feedback.IsClosed {
+						@components.Icon(components.IconProps{Name: "rotate-ccw", Size: 18})
+						Reopen
+					} else {
+						@components.Icon(components.IconProps{Name: "check", Size: 18})
+						Close
+					}
+				</button>
+				<div id="close-result"></div>
+			</div>
+		</form>
+	}
+}
+
+templ AdminFeedbackClosedSuccess() {
+	@Toast("Feedback status updated", false)
+}
+
+func getFilterBtnClass(currentFilter, targetFilter string) string {
+	if currentFilter == targetFilter {
+		return "btn"
+	}
+	return "btn-outline"
+}
