@@ -142,7 +142,13 @@ func (h *Handler) DeleteEntry(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.DeletedRow())
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Redirect", "/")
+		c.Response().WriteHeader(http.StatusSeeOther)
+		return render(c, views.Toast("success", "Entry deleted!", ""))
+	}
+
+	return c.Redirect(http.StatusSeeOther, "/")
 }
 
 // ExerciseHistory shows all entries for a specific exercise.

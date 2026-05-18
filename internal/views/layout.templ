@@ -201,11 +201,16 @@ templ Layout(data PageData) {
 								</div>
 								<div class="flex gap-1">
 									<li>
-										<a href="/entries-new" class="btn-ghost">
-											@components.Icon(components.IconProps{Name: "plus", Size: 20})
+										<a href="/" class="btn-ghost">
+											@components.Icon(components.IconProps{Name: "home", Size: 20})
 										</a>
 									</li>
 									<li>
+										<a href="/entries/new" class="btn-ghost">
+											@components.Icon(components.IconProps{Name: "plus", Size: 20})
+										</a>
+									</li>
+									<li class="hidden sm:block">
 										<a href="/feedback" class="btn-ghost">
 											@components.Icon(components.IconProps{Name: "message", Size: 20})
 										</a>

@@ -92,7 +92,23 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 // EditEntryForm renders the form for editing an existing entry
 templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
+		<div class="w-full flex items-center justify-between">
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
+			<button
+				type="button"
+				class="btn-sm-icon-destructive relative inline-flex"
+				hx-delete={ fmt.Sprintf("/entries/%s", entry.ID) }
+				hx-confirm="Are you sure you want to delete this entry?"
+				hx-indicator="#delete-spinner"
+			>
+				<span class="flex items-center justify-around gap-2">
+					@components.Icon(components.IconProps{Name: "trash", Size: 14})
+				</span>
+				<span id="delete-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+					@components.Icon(components.IconProps{Name: "loader", Size: 14})
+				</span>
+			</button>
+		</div>
 		<form
 			id="entry-form"
 			hx-put={ fmt.Sprintf("/entries/%s", entry.ID) }

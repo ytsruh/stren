@@ -901,8 +901,8 @@ func TestDeleteEntry(t *testing.T) {
 	if err := h.DeleteEntry(c); err != nil {
 		t.Fatalf("DeleteEntry failed: %v", err)
 	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
 	}
 	if len(mock.entries) != 0 {
 		t.Fatalf("expected entry to be deleted, got %d entries", len(mock.entries))
