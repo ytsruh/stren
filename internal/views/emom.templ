@@ -27,7 +27,7 @@ templ EMOMPage(data PageData) {
 						Start
 					</button>
 				</div>
-				<div id="emom-display" class="flex flex-col items-center justify-center mt-8 hidden">
+				<div id="emom-display" class="flex-col items-center justify-center mt-8 hidden">
 					<div class="text-4xl font-bold mb-4" id="round-display">Round 1/--</div>
 					<div class="text-8xl font-bold tabular-nums" id="countdown-display">0:60</div>
 					<div class="flex gap-4 mt-8">
@@ -36,7 +36,7 @@ templ EMOMPage(data PageData) {
 						<button type="button" id="reset-btn" class="btn-outline hidden" onclick="resetEMOM()">Reset</button>
 					</div>
 				</div>
-				<div id="emom-complete" class="hidden flex flex-col items-center gap-4 mt-8">
+				<div id="emom-complete" class="flex-col items-center gap-4 mt-8 hidden">
 					<div class="text-4xl font-bold text-primary">Complete!</div>
 					<button type="button" class="btn-outline" onclick="resetEMOM()">Start Another</button>
 				</div>

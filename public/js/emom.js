@@ -39,7 +39,10 @@
     if (startBtn) startBtn.classList.remove('hidden');
     if (stopBtn) stopBtn.classList.remove('hidden');
     if (resetBtn) resetBtn.classList.remove('hidden');
-    if (display) display.classList.remove('hidden');
+    if (display) {
+      display.classList.remove('hidden');
+      display.classList.add('flex');
+    }
     if (countdownDisplay) countdownDisplay.classList.remove('hidden');
     if (completeDiv) {
       completeDiv.classList.add('hidden');
@@ -56,7 +59,10 @@
     if (startBtn) startBtn.classList.add('hidden');
     if (stopBtn) stopBtn.classList.add('hidden');
     if (resetBtn) resetBtn.classList.add('hidden');
-    if (display) display.classList.add('hidden');
+    if (display) {
+      display.classList.add('hidden');
+      display.classList.remove('flex');
+    }
     if (countdownDisplay) countdownDisplay.classList.add('hidden');
   }
 
