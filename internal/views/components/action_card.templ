@@ -1,0 +1,14 @@
+package components
+
+type ActionCardProps struct {
+	Label string
+	Href  string
+	Icon  string
+}
+
+templ ActionCard(props ActionCardProps) {
+	<a href={ templ.SafeURL(props.Href) } class="card flex items-center justify-between gap-2 sm:gap-4 p-2 sm:p-4 hover:opacity-90 transition-opacity no-underline hover:border-primary">
+		@Icon(IconProps{Name: props.Icon, Size: 24})
+		<span class="text-center text-lg font-medium">{ props.Label }</span>
+	</a>
+}
