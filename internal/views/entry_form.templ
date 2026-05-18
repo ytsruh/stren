@@ -95,7 +95,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
 		<form
 			id="entry-form"
-			hx-put={ fmt.Sprintf("/entries/%d", entry.ID) }
+			hx-put={ fmt.Sprintf("/entries/%s", entry.ID) }
 			hx-target="#toaster"
 			hx-swap="beforeend"
 			class="form grid gap-6"
@@ -161,7 +161,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 						placeholder="How did it feel? Any observations?"
 					>{ entry.Notes }</textarea>
 				</div>
-				<input type="hidden" name="id" value={ fmt.Sprintf("%d", entry.ID) }/>
+				<input type="hidden" name="id" value={ fmt.Sprintf("%s", entry.ID) }/>
 			</fieldset>
 			<div class="flex gap-3">
 				<button type="submit" hx-indicator="#entry-spinner" class="btn relative inline-flex">

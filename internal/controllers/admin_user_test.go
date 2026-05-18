@@ -7,7 +7,6 @@ import (
 	"stren/internal/models"
 )
 
-// mockAdminUserRepository is an in-memory implementation of models.AdminUserRepo for testing.
 type mockAdminUserRepository struct {
 	mu    sync.Mutex
 	users []models.User
@@ -28,8 +27,8 @@ func (m *mockAdminUserRepository) ListUsers() ([]models.User, error) {
 func TestAdminUserController_ListUsers(t *testing.T) {
 	mock := newMockAdminUserRepository()
 	mock.users = []models.User{
-		{ID: 1, Name: "Alice", Email: "alice@example.com", IsAdmin: true},
-		{ID: 2, Name: "Bob", Email: "bob@example.com", IsAdmin: false},
+		{ID: "user-1", Name: "Alice", Email: "alice@example.com", IsAdmin: true},
+		{ID: "user-2", Name: "Bob", Email: "bob@example.com", IsAdmin: false},
 	}
 
 	ctrl := NewAdminUserController(mock)

@@ -10,14 +10,10 @@ import (
 	"stren/internal/models"
 )
 
-// mockRepository is an in-memory implementation of models.Repository for testing.
 type mockRepository struct {
 	mu        sync.Mutex
 	exercises []models.Exercise
 	entries   []models.ExerciseEntry
-
-	nextExerciseID int64
-	nextEntryID    int64
 
 	errCreate            error
 	errGetByName          error
@@ -30,18 +26,16 @@ type mockRepository struct {
 	errListEntries        error
 	errGetEntriesByExercise error
 	errGetEntriesByDateRange error
+	errGetExerciseByID       error
 }
 
 func newMockRepository() *mockRepository {
-	return &mockRepository{
-		nextExerciseID: 1,
-		nextEntryID:    1,
-	}
+	return &mockRepository{}
 }
 
-func (m *mockRepository) Create(_ *sql.Tx, name string) (int64, error) {
+func (m *mockRepository) Create(_ *sql.Tx, name string) (string, error) {
 	if m.errCreate != nil {
-		return 0, m.errCreate
+		return "", m.errCreate
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -50,8 +44,7 @@ func (m *mockRepository) Create(_ *sql.Tx, name string) (int64, error) {
 			return e.ID, nil
 		}
 	}
-	id := m.nextExerciseID
-	m.nextExerciseID++
+	id := "ex-" + name
 	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: name})
 	return id, nil
 }
@@ -89,26 +82,24 @@ func (m *mockRepository) CreateEntry(entry *models.ExerciseEntry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var exerciseID int64
+	var exerciseID string
 	for _, e := range m.exercises {
 		if e.Name == entry.ExerciseName {
 			exerciseID = e.ID
 			break
 		}
 	}
-	if exerciseID == 0 {
-		exerciseID = m.nextExerciseID
-		m.nextExerciseID++
+	if exerciseID == "" {
+		exerciseID = "ex-" + entry.ExerciseName
 		m.exercises = append(m.exercises, models.Exercise{ID: exerciseID, Name: entry.ExerciseName})
 	}
 	entry.ExerciseID = exerciseID
-	entry.ID = m.nextEntryID
-	m.nextEntryID++
+	entry.ID = "entry-" + entry.ExerciseName
 	m.entries = append(m.entries, *entry)
 	return nil
 }
 
-func (m *mockRepository) GetEntry(id int64, userID int64) (*models.ExerciseEntry, error) {
+func (m *mockRepository) GetEntry(id string, userID string) (*models.ExerciseEntry, error) {
 	if m.errGetEntry != nil {
 		return nil, m.errGetEntry
 	}
@@ -123,7 +114,7 @@ func (m *mockRepository) GetEntry(id int64, userID int64) (*models.ExerciseEntry
 	return nil, nil
 }
 
-func (m *mockRepository) UpdateEntry(entry *models.ExerciseEntry, userID int64) error {
+func (m *mockRepository) UpdateEntry(entry *models.ExerciseEntry, userID string) error {
 	if m.errUpdateEntry != nil {
 		return m.errUpdateEntry
 	}
@@ -138,7 +129,7 @@ func (m *mockRepository) UpdateEntry(entry *models.ExerciseEntry, userID int64) 
 	return nil
 }
 
-func (m *mockRepository) UpdateEntryWithDate(entry *models.ExerciseEntry, userID int64) error {
+func (m *mockRepository) UpdateEntryWithDate(entry *models.ExerciseEntry, userID string) error {
 	if m.errUpdateEntryWithDate != nil {
 		return m.errUpdateEntryWithDate
 	}
@@ -153,7 +144,7 @@ func (m *mockRepository) UpdateEntryWithDate(entry *models.ExerciseEntry, userID
 	return nil
 }
 
-func (m *mockRepository) DeleteEntry(id int64, userID int64) error {
+func (m *mockRepository) DeleteEntry(id string, userID string) error {
 	if m.errDeleteEntry != nil {
 		return m.errDeleteEntry
 	}
@@ -168,7 +159,7 @@ func (m *mockRepository) DeleteEntry(id int64, userID int64) error {
 	return nil
 }
 
-func (m *mockRepository) ListEntries(userID int64, limit int) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) ListEntries(userID string, limit int) ([]models.ExerciseEntry, error) {
 	if m.errListEntries != nil {
 		return nil, m.errListEntries
 	}
@@ -186,7 +177,7 @@ func (m *mockRepository) ListEntries(userID int64, limit int) ([]models.Exercise
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByExercise(exerciseName string, userID int64) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) GetEntriesByExercise(exerciseName string, userID string) ([]models.ExerciseEntry, error) {
 	if m.errGetEntriesByExercise != nil {
 		return nil, m.errGetEntriesByExercise
 	}
@@ -201,7 +192,7 @@ func (m *mockRepository) GetEntriesByExercise(exerciseName string, userID int64)
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID int64) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID string) ([]models.ExerciseEntry, error) {
 	if m.errGetEntriesByDateRange != nil {
 		return nil, m.errGetEntriesByDateRange
 	}
@@ -216,7 +207,7 @@ func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID int6
 	return result, nil
 }
 
-func (m *mockRepository) ListEntriesLast30Days(userID int64) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) ListEntriesLast30Days(userID string) ([]models.ExerciseEntry, error) {
 	if m.errListEntries != nil {
 		return nil, m.errListEntries
 	}
@@ -232,16 +223,28 @@ func (m *mockRepository) ListEntriesLast30Days(userID int64) ([]models.ExerciseE
 	return result, nil
 }
 
-
+func (m *mockRepository) GetExerciseByID(id string, userID string) (*models.Exercise, error) {
+	if m.errGetExerciseByID != nil {
+		return nil, m.errGetExerciseByID
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, e := range m.exercises {
+		if e.ID == id {
+			cp := e
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
 
 func setupEntryController(t *testing.T) (*EntryController, *mockRepository) {
 	t.Helper()
 	mock := newMockRepository()
 	mock.exercises = []models.Exercise{
-		{ID: 1, Name: "Squat"},
-		{ID: 2, Name: "Bench Press"},
+		{ID: "ex-1", Name: "Squat"},
+		{ID: "ex-2", Name: "Bench Press"},
 	}
-	mock.nextExerciseID = 3
 	return NewEntryController(mock), mock
 }
 
@@ -249,11 +252,11 @@ func TestEntryController_ListEntries(t *testing.T) {
 	ec, _ := setupEntryController(t)
 	mock := ec.repo.(*mockRepository)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
-		{ID: 2, UserID: 1, ExerciseName: "Bench Press", Reps: 8, Weight: 80},
+		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-2", UserID: "user-1", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
 	}
 
-	entries, err := ec.ListEntries(1)
+	entries, err := ec.ListEntries("user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -265,11 +268,11 @@ func TestEntryController_ListEntries(t *testing.T) {
 func TestEntryController_ListEntries_Limit(t *testing.T) {
 	ec, mock := setupEntryController(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
-		{ID: 2, UserID: 1, ExerciseName: "Bench Press", Reps: 8, Weight: 80},
+		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-2", UserID: "user-1", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
 	}
 
-	entries, err := ec.ListEntries(1)
+	entries, err := ec.ListEntries("user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -282,10 +285,10 @@ func TestEntryController_GetEntry(t *testing.T) {
 	ec, _ := setupEntryController(t)
 	mock := ec.repo.(*mockRepository)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	entry, err := ec.GetEntry(1, 1)
+	entry, err := ec.GetEntry("entry-1", "user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -298,10 +301,10 @@ func TestEntryController_GetEntry_WrongUser(t *testing.T) {
 	ec, _ := setupEntryController(t)
 	mock := ec.repo.(*mockRepository)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	entry, err := ec.GetEntry(1, 999)
+	entry, err := ec.GetEntry("entry-1", "user-999")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -313,7 +316,7 @@ func TestEntryController_GetEntry_WrongUser(t *testing.T) {
 func TestEntryController_CreateEntry(t *testing.T) {
 	ec, _ := setupEntryController(t)
 
-	entry, err := ec.CreateEntry(1, "Squat", "great set", 5, 100)
+	entry, err := ec.CreateEntry("user-1", "Squat", "great set", 5, 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -329,7 +332,7 @@ func TestEntryController_CreateEntry_RepositoryError(t *testing.T) {
 	ec, mock := setupEntryController(t)
 	mock.errCreateEntry = errors.New("db error")
 
-	_, err := ec.CreateEntry(1, "Squat", "great set", 5, 100)
+	_, err := ec.CreateEntry("user-1", "Squat", "great set", 5, 100)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -339,10 +342,10 @@ func TestEntryController_UpdateEntry(t *testing.T) {
 	ec, _ := setupEntryController(t)
 	mock := ec.repo.(*mockRepository)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	entry, err := ec.UpdateEntry(1, 1, "Squat", "even better", 6, 110, time.Now())
+	entry, err := ec.UpdateEntry("entry-1", "user-1", "Squat", "even better", 6, 110, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -355,10 +358,10 @@ func TestEntryController_DeleteEntry(t *testing.T) {
 	ec, _ := setupEntryController(t)
 	mock := ec.repo.(*mockRepository)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	err := ec.DeleteEntry(1, 1)
+	err := ec.DeleteEntry("entry-1", "user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -392,12 +395,12 @@ func TestEntryController_List_Error(t *testing.T) {
 func TestEntryController_GetEntriesByExercise(t *testing.T) {
 	ec, mock := setupEntryController(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: 1, UserID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
-		{ID: 2, UserID: 1, ExerciseName: "Bench Press", Reps: 8, Weight: 80},
-		{ID: 3, UserID: 1, ExerciseName: "Squat", Reps: 3, Weight: 110},
+		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-2", UserID: "user-1", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
+		{ID: "entry-3", UserID: "user-1", ExerciseName: "Squat", Reps: 3, Weight: 110},
 	}
 
-	entries, err := ec.GetEntriesByExercise("Squat", 1)
+	entries, err := ec.GetEntriesByExercise("Squat", "user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

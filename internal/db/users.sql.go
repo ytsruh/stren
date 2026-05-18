@@ -11,26 +11,28 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (name, email, password_hash, is_admin)
-VALUES (?, ?, ?, ?)
+INSERT INTO users (id, name, email, password_hash, is_admin)
+VALUES (?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type CreateUserParams struct {
+	ID           string
 	Name         string
 	Email        string
 	PasswordHash string
 	IsAdmin      int64
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (int64, error) {
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (string, error) {
 	row := q.db.QueryRowContext(ctx, createUser,
+		arg.ID,
 		arg.Name,
 		arg.Email,
 		arg.PasswordHash,
 		arg.IsAdmin,
 	)
-	var id int64
+	var id string
 	err := row.Scan(&id)
 	return id, err
 }
@@ -62,7 +64,7 @@ FROM users
 WHERE id = ?
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
+func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRowContext(ctx, getUserByID, id)
 	var i User
 	err := row.Scan(
@@ -121,7 +123,7 @@ UPDATE users SET name = ?, updated_at = ? WHERE id = ?
 type UpdateUserParams struct {
 	Name      string
 	UpdatedAt sql.NullTime
-	ID        int64
+	ID        string
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {

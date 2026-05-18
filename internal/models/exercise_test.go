@@ -8,8 +8,7 @@ import (
 	"stren/internal/db"
 )
 
-// setupTestRepo creates a fresh in-memory database, a test user, and repositories for testing.
-func setupTestRepo(t *testing.T) (*ExerciseRepository, *UserRepository, *db.DB, int64) {
+func setupTestRepo(t *testing.T) (*ExerciseRepository, *UserRepository, *db.DB, string) {
 	t.Helper()
 
 	database, err := db.NewLocalConnection(":memory:")
@@ -20,7 +19,6 @@ func setupTestRepo(t *testing.T) (*ExerciseRepository, *UserRepository, *db.DB, 
 	userRepo := NewUserRepository(database)
 	exerciseRepo := NewExerciseRepository(database)
 
-	// Create a test user to associate with entries
 	user := &User{
 		Name:         "Test User",
 		Email:        "test@example.com",
@@ -41,17 +39,16 @@ func TestExerciseRepository_Create(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
-	if id == 0 {
-		t.Fatal("expected non-zero id")
+	if id == "" {
+		t.Fatal("expected non-empty id")
 	}
 
-	// Creating the same exercise again should return the existing ID.
 	id2, err := repo.Create(nil, "Test Create")
 	if err != nil {
 		t.Fatalf("Create duplicate failed: %v", err)
 	}
 	if id2 != id {
-		t.Fatalf("expected same id %d, got %d", id, id2)
+		t.Fatalf("expected same id %s, got %s", id, id2)
 	}
 }
 
@@ -59,7 +56,7 @@ func TestExerciseRepository_Create_WithTx(t *testing.T) {
 	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
-	var createdID int64
+	var createdID string
 	err := database.Transaction(func(tx *sql.Tx) error {
 		id, err := repo.Create(tx, "Tx Exercise")
 		createdID = id
@@ -68,8 +65,8 @@ func TestExerciseRepository_Create_WithTx(t *testing.T) {
 	if err != nil {
 		t.Fatalf("transaction failed: %v", err)
 	}
-	if createdID == 0 {
-		t.Fatal("expected non-zero id from transaction")
+	if createdID == "" {
+		t.Fatal("expected non-empty id from transaction")
 	}
 }
 
@@ -77,13 +74,11 @@ func TestExerciseRepository_GetByName(t *testing.T) {
 	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
-	// Create an exercise first
 	_, err := repo.Create(nil, "Test Exercise")
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	// Get should return the exercise
 	et, err := repo.GetByName("Test Exercise")
 	if err != nil {
 		t.Fatalf("GetByName failed: %v", err)
@@ -95,7 +90,6 @@ func TestExerciseRepository_GetByName(t *testing.T) {
 		t.Fatalf("expected name 'Test Exercise', got %q", et.Name)
 	}
 
-	// Non-existing exercise should return nil.
 	et, err = repo.GetByName("NonExistentExercise")
 	if err != nil {
 		t.Fatalf("GetByName failed: %v", err)
@@ -109,7 +103,6 @@ func TestExerciseRepository_List(t *testing.T) {
 	repo, _, database, _ := setupTestRepo(t)
 	defer database.Close()
 
-	// Create some exercises
 	_, err := repo.Create(nil, "Alpha")
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
@@ -124,12 +117,10 @@ func TestExerciseRepository_List(t *testing.T) {
 		t.Fatalf("List failed: %v", err)
 	}
 
-	// Should have at least the 2 we created
 	if len(exercises) < 2 {
 		t.Fatalf("expected at least 2 exercises, got %d", len(exercises))
 	}
 
-	// Verify ordering by name.
 	if exercises[0].Name > exercises[1].Name {
 		t.Fatalf("expected exercises ordered by name, got %q then %q", exercises[0].Name, exercises[1].Name)
 	}
@@ -152,8 +143,8 @@ func TestExerciseRepository_CreateEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if entry.ID == 0 {
-		t.Fatal("expected non-zero entry ID after creation")
+	if entry.ID == "" {
+		t.Fatal("expected non-empty entry ID after creation")
 	}
 }
 
@@ -161,8 +152,7 @@ func TestExerciseRepository_GetEntry(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
-	// Non-existing entry.
-	entry, err := repo.GetEntry(9999, userID)
+	entry, err := repo.GetEntry("non-existent-id", userID)
 	if err != nil {
 		t.Fatalf("GetEntry failed: %v", err)
 	}
@@ -170,7 +160,6 @@ func TestExerciseRepository_GetEntry(t *testing.T) {
 		t.Fatalf("expected nil for non-existing entry, got %+v", entry)
 	}
 
-	// Create an entry and retrieve it.
 	created := &ExerciseEntry{
 		ExerciseName: "Bench Press",
 		UserID:       userID,
@@ -311,7 +300,6 @@ func TestExerciseRepository_ListEntries(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
-	// Create multiple entries.
 	for i := 0; i < 5; i++ {
 		entry := &ExerciseEntry{
 			ExerciseName: "Dips",
@@ -325,7 +313,6 @@ func TestExerciseRepository_ListEntries(t *testing.T) {
 		}
 	}
 
-	// With limit.
 	entries, err := repo.ListEntries(userID, 3)
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
@@ -334,7 +321,6 @@ func TestExerciseRepository_ListEntries(t *testing.T) {
 		t.Fatalf("expected 3 entries with limit, got %d", len(entries))
 	}
 
-	// Without limit.
 	entries, err = repo.ListEntries(userID, 0)
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
@@ -343,7 +329,6 @@ func TestExerciseRepository_ListEntries(t *testing.T) {
 		t.Fatalf("expected 5 entries without limit, got %d", len(entries))
 	}
 
-	// Verify descending order (latest first).
 	if entries[0].CreatedAt.Before(entries[1].CreatedAt) {
 		t.Fatal("expected entries in descending order by created_at")
 	}
@@ -353,7 +338,6 @@ func TestExerciseRepository_GetEntriesByExercise(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
-	// Create entries for different exercises.
 	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 100, CreatedAt: time.Now()}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}

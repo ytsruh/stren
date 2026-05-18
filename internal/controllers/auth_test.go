@@ -11,15 +11,13 @@ import (
 	"stren/internal/utils"
 )
 
-// mockUserRepository is an in-memory implementation of models.UserRepo for testing.
 type mockUserRepository struct {
-	mu     sync.Mutex
-	users  []models.User
-	nextID int64
+	mu    sync.Mutex
+	users []models.User
 }
 
 func newMockUserRepository() *mockUserRepository {
-	return &mockUserRepository{nextID: 1}
+	return &mockUserRepository{}
 }
 
 func (m *mockUserRepository) CreateUser(user *models.User) error {
@@ -30,8 +28,7 @@ func (m *mockUserRepository) CreateUser(user *models.User) error {
 			return errors.New("email already exists")
 		}
 	}
-	user.ID = m.nextID
-	m.nextID++
+	user.ID = "user-" + user.Email
 	m.users = append(m.users, *user)
 	return nil
 }
@@ -48,7 +45,7 @@ func (m *mockUserRepository) GetUserByEmail(email string) (*models.User, error) 
 	return nil, nil
 }
 
-func (m *mockUserRepository) GetUserByID(id int64) (*models.User, error) {
+func (m *mockUserRepository) GetUserByID(id string) (*models.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, u := range m.users {
@@ -82,10 +79,9 @@ func setupAuthController(t *testing.T) (*AuthController, *mockUserRepository) {
 func TestAuthController_Login_Success(t *testing.T) {
 	ac, mockUser := setupAuthController(t)
 
-	// Pre-seed a user
 	hash, _ := bcrypt.GenerateFromPassword([]byte("correct"), bcrypt.DefaultCost)
 	mockUser.users = append(mockUser.users, models.User{
-		ID:           1,
+		ID:           "user-1",
 		Name:         "Alice",
 		Email:        "alice@example.com",
 		PasswordHash: string(hash),
@@ -111,7 +107,7 @@ func TestAuthController_Login_InvalidPassword(t *testing.T) {
 
 	hash, _ := bcrypt.GenerateFromPassword([]byte("correct"), bcrypt.DefaultCost)
 	mockUser.users = append(mockUser.users, models.User{
-		ID:           1,
+		ID:           "user-1",
 		Name:         "Bob",
 		Email:        "bob@example.com",
 		PasswordHash: string(hash),
@@ -162,14 +158,13 @@ func TestAuthController_Register_Success(t *testing.T) {
 	if user == nil {
 		t.Fatal("expected user, got nil")
 	}
-	if user.ID != 1 {
-		t.Fatalf("expected user ID 1, got %d", user.ID)
+	if user.ID == "" {
+		t.Fatalf("expected non-empty user ID")
 	}
 	if token == "" {
 		t.Fatal("expected non-empty token")
 	}
 
-	// Verify stored password is hashed
 	stored := mockUser.users[0]
 	if err := bcrypt.CompareHashAndPassword([]byte(stored.PasswordHash), []byte("secret123")); err != nil {
 		t.Fatal("expected stored password to be a valid bcrypt hash")
@@ -179,9 +174,8 @@ func TestAuthController_Register_Success(t *testing.T) {
 func TestAuthController_Register_EmailExists(t *testing.T) {
 	ac, mockUser := setupAuthController(t)
 
-	// Pre-seed a user
 	mockUser.users = append(mockUser.users, models.User{
-		ID:    1,
+		ID:    "user-1",
 		Name:  "Alice",
 		Email: "alice@example.com",
 	})
@@ -232,7 +226,6 @@ func TestAuthController_Register_ShortPassword(t *testing.T) {
 func TestAuthController_RegisterAndLogin(t *testing.T) {
 	ac, _ := setupAuthController(t)
 
-	// Register
 	user, token, err := ac.Register("Alice", "alice@example.com", "secret123")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
@@ -241,7 +234,6 @@ func TestAuthController_RegisterAndLogin(t *testing.T) {
 		t.Fatal("expected user and token after registration")
 	}
 
-	// Login with same credentials
 	loggedInUser, loginToken, err := ac.Login("alice@example.com", "secret123")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)

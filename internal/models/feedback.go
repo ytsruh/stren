@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/google/uuid"
 	"stren/internal/db"
 )
 
 type Feedback struct {
-	ID        int64
-	UserID    int64
+	ID        string
+	UserID    string
 	UserName  string
 	Title     string
 	Message   string
@@ -22,8 +23,8 @@ type Feedback struct {
 type FeedbackRepository interface {
 	Create(feedback *Feedback) error
 	GetAll(filter string) ([]*Feedback, error)
-	GetByID(id int64) (*Feedback, error)
-	UpdateStatus(id int64, isClosed bool) error
+	GetByID(id string) (*Feedback, error)
+	UpdateStatus(id string, isClosed bool) error
 }
 
 type FeedbackRepo struct {
@@ -38,7 +39,9 @@ var _ FeedbackRepository = (*FeedbackRepo)(nil)
 
 func (r *FeedbackRepo) Create(feedback *Feedback) error {
 	ctx := context.Background()
+	feedback.ID = uuid.New().String()
 	f, err := r.db.CreateFeedback(ctx, db.CreateFeedbackParams{
+		ID:      feedback.ID,
 		UserID:  feedback.UserID,
 		Title:   feedback.Title,
 		Message: feedback.Message,
@@ -151,7 +154,7 @@ func mapFeedbackRows(rows []db.GetAllOpenRow) []*Feedback {
 	return result
 }
 
-func (r *FeedbackRepo) GetByID(id int64) (*Feedback, error) {
+func (r *FeedbackRepo) GetByID(id string) (*Feedback, error) {
 	ctx := context.Background()
 	f, err := r.db.GetFeedbackByID(ctx, id)
 	if err == sql.ErrNoRows {
@@ -179,7 +182,7 @@ func (r *FeedbackRepo) GetByID(id int64) (*Feedback, error) {
 	return result, nil
 }
 
-func (r *FeedbackRepo) UpdateStatus(id int64, isClosed bool) error {
+func (r *FeedbackRepo) UpdateStatus(id string, isClosed bool) error {
 	ctx := context.Background()
 	var closedVal int64 = 0
 	if isClosed {

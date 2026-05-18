@@ -2,7 +2,6 @@ package routes
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -59,10 +58,7 @@ func (h *Handler) AdminListFeedback(c echo.Context) error {
 }
 
 func (h *Handler) AdminFeedbackDetail(c echo.Context) error {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid feedback ID")
-	}
+	id := c.Param("id")
 
 	claims := GetClaims(c)
 	feedback, err := h.feedbackCtrl.AdminDetail(id)
@@ -74,10 +70,7 @@ func (h *Handler) AdminFeedbackDetail(c echo.Context) error {
 }
 
 func (h *Handler) AdminCloseFeedback(c echo.Context) error {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid feedback ID")
-	}
+	id := c.Param("id")
 
 	if err := h.feedbackCtrl.Close(id); err != nil {
 		return err

@@ -3,7 +3,6 @@ package routes
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -64,10 +63,7 @@ func (h *Handler) CreateEntry(c echo.Context) error {
 
 // EditEntryForm renders the form for editing an entry.
 func (h *Handler) EditEntryForm(c echo.Context) error {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid entry ID")
-	}
+	id := c.Param("id")
 
 	claims := GetClaims(c)
 	entry, err := h.entryCtrl.GetEntry(id, claims.UserID)
@@ -83,10 +79,7 @@ func (h *Handler) EditEntryForm(c echo.Context) error {
 
 // GetEntry returns a single entry (for API/hx-get).
 func (h *Handler) GetEntry(c echo.Context) error {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid entry ID")
-	}
+	id := c.Param("id")
 
 	claims := GetClaims(c)
 	entry, err := h.entryCtrl.GetEntry(id, claims.UserID)
@@ -102,10 +95,7 @@ func (h *Handler) GetEntry(c echo.Context) error {
 
 // UpdateEntry handles updating an existing entry.
 func (h *Handler) UpdateEntry(c echo.Context) error {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid entry ID")
-	}
+	id := c.Param("id")
 
 	claims := GetClaims(c)
 
@@ -145,31 +135,32 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 
 // DeleteEntry handles deleting an entry.
 func (h *Handler) DeleteEntry(c echo.Context) error {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid entry ID")
-	}
+	id := c.Param("id")
 
 	claims := GetClaims(c)
 	if err := h.entryCtrl.DeleteEntry(id, claims.UserID); err != nil {
 		return err
 	}
 
-	// Return empty row for htmx to swap
 	return render(c, views.DeletedRow())
 }
 
 // ExerciseHistory shows all entries for a specific exercise.
 func (h *Handler) ExerciseHistory(c echo.Context) error {
-	name := c.Param("name")
+	id := c.Param("id")
 
 	claims := GetClaims(c)
-	entries, err := h.entryCtrl.GetEntriesByExercise(name, claims.UserID)
+	exercise, err := h.entryCtrl.GetExerciseByID(id, claims.UserID)
 	if err != nil {
 		return err
 	}
 
-	return render(c, views.ExerciseHistory(name, entries, claims.Name, true, claims.IsAdmin))
+	entries, err := h.entryCtrl.GetEntriesByExercise(exercise.Name, claims.UserID)
+	if err != nil {
+		return err
+	}
+
+	return render(c, views.ExerciseHistory(exercise.Name, entries, claims.Name, true, claims.IsAdmin))
 }
 
 // ListExercises returns all exercises as JSON (for autocomplete).

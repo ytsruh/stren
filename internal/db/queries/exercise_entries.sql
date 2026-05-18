@@ -1,6 +1,6 @@
 -- name: CreateEntry :one
-INSERT INTO exercise_entries (exercise_id, user_id, reps, weight, notes, created_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO exercise_entries (id, exercise_id, user_id, reps, weight, notes, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: GetEntry :one

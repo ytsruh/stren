@@ -10,15 +10,20 @@ import (
 )
 
 const create = `-- name: Create :one
-INSERT INTO exercises (name)
-VALUES (?)
+INSERT INTO exercises (id, name)
+VALUES (?, ?)
 ON CONFLICT(name) DO UPDATE SET name=name
 RETURNING id
 `
 
-func (q *Queries) Create(ctx context.Context, name string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, create, name)
-	var id int64
+type CreateParams struct {
+	ID   string
+	Name string
+}
+
+func (q *Queries) Create(ctx context.Context, arg CreateParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, create, arg.ID, arg.Name)
+	var id string
 	err := row.Scan(&id)
 	return id, err
 }
@@ -29,7 +34,7 @@ FROM exercises
 WHERE id = ?
 `
 
-func (q *Queries) GetByID(ctx context.Context, id int64) (Exercise, error) {
+func (q *Queries) GetByID(ctx context.Context, id string) (Exercise, error) {
 	row := q.db.QueryRowContext(ctx, getByID, id)
 	var i Exercise
 	err := row.Scan(&i.ID, &i.Name)
@@ -87,7 +92,7 @@ RETURNING id, name
 
 type UpdateParams struct {
 	Name string
-	ID   int64
+	ID   string
 }
 
 func (q *Queries) Update(ctx context.Context, arg UpdateParams) (Exercise, error) {

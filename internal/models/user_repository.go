@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"stren/internal/db"
 )
 
@@ -29,6 +30,7 @@ func (r *UserRepository) CreateUser(user *User) error {
 		isAdmin = 1
 	}
 	id, err := r.queries.CreateUser(ctx, db.CreateUserParams{
+		ID:           uuid.New().String(),
 		Name:         user.Name,
 		Email:        user.Email,
 		PasswordHash: user.PasswordHash,
@@ -57,7 +59,7 @@ func (r *UserRepository) GetUserByEmail(email string) (*User, error) {
 
 // GetUserByID retrieves a user by their ID.
 // Returns nil if not found.
-func (r *UserRepository) GetUserByID(id int64) (*User, error) {
+func (r *UserRepository) GetUserByID(id string) (*User, error) {
 	ctx := context.Background()
 	row, err := r.queries.GetUserByID(ctx, id)
 	if err == sql.ErrNoRows {

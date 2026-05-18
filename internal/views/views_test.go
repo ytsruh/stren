@@ -140,7 +140,7 @@ func TestEmptyState(t *testing.T) {
 
 func TestDashboard_WithEntries(t *testing.T) {
 	entries := []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 	html := renderToString(t, Dashboard(entries, "Test User", true, false))
 	if !strings.Contains(html, "Workout History") {
@@ -163,8 +163,8 @@ func TestDashboard_Empty(t *testing.T) {
 
 func TestEntryList(t *testing.T) {
 	entries := []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
-		{ID: 2, ExerciseName: "Bench Press", Reps: 8, Weight: 80},
+		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-2", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
 	}
 	html := renderToString(t, EntryList(entries))
 	if !strings.Contains(html, "Squat") {
@@ -180,7 +180,7 @@ func TestEntryList(t *testing.T) {
 
 func TestEntryRow(t *testing.T) {
 	entry := models.ExerciseEntry{
-		ID:           1,
+		ID:           "entry-1",
 		ExerciseName: "Deadlift",
 		Reps:         5,
 		Weight:       180,
@@ -197,10 +197,10 @@ func TestEntryRow(t *testing.T) {
 	if !strings.Contains(html, "PR") {
 		t.Error("expected notes")
 	}
-	if !strings.Contains(html, `id="entry-1"`) {
+	if !strings.Contains(html, `id="entry-entry-1"`) {
 		t.Error("expected entry ID attribute")
 	}
-	if !strings.Contains(html, "/entries/1/edit") {
+	if !strings.Contains(html, "/entries/entry-1/edit") {
 		t.Error("expected edit link")
 	}
 }
@@ -214,7 +214,7 @@ func TestDeletedRow(t *testing.T) {
 
 func TestRecentEntries_WithData(t *testing.T) {
 	entries := []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 	html := renderToString(t, RecentEntries(entries))
 	if !strings.Contains(html, "Recent Workouts") {
@@ -258,8 +258,8 @@ func TestQuickStats(t *testing.T) {
 
 func TestEntryForm_New(t *testing.T) {
 	types := []models.Exercise{
-		{ID: 1, Name: "Squat"},
-		{ID: 2, Name: "Bench Press"},
+		{ID: "ex-1", Name: "Squat"},
+		{ID: "ex-2", Name: "Bench Press"},
 	}
 	html := renderToString(t, EntryForm(types, "Test User", true, false))
 	if !strings.Contains(html, "New Entry") {
@@ -275,7 +275,7 @@ func TestEntryForm_New(t *testing.T) {
 
 func TestEditEntryForm(t *testing.T) {
 	entry := &models.ExerciseEntry{
-		ID:           1,
+		ID:           "entry-1",
 		ExerciseName: "Squat",
 		Reps:         5,
 		Weight:       100.0,
@@ -286,7 +286,7 @@ func TestEditEntryForm(t *testing.T) {
 	if !strings.Contains(html, "Edit Entry") {
 		t.Error("expected edit title")
 	}
-	if !strings.Contains(html, "/entries/1") {
+	if !strings.Contains(html, "/entries/entry-1") {
 		t.Error("expected form action with entry ID")
 	}
 	if !strings.Contains(html, `name="created_at"`) {
@@ -326,7 +326,7 @@ func TestEntryFormError(t *testing.T) {
 
 func TestExerciseHistory_WithEntries(t *testing.T) {
 	entries := []models.ExerciseEntry{
-		{ID: 1, ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 	html := renderToString(t, ExerciseHistory("Squat", entries, "Test User", true, false))
 	if !strings.Contains(html, "Squat") {

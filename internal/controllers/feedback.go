@@ -29,7 +29,7 @@ func NewFeedbackController(repo models.FeedbackRepoInterface) *FeedbackControlle
 	return &FeedbackController{repo: repo}
 }
 
-func (fc *FeedbackController) Submit(title, message string, userID int64) error {
+func (fc *FeedbackController) Submit(title, message string, userID string) error {
 	title = strings.TrimSpace(title)
 	message = strings.TrimSpace(message)
 
@@ -59,7 +59,7 @@ func (fc *FeedbackController) AdminList(filter string) ([]*models.Feedback, erro
 	return fc.repo.GetAll(filter)
 }
 
-func (fc *FeedbackController) AdminDetail(id int64) (*models.Feedback, error) {
+func (fc *FeedbackController) AdminDetail(id string) (*models.Feedback, error) {
 	feedback, err := fc.repo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (fc *FeedbackController) AdminDetail(id int64) (*models.Feedback, error) {
 	return feedback, nil
 }
 
-func (fc *FeedbackController) Close(id int64) error {
+func (fc *FeedbackController) Close(id string) error {
 	feedback, err := fc.repo.GetByID(id)
 	if err != nil {
 		return err

@@ -51,10 +51,10 @@ templ EntryList(entries []models.ExerciseEntry) {
 
 // EntryRow renders a single entry row (used for htmx swaps)
 templ EntryRow(entry models.ExerciseEntry) {
-	<tr id={ fmt.Sprintf("entry-%d", entry.ID) }>
+	<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
 		<td>{ entry.FormattedDate() }</td>
 		<td>
-			<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", entry.ExerciseName)) } class="underline-offset-4 hover:underline inline-flex items-center gap-1">
+			<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", entry.ExerciseID)) } class="underline-offset-4 hover:underline inline-flex items-center gap-1">
 				@components.Icon(components.IconProps{Name: "eye", Size: 14})
 				{ entry.ExerciseName }
 			</a>
@@ -65,7 +65,7 @@ templ EntryRow(entry models.ExerciseEntry) {
 		<td>
 			<div class="flex gap-2">
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/entries/%d/edit", entry.ID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
 					class="btn-outline p-2"
 					title="Edit"
 				>
@@ -74,10 +74,10 @@ templ EntryRow(entry models.ExerciseEntry) {
 				<button
 					class="btn-destructive p-2"
 					title="Delete"
-					hx-delete={ fmt.Sprintf("/entries/%d", entry.ID) }
+					hx-delete={ fmt.Sprintf("/entries/%s", entry.ID) }
 					hx-confirm="Are you sure you want to delete this entry?"
 					hx-indicator="#confirm-spinner"
-					hx-target={ fmt.Sprintf("#entry-%d", entry.ID) }
+					hx-target={ fmt.Sprintf("#entry-%s", entry.ID) }
 					hx-swap="outerHTML swap:0.3s"
 				>
 					@components.Icon(components.IconProps{Name: "trash", Size: 16})

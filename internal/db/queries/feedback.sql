@@ -1,6 +1,6 @@
 -- name: CreateFeedback :one
-INSERT INTO feedback (user_id, title, message)
-VALUES (?, ?, ?)
+INSERT INTO feedback (id, user_id, title, message)
+VALUES (?, ?, ?, ?)
 RETURNING id, user_id, title, message, is_closed, created_at, updated_at;
 
 -- name: GetAll :many

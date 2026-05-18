@@ -1,7 +1,6 @@
 package views
 
 import (
-	"fmt"
 	"stren/internal/models"
 	"stren/internal/views/components"
 )
@@ -31,7 +30,7 @@ templ AdminUserList(users []models.User, userName string, isAuthenticated bool, 
 				<tbody>
 					for _, u := range users {
 						<tr>
-							<td>{ fmt.Sprintf("%d", u.ID) }</td>
+							<td>{ u.ID }</td>
 							<td>{ u.Name }</td>
 							<td>{ u.Email }</td>
 							<td>

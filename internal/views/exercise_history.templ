@@ -48,7 +48,7 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 					</thead>
 					<tbody>
 						for _, entry := range entries {
-							<tr id={ fmt.Sprintf("entry-%d", entry.ID) }>
+							<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
 								<td>{ entry.FormattedDate() }</td>
 								<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
 								<td>{ entry.FormattedWeight() }</td>
@@ -56,7 +56,7 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 								<td>
 									<div class="flex gap-2">
 										<a
-											href={ templ.SafeURL(fmt.Sprintf("/entries/%d/edit", entry.ID)) }
+											href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
 											class="btn-outline p-2"
 											title="Edit"
 										>
@@ -65,10 +65,10 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 										<button
 											class="btn-destructive p-2"
 											title="Delete"
-											hx-delete={ fmt.Sprintf("/entries/%d", entry.ID) }
+											hx-delete={ fmt.Sprintf("/entries/%s", entry.ID) }
 											hx-confirm="Delete this entry?"
 											hx-indicator="#confirm-spinner"
-											hx-target={ fmt.Sprintf("#entry-%d", entry.ID) }
+											hx-target={ fmt.Sprintf("#entry-%s", entry.ID) }
 											hx-swap="outerHTML swap:0.3s"
 										>
 											@components.Icon(components.IconProps{Name: "trash", Size: 16})

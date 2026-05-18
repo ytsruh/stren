@@ -1,6 +1,6 @@
 -- name: Create :one
-INSERT INTO exercises (name)
-VALUES (?)
+INSERT INTO exercises (id, name)
+VALUES (?, ?)
 ON CONFLICT(name) DO UPDATE SET name=name
 RETURNING id;
 

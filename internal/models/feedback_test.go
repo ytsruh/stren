@@ -7,7 +7,7 @@ import (
 	"stren/internal/db"
 )
 
-func setupFeedbackTestRepo(t *testing.T) (*FeedbackRepo, *UserRepository, *db.DB, int64) {
+func setupFeedbackTestRepo(t *testing.T) (*FeedbackRepo, *UserRepository, *db.DB, string) {
 	t.Helper()
 
 	database, err := db.NewLocalConnection(":memory:")
@@ -44,8 +44,8 @@ func TestFeedbackRepository_Create(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
-	if feedback.ID == 0 {
-		t.Fatal("expected non-zero feedback ID after creation")
+	if feedback.ID == "" {
+		t.Fatal("expected non-empty feedback ID after creation")
 	}
 	if feedback.Title != "Test Feedback" {
 		t.Fatalf("expected title 'Test Feedback', got %q", feedback.Title)
@@ -177,7 +177,7 @@ func TestFeedbackRepository_GetByID_NotFound(t *testing.T) {
 	repo, _, database, _ := setupFeedbackTestRepo(t)
 	defer database.Close()
 
-	found, err := repo.GetByID(9999)
+	found, err := repo.GetByID("non-existent-id")
 	if err != nil {
 		t.Fatalf("GetByID unexpected error: %v", err)
 	}

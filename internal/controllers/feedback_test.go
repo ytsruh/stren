@@ -12,7 +12,6 @@ import (
 type mockFeedbackRepository struct {
 	mu       sync.Mutex
 	feedback []*models.Feedback
-	nextID   int64
 
 	errCreate   error
 	errGetAll   error
@@ -21,9 +20,7 @@ type mockFeedbackRepository struct {
 }
 
 func newMockFeedbackRepository() *mockFeedbackRepository {
-	return &mockFeedbackRepository{
-		nextID: 1,
-	}
+	return &mockFeedbackRepository{}
 }
 
 func (m *mockFeedbackRepository) Create(feedback *models.Feedback) error {
@@ -32,8 +29,7 @@ func (m *mockFeedbackRepository) Create(feedback *models.Feedback) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	feedback.ID = m.nextID
-	m.nextID++
+	feedback.ID = "feedback-" + feedback.Title
 	m.feedback = append(m.feedback, feedback)
 	return nil
 }
@@ -63,7 +59,7 @@ func (m *mockFeedbackRepository) GetAll(filter string) ([]*models.Feedback, erro
 	return result, nil
 }
 
-func (m *mockFeedbackRepository) GetByID(id int64) (*models.Feedback, error) {
+func (m *mockFeedbackRepository) GetByID(id string) (*models.Feedback, error) {
 	if m.errGetByID != nil {
 		return nil, m.errGetByID
 	}
@@ -77,7 +73,7 @@ func (m *mockFeedbackRepository) GetByID(id int64) (*models.Feedback, error) {
 	return nil, nil
 }
 
-func (m *mockFeedbackRepository) UpdateStatus(id int64, isClosed bool) error {
+func (m *mockFeedbackRepository) UpdateStatus(id string, isClosed bool) error {
 	if m.errUpdate != nil {
 		return m.errUpdate
 	}
@@ -94,12 +90,12 @@ func (m *mockFeedbackRepository) UpdateStatus(id int64, isClosed bool) error {
 
 type mockFeedbackUserRepository struct {
 	mu    sync.Mutex
-	users map[int64]*models.User
+	users map[string]*models.User
 }
 
 func newMockFeedbackUserRepository() *mockFeedbackUserRepository {
 	return &mockFeedbackUserRepository{
-		users: make(map[int64]*models.User),
+		users: make(map[string]*models.User),
 	}
 }
 
@@ -121,7 +117,7 @@ func (m *mockFeedbackUserRepository) GetUserByEmail(email string) (*models.User,
 	return nil, nil
 }
 
-func (m *mockFeedbackUserRepository) GetUserByID(id int64) (*models.User, error) {
+func (m *mockFeedbackUserRepository) GetUserByID(id string) (*models.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if u, ok := m.users[id]; ok {
@@ -141,7 +137,7 @@ func TestFeedbackController_Submit_Success(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	ctrl := NewFeedbackController(mock)
 
-	err := ctrl.Submit("Valid Title", "This is a valid message with enough characters", 1)
+	err := ctrl.Submit("Valid Title", "This is a valid message with enough characters", "user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -157,7 +153,7 @@ func TestFeedbackController_Submit_TitleTooShort(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	ctrl := NewFeedbackController(mock)
 
-	err := ctrl.Submit("Hi", "This is a valid message with enough characters", 1)
+	err := ctrl.Submit("Hi", "This is a valid message with enough characters", "user-1")
 	if !errors.Is(err, ErrTitleTooShort) {
 		t.Errorf("expected ErrTitleTooShort, got %v", err)
 	}
@@ -167,7 +163,7 @@ func TestFeedbackController_Submit_MessageTooShort(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	ctrl := NewFeedbackController(mock)
 
-	err := ctrl.Submit("Valid Title", "Short", 1)
+	err := ctrl.Submit("Valid Title", "Short", "user-1")
 	if !errors.Is(err, ErrMessageTooShort) {
 		t.Errorf("expected ErrMessageTooShort, got %v", err)
 	}
@@ -178,7 +174,7 @@ func TestFeedbackController_Submit_TitleTooLong(t *testing.T) {
 	ctrl := NewFeedbackController(mock)
 
 	longTitle := strings.Repeat("a", 101)
-	err := ctrl.Submit(longTitle, "This is a valid message", 1)
+	err := ctrl.Submit(longTitle, "This is a valid message", "user-1")
 	if !errors.Is(err, ErrTitleTooLong) {
 		t.Errorf("expected ErrTitleTooLong, got %v", err)
 	}
@@ -189,7 +185,7 @@ func TestFeedbackController_Submit_MessageTooLong(t *testing.T) {
 	ctrl := NewFeedbackController(mock)
 
 	longMessage := strings.Repeat("a", 1001)
-	err := ctrl.Submit("Valid Title", longMessage, 1)
+	err := ctrl.Submit("Valid Title", longMessage, "user-1")
 	if !errors.Is(err, ErrMessageTooLong) {
 		t.Errorf("expected ErrMessageTooLong, got %v", err)
 	}
@@ -199,7 +195,7 @@ func TestFeedbackController_Submit_TrimsWhitespace(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	ctrl := NewFeedbackController(mock)
 
-	err := ctrl.Submit("  Valid Title  ", "   Valid message here   ", 1)
+	err := ctrl.Submit("  Valid Title  ", "   Valid message here   ", "user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -214,8 +210,8 @@ func TestFeedbackController_Submit_TrimsWhitespace(t *testing.T) {
 func TestFeedbackController_AdminList_All(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	mock.feedback = []*models.Feedback{
-		{ID: 1, Title: "First", Message: "Message 1"},
-		{ID: 2, Title: "Second", Message: "Message 2"},
+		{ID: "fb-1", Title: "First", Message: "Message 1"},
+		{ID: "fb-2", Title: "Second", Message: "Message 2"},
 	}
 
 	ctrl := NewFeedbackController(mock)
@@ -232,8 +228,8 @@ func TestFeedbackController_AdminList_All(t *testing.T) {
 func TestFeedbackController_AdminList_Open(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	mock.feedback = []*models.Feedback{
-		{ID: 1, Title: "Open", Message: "Message", IsClosed: false},
-		{ID: 2, Title: "Closed", Message: "Message", IsClosed: true},
+		{ID: "fb-1", Title: "Open", Message: "Message", IsClosed: false},
+		{ID: "fb-2", Title: "Closed", Message: "Message", IsClosed: true},
 	}
 
 	ctrl := NewFeedbackController(mock)
@@ -253,8 +249,8 @@ func TestFeedbackController_AdminList_Open(t *testing.T) {
 func TestFeedbackController_AdminList_Closed(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	mock.feedback = []*models.Feedback{
-		{ID: 1, Title: "Open", Message: "Message", IsClosed: false},
-		{ID: 2, Title: "Closed", Message: "Message", IsClosed: true},
+		{ID: "fb-1", Title: "Open", Message: "Message", IsClosed: false},
+		{ID: "fb-2", Title: "Closed", Message: "Message", IsClosed: true},
 	}
 
 	ctrl := NewFeedbackController(mock)
@@ -274,12 +270,12 @@ func TestFeedbackController_AdminList_Closed(t *testing.T) {
 func TestFeedbackController_AdminDetail_Found(t *testing.T) {
 	mockFeedback := newMockFeedbackRepository()
 	mockFeedback.feedback = []*models.Feedback{
-		{ID: 1, UserID: 1, UserName: "Test User", Title: "Found", Message: "Found message"},
+		{ID: "fb-1", UserID: "user-1", UserName: "Test User", Title: "Found", Message: "Found message"},
 	}
 
 	ctrl := NewFeedbackController(mockFeedback)
 
-	feedback, err := ctrl.AdminDetail(1)
+	feedback, err := ctrl.AdminDetail("fb-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -295,7 +291,7 @@ func TestFeedbackController_AdminDetail_NotFound(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	ctrl := NewFeedbackController(mock)
 
-	_, err := ctrl.AdminDetail(999)
+	_, err := ctrl.AdminDetail("non-existent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -306,7 +302,7 @@ func TestFeedbackController_AdminDetail_GetByIDError(t *testing.T) {
 	mock.errGetByID = errors.New("database error")
 	ctrl := NewFeedbackController(mock)
 
-	_, err := ctrl.AdminDetail(1)
+	_, err := ctrl.AdminDetail("fb-1")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -315,12 +311,12 @@ func TestFeedbackController_AdminDetail_GetByIDError(t *testing.T) {
 func TestFeedbackController_Close_Success(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	mock.feedback = []*models.Feedback{
-		{ID: 1, Title: "To Close", Message: "Message", IsClosed: false},
+		{ID: "fb-1", Title: "To Close", Message: "Message", IsClosed: false},
 	}
 
 	ctrl := NewFeedbackController(mock)
 
-	err := ctrl.Close(1)
+	err := ctrl.Close("fb-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -332,12 +328,12 @@ func TestFeedbackController_Close_Success(t *testing.T) {
 func TestFeedbackController_Close_Reopen(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	mock.feedback = []*models.Feedback{
-		{ID: 1, Title: "To Reopen", Message: "Message", IsClosed: true},
+		{ID: "fb-1", Title: "To Reopen", Message: "Message", IsClosed: true},
 	}
 
 	ctrl := NewFeedbackController(mock)
 
-	err := ctrl.Close(1)
+	err := ctrl.Close("fb-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -350,7 +346,7 @@ func TestFeedbackController_Close_NotFound(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	ctrl := NewFeedbackController(mock)
 
-	err := ctrl.Close(999)
+	err := ctrl.Close("non-existent")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -359,12 +355,12 @@ func TestFeedbackController_Close_NotFound(t *testing.T) {
 func TestFeedbackController_Close_UpdateStatusError(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	mock.feedback = []*models.Feedback{
-		{ID: 1, Title: "Error", Message: "Message"},
+		{ID: "fb-1", Title: "Error", Message: "Message"},
 	}
 	mock.errUpdate = errors.New("database error")
 	ctrl := NewFeedbackController(mock)
 
-	err := ctrl.Close(1)
+	err := ctrl.Close("fb-1")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

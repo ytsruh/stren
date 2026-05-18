@@ -8,11 +8,9 @@ import (
 	"stren/internal/models"
 )
 
-// mockAdminRepository is an in-memory implementation of models.AdminRepository for testing.
 type mockAdminRepository struct {
 	mu        sync.Mutex
 	exercises []models.Exercise
-	nextID    int64
 
 	errGetByID    error
 	errUpdate     error
@@ -21,12 +19,10 @@ type mockAdminRepository struct {
 }
 
 func newMockAdminRepository() *mockAdminRepository {
-	return &mockAdminRepository{
-		nextID: 1,
-	}
+	return &mockAdminRepository{}
 }
 
-func (m *mockAdminRepository) GetByID(id int64) (*models.Exercise, error) {
+func (m *mockAdminRepository) GetByID(id string) (*models.Exercise, error) {
 	if m.errGetByID != nil {
 		return nil, m.errGetByID
 	}
@@ -41,7 +37,7 @@ func (m *mockAdminRepository) GetByID(id int64) (*models.Exercise, error) {
 	return nil, nil
 }
 
-func (m *mockAdminRepository) Update(id int64, name string) (*models.Exercise, error) {
+func (m *mockAdminRepository) Update(id string, name string) (*models.Exercise, error) {
 	if m.errUpdate != nil {
 		return nil, m.errUpdate
 	}
@@ -57,9 +53,9 @@ func (m *mockAdminRepository) Update(id int64, name string) (*models.Exercise, e
 	return nil, nil
 }
 
-func (m *mockAdminRepository) CreateNoTx(name string) (int64, error) {
+func (m *mockAdminRepository) CreateNoTx(name string) (string, error) {
 	if m.errCreateNoTx != nil {
-		return 0, m.errCreateNoTx
+		return "", m.errCreateNoTx
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -68,8 +64,7 @@ func (m *mockAdminRepository) CreateNoTx(name string) (int64, error) {
 			return e.ID, nil
 		}
 	}
-	id := m.nextID
-	m.nextID++
+	id := "mock-id-" + name
 	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: name})
 	return id, nil
 }
@@ -88,8 +83,8 @@ func (m *mockAdminRepository) List() ([]models.Exercise, error) {
 func TestAdminController_List(t *testing.T) {
 	mock := newMockAdminRepository()
 	mock.exercises = []models.Exercise{
-		{ID: 1, Name: "Squat"},
-		{ID: 2, Name: "Bench Press"},
+		{ID: "ex-1", Name: "Squat"},
+		{ID: "ex-2", Name: "Bench Press"},
 	}
 
 	ctrl := NewAdminController(mock)
@@ -117,14 +112,14 @@ func TestAdminController_List_Error(t *testing.T) {
 func TestAdminController_Get(t *testing.T) {
 	mock := newMockAdminRepository()
 	mock.exercises = []models.Exercise{
-		{ID: 1, Name: "Squat"},
-		{ID: 2, Name: "Bench Press"},
+		{ID: "ex-1", Name: "Squat"},
+		{ID: "ex-2", Name: "Bench Press"},
 	}
 
 	ctrl := NewAdminController(mock)
 
 	t.Run("found", func(t *testing.T) {
-		ex, err := ctrl.Get(1)
+		ex, err := ctrl.Get("ex-1")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -134,7 +129,7 @@ func TestAdminController_Get(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		_, err := ctrl.Get(999)
+		_, err := ctrl.Get("non-existent")
 		if !errors.Is(err, ErrNotFound) {
 			t.Errorf("expected ErrNotFound, got %v", err)
 		}
@@ -142,7 +137,7 @@ func TestAdminController_Get(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		mock.errGetByID = errors.New("database error")
-		_, err := ctrl.Get(1)
+		_, err := ctrl.Get("ex-1")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -184,13 +179,13 @@ func TestAdminController_Create(t *testing.T) {
 func TestAdminController_Update(t *testing.T) {
 	mock := newMockAdminRepository()
 	mock.exercises = []models.Exercise{
-		{ID: 1, Name: "Squat"},
+		{ID: "ex-1", Name: "Squat"},
 	}
 
 	ctrl := NewAdminController(mock)
 
 	t.Run("success", func(t *testing.T) {
-		ex, err := ctrl.Update(1, "Front Squat")
+		ex, err := ctrl.Update("ex-1", "Front Squat")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -200,7 +195,7 @@ func TestAdminController_Update(t *testing.T) {
 	})
 
 	t.Run("empty name", func(t *testing.T) {
-		_, err := ctrl.Update(1, "   ")
+		_, err := ctrl.Update("ex-1", "   ")
 		if err == nil {
 			t.Fatal("expected error for empty name, got nil")
 		}
@@ -208,7 +203,7 @@ func TestAdminController_Update(t *testing.T) {
 
 	t.Run("repository error", func(t *testing.T) {
 		mock.errUpdate = errors.New("database error")
-		_, err := ctrl.Update(1, "Squat")
+		_, err := ctrl.Update("ex-1", "Squat")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}

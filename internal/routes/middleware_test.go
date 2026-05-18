@@ -156,7 +156,7 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 
 func TestAuthMiddleware_ValidToken(t *testing.T) {
 	jwtService := utils.NewJWTService("test-secret")
-	token, err := jwtService.GenerateToken(42, "alice@example.com", "Alice", false)
+	token, err := jwtService.GenerateToken("user-42", "alice@example.com", "Alice", false)
 	if err != nil {
 		t.Fatalf("failed to generate token: %v", err)
 	}
@@ -181,9 +181,9 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 		if claims == nil {
 			t.Fatal("expected claims to be set in context")
 		}
-		if claims.UserID != 42 {
-			t.Fatalf("expected user_id 42, got %d", claims.UserID)
-		}
+if claims.UserID != "user-42" {
+		t.Fatalf("expected user_id 'user-42', got %q", claims.UserID)
+	}
 		if claims.Email != "alice@example.com" {
 			t.Fatalf("expected email 'alice@example.com', got %q", claims.Email)
 		}
@@ -225,7 +225,7 @@ func TestGetClaims_Present(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	expected := &utils.Claims{
-		UserID:  7,
+		UserID:  "user-7",
 		Email:   "bob@example.com",
 		Name:    "Bob",
 		IsAdmin: true,
@@ -237,7 +237,7 @@ func TestGetClaims_Present(t *testing.T) {
 		t.Fatal("expected claims, got nil")
 	}
 	if claims.UserID != expected.UserID {
-		t.Fatalf("expected user_id %d, got %d", expected.UserID, claims.UserID)
+		t.Fatalf("expected user_id %q, got %q", expected.UserID, claims.UserID)
 	}
 	if claims.Email != expected.Email {
 		t.Fatalf("expected email %q, got %q", expected.Email, claims.Email)
@@ -249,7 +249,7 @@ func TestGetClaims_Present(t *testing.T) {
 
 func TestAuthMiddleware_ValidToken_HTMX(t *testing.T) {
 	jwtService := utils.NewJWTService("test-secret")
-	token, err := jwtService.GenerateToken(1, "test@example.com", "Test", false)
+	token, err := jwtService.GenerateToken("user-1", "test@example.com", "Test", false)
 	if err != nil {
 		t.Fatalf("failed to generate token: %v", err)
 	}

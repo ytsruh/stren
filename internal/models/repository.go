@@ -11,11 +11,15 @@ import (
 type Repository interface {
 	// Create creates a new exercise or returns the existing ID.
 	// If tx is provided, the operation runs within the transaction.
-	Create(tx *sql.Tx, name string) (int64, error)
+	Create(tx *sql.Tx, name string) (string, error)
 
 	// GetByName retrieves an exercise by its normalized name.
 	// Returns nil if not found.
 	GetByName(name string) (*Exercise, error)
+
+	// GetExerciseByID retrieves an exercise by its UUID.
+	// Returns nil if not found. Scopes to the given user ID.
+	GetExerciseByID(id string, userID string) (*Exercise, error)
 
 	// List returns all exercises ordered by name.
 	List() ([]Exercise, error)
@@ -25,41 +29,41 @@ type Repository interface {
 
 	// GetEntry retrieves a single entry by ID with its exercise name.
 	// Returns nil if not found. Scopes to the given user ID.
-	GetEntry(id int64, userID int64) (*ExerciseEntry, error)
+	GetEntry(id string, userID string) (*ExerciseEntry, error)
 
 	// UpdateEntry updates an existing entry without changing its created_at date.
 	// Scopes to the given user ID.
-	UpdateEntry(entry *ExerciseEntry, userID int64) error
+	UpdateEntry(entry *ExerciseEntry, userID string) error
 
 	// UpdateEntryWithDate updates an existing entry including its created_at date.
 	// Scopes to the given user ID.
-	UpdateEntryWithDate(entry *ExerciseEntry, userID int64) error
+	UpdateEntryWithDate(entry *ExerciseEntry, userID string) error
 
 	// DeleteEntry removes an entry by ID. Scopes to the given user ID.
-	DeleteEntry(id int64, userID int64) error
+	DeleteEntry(id string, userID string) error
 
 	// ListEntries returns entries ordered by created_at descending.
 	// If limit > 0, results are capped at that count. Scopes to the given user ID.
-	ListEntries(userID int64, limit int) ([]ExerciseEntry, error)
+	ListEntries(userID string, limit int) ([]ExerciseEntry, error)
 
 	// GetEntriesByExercise returns all entries for a specific exercise name.
 	// Scopes to the given user ID.
-	GetEntriesByExercise(exerciseName string, userID int64) ([]ExerciseEntry, error)
+	GetEntriesByExercise(exerciseName string, userID string) ([]ExerciseEntry, error)
 
 	// GetEntriesByDateRange returns entries within an inclusive date range.
 	// Scopes to the given user ID.
-	GetEntriesByDateRange(start, end time.Time, userID int64) ([]ExerciseEntry, error)
+	GetEntriesByDateRange(start, end time.Time, userID string) ([]ExerciseEntry, error)
 
 	// ListEntriesLast30Days returns entries from the last 30 days ordered by created_at descending.
 	// Scopes to the given user ID.
-	ListEntriesLast30Days(userID int64) ([]ExerciseEntry, error)
+	ListEntriesLast30Days(userID string) ([]ExerciseEntry, error)
 }
 
 // UserRepo defines the interface for user data access.
 type UserRepo interface {
 	CreateUser(user *User) error
 	GetUserByEmail(email string) (*User, error)
-	GetUserByID(id int64) (*User, error)
+	GetUserByID(id string) (*User, error)
 	UpdateUser(user *User) error
 }
 
@@ -78,6 +82,6 @@ var _ Repository = (*ExerciseRepository)(nil)
 type FeedbackRepoInterface interface {
 	Create(feedback *Feedback) error
 	GetAll(filter string) ([]*Feedback, error)
-	GetByID(id int64) (*Feedback, error)
-	UpdateStatus(id int64, isClosed bool) error
+	GetByID(id string) (*Feedback, error)
+	UpdateStatus(id string, isClosed bool) error
 }

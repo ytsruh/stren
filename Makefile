@@ -22,14 +22,12 @@ help:
 	@echo "  make css-build       - Build CSS with Tailwind CLI"
 	@echo "  make css-watch       - Watch and rebuild CSS on changes"
 	@echo "  make download-tailwind - Download Tailwind CLI binaries"
+	@echo "  make templ           - Regenerate Templ templates"
 	@echo "  make run             - Build and run the application"
 	@echo "  make dev             - Run with auto-restart (requires entr)"
 	@echo "  make generate        - Regenerate sqlc queries"
-	@echo "  make db-reset        - Delete and recreate database"
 	@echo "  make test            - Run tests"
 	@echo "  make test-cover      - Run tests with coverage report"
-	@echo "  make templ           - Regenerate Templ templates"
-	@echo "  make clean           - Remove built binary and database"
 	@echo ""
 
 # Download Tailwind CLI binaries for current platform
@@ -96,14 +94,6 @@ generate:
 	@which sqlc > /dev/null || (echo "Installing sqlc..." && go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest)
 	sqlc generate
 	@echo "✓ sqlc queries generated"
-
-# Reset database (delete - migrations run on next startup)
-.PHONY: db-reset
-db-reset:
-	@echo "Resetting database..."
-	@rm -f $(DB_FILE)
-	@rm -rf /data/*.db
-	@echo "✓ Database deleted. Migrations and seed data will run on next startup."
 
 # Run tests
 .PHONY: test

@@ -11,19 +11,25 @@ import (
 )
 
 const createFeedback = `-- name: CreateFeedback :one
-INSERT INTO feedback (user_id, title, message)
-VALUES (?, ?, ?)
+INSERT INTO feedback (id, user_id, title, message)
+VALUES (?, ?, ?, ?)
 RETURNING id, user_id, title, message, is_closed, created_at, updated_at
 `
 
 type CreateFeedbackParams struct {
-	UserID  int64
+	ID      string
+	UserID  string
 	Title   string
 	Message string
 }
 
 func (q *Queries) CreateFeedback(ctx context.Context, arg CreateFeedbackParams) (Feedback, error) {
-	row := q.db.QueryRowContext(ctx, createFeedback, arg.UserID, arg.Title, arg.Message)
+	row := q.db.QueryRowContext(ctx, createFeedback,
+		arg.ID,
+		arg.UserID,
+		arg.Title,
+		arg.Message,
+	)
 	var i Feedback
 	err := row.Scan(
 		&i.ID,
@@ -45,8 +51,8 @@ ORDER BY f.created_at DESC
 `
 
 type GetAllRow struct {
-	ID        int64
-	UserID    int64
+	ID        string
+	UserID    string
 	Title     string
 	Message   string
 	IsClosed  int64
@@ -96,8 +102,8 @@ ORDER BY f.created_at DESC
 `
 
 type GetAllClosedRow struct {
-	ID        int64
-	UserID    int64
+	ID        string
+	UserID    string
 	Title     string
 	Message   string
 	IsClosed  int64
@@ -147,8 +153,8 @@ ORDER BY f.created_at DESC
 `
 
 type GetAllOpenRow struct {
-	ID        int64
-	UserID    int64
+	ID        string
+	UserID    string
 	Title     string
 	Message   string
 	IsClosed  int64
@@ -197,8 +203,8 @@ WHERE f.id = ?
 `
 
 type GetFeedbackByIDRow struct {
-	ID        int64
-	UserID    int64
+	ID        string
+	UserID    string
 	Title     string
 	Message   string
 	IsClosed  int64
@@ -207,7 +213,7 @@ type GetFeedbackByIDRow struct {
 	UserName  sql.NullString
 }
 
-func (q *Queries) GetFeedbackByID(ctx context.Context, id int64) (GetFeedbackByIDRow, error) {
+func (q *Queries) GetFeedbackByID(ctx context.Context, id string) (GetFeedbackByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getFeedbackByID, id)
 	var i GetFeedbackByIDRow
 	err := row.Scan(
@@ -232,7 +238,7 @@ RETURNING id, user_id, title, message, is_closed, created_at, updated_at
 
 type UpdateStatusParams struct {
 	IsClosed int64
-	ID       int64
+	ID       string
 }
 
 func (q *Queries) UpdateStatus(ctx context.Context, arg UpdateStatusParams) (Feedback, error) {

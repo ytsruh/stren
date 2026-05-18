@@ -4,7 +4,7 @@ import "time"
 
 // User represents an authenticated user of the strength tracker.
 type User struct {
-	ID           int64
+	ID           string
 	Name         string
 	Email        string
 	PasswordHash string

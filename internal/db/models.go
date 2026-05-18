@@ -9,14 +9,14 @@ import (
 )
 
 type Exercise struct {
-	ID   int64
+	ID   string
 	Name string
 }
 
 type ExerciseEntry struct {
-	ID         int64
-	ExerciseID int64
-	UserID     sql.NullInt64
+	ID         string
+	ExerciseID string
+	UserID     sql.NullString
 	Reps       int64
 	Weight     float64
 	Notes      sql.NullString
@@ -24,8 +24,8 @@ type ExerciseEntry struct {
 }
 
 type Feedback struct {
-	ID        int64
-	UserID    int64
+	ID        string
+	UserID    string
 	Title     string
 	Message   string
 	IsClosed  int64
@@ -34,7 +34,7 @@ type Feedback struct {
 }
 
 type User struct {
-	ID           int64
+	ID           string
 	Name         string
 	Email        string
 	PasswordHash string

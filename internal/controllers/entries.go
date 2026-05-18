@@ -18,22 +18,22 @@ func NewEntryController(repo models.Repository) *EntryController {
 }
 
 // ListEntries returns the latest entries for a user.
-func (ec *EntryController) ListEntries(userID int64) ([]models.ExerciseEntry, error) {
+func (ec *EntryController) ListEntries(userID string) ([]models.ExerciseEntry, error) {
 	return ec.repo.ListEntries(userID, 100)
 }
 
 // ListEntriesLast30Days returns entries from the last 30 days for a user.
-func (ec *EntryController) ListEntriesLast30Days(userID int64) ([]models.ExerciseEntry, error) {
+func (ec *EntryController) ListEntriesLast30Days(userID string) ([]models.ExerciseEntry, error) {
 	return ec.repo.ListEntriesLast30Days(userID)
 }
 
 // GetEntry retrieves a single entry by ID, scoped to the user.
-func (ec *EntryController) GetEntry(id, userID int64) (*models.ExerciseEntry, error) {
+func (ec *EntryController) GetEntry(id, userID string) (*models.ExerciseEntry, error) {
 	return ec.repo.GetEntry(id, userID)
 }
 
 // CreateEntry creates a new exercise entry for the given user.
-func (ec *EntryController) CreateEntry(userID int64, exerciseName, notes string, reps int, weight float64) (*models.ExerciseEntry, error) {
+func (ec *EntryController) CreateEntry(userID string, exerciseName, notes string, reps int, weight float64) (*models.ExerciseEntry, error) {
 	entry := &models.ExerciseEntry{
 		ExerciseName: exerciseName,
 		Notes:        notes,
@@ -49,7 +49,7 @@ func (ec *EntryController) CreateEntry(userID int64, exerciseName, notes string,
 }
 
 // UpdateEntry updates an existing entry, including its timestamp.
-func (ec *EntryController) UpdateEntry(id, userID int64, exerciseName, notes string, reps int, weight float64, createdAt time.Time) (*models.ExerciseEntry, error) {
+func (ec *EntryController) UpdateEntry(id, userID string, exerciseName, notes string, reps int, weight float64, createdAt time.Time) (*models.ExerciseEntry, error) {
 	entry := &models.ExerciseEntry{
 		ID:           id,
 		ExerciseName: exerciseName,
@@ -66,7 +66,7 @@ func (ec *EntryController) UpdateEntry(id, userID int64, exerciseName, notes str
 }
 
 // DeleteEntry removes an entry by ID, scoped to the user.
-func (ec *EntryController) DeleteEntry(id, userID int64) error {
+func (ec *EntryController) DeleteEntry(id, userID string) error {
 	return ec.repo.DeleteEntry(id, userID)
 }
 
@@ -76,6 +76,11 @@ func (ec *EntryController) List() ([]models.Exercise, error) {
 }
 
 // GetEntriesByExercise returns all entries for a specific exercise name.
-func (ec *EntryController) GetEntriesByExercise(exerciseName string, userID int64) ([]models.ExerciseEntry, error) {
+func (ec *EntryController) GetEntriesByExercise(exerciseName string, userID string) ([]models.ExerciseEntry, error) {
 	return ec.repo.GetEntriesByExercise(exerciseName, userID)
+}
+
+// GetExerciseByID returns an exercise by its UUID.
+func (ec *EntryController) GetExerciseByID(id, userID string) (*models.Exercise, error) {
+	return ec.repo.GetExerciseByID(id, userID)
 }

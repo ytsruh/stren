@@ -12,7 +12,7 @@ const CookieName = "auth_token"
 
 // Claims represents the JWT claims for an authenticated user.
 type Claims struct {
-	UserID  int64  `json:"user_id"`
+	UserID  string `json:"user_id"`
 	Email   string `json:"email"`
 	Name    string `json:"name"`
 	IsAdmin bool   `json:"is_admin"`
@@ -31,7 +31,7 @@ func NewJWTService(secret string) *JWTService {
 
 // GenerateToken creates a new JWT token for the given user details.
 // Tokens expire after 7 days.
-func (s *JWTService) GenerateToken(userID int64, email, name string, isAdmin bool) (string, error) {
+func (s *JWTService) GenerateToken(userID string, email, name string, isAdmin bool) (string, error) {
 	claims := Claims{
 		UserID:  userID,
 		Email:   email,

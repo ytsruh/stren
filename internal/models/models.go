@@ -7,15 +7,15 @@ import (
 
 // Exercise represents a normalized exercise name
 type Exercise struct {
-	ID   int64
+	ID   string
 	Name string
 }
 
 // ExerciseEntry represents a single set of an exercise
 type ExerciseEntry struct {
-	ID           int64
-	ExerciseID   int64
-	UserID       int64
+	ID           string
+	ExerciseID   string
+	UserID       string
 	ExerciseName string
 	Reps         int
 	Weight       float64

@@ -122,7 +122,7 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 									}
 								</td>
 								<td>
-									<a href={ templ.URL(fmt.Sprintf("/admin/feedback/%d", f.ID)) } class="btn-outline text-sm py-1">
+									<a href={ templ.URL(fmt.Sprintf("/admin/feedback/%s", f.ID)) } class="btn-outline text-sm py-1">
 										View
 									</a>
 								</td>
@@ -200,7 +200,7 @@ templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenti
 			<div class="flex gap-3 py-5 justify-between">
 				<button
 					type="button"
-					hx-post={ fmt.Sprintf("/admin/feedback/%d/close", feedback.ID) }
+					hx-post={ fmt.Sprintf("/admin/feedback/%s/close", feedback.ID) }
 					hx-indicator="#close-spinner"
 					hx-target="#close-result"
 					hx-swap="innerHTML"

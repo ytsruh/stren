@@ -26,7 +26,7 @@ func (ac *AdminController) List() ([]models.Exercise, error) {
 }
 
 // Get retrieves a single exercise by ID.
-func (ac *AdminController) Get(id int64) (*models.Exercise, error) {
+func (ac *AdminController) Get(id string) (*models.Exercise, error) {
 	exercise, err := ac.repo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (ac *AdminController) Create(name string) (*models.Exercise, error) {
 }
 
 // Update updates an existing exercise's name.
-func (ac *AdminController) Update(id int64, name string) (*models.Exercise, error) {
+func (ac *AdminController) Update(id string, name string) (*models.Exercise, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("exercise name cannot be empty")

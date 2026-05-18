@@ -3,7 +3,6 @@ package routes
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -60,10 +59,7 @@ func (h *Handler) AdminCreateExercise(c echo.Context) error {
 
 // AdminEditExerciseForm renders the form for editing an existing exercise.
 func (h *Handler) AdminEditExerciseForm(c echo.Context) error {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid exercise ID")
-	}
+	id := c.Param("id")
 
 	exercise, err := h.adminCtrl.Get(id)
 	if err != nil {
@@ -79,17 +75,14 @@ func (h *Handler) AdminEditExerciseForm(c echo.Context) error {
 
 // AdminUpdateExercise handles updating an existing exercise.
 func (h *Handler) AdminUpdateExercise(c echo.Context) error {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid exercise ID")
-	}
+	id := c.Param("id")
 
 	name := c.FormValue("name")
 	if name == "" {
 		return render(c, views.AdminExerciseFormError("Exercise name is required"))
 	}
 
-	_, err = h.adminCtrl.Update(id, name)
+	_, err := h.adminCtrl.Update(id, name)
 	if err != nil {
 		if errors.Is(err, controllers.ErrNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "Exercise not found")

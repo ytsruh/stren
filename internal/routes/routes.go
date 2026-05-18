@@ -82,7 +82,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.DELETE("/entries/:id", h.DeleteEntry)
 
 	// Exercise history
-	e.GET("/exercises/:name", h.ExerciseHistory)
+	e.GET("/exercises/:id", h.ExerciseHistory)
 
 	// Feedback
 	e.GET("/feedback", h.FeedbackForm)

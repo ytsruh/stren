@@ -36,7 +36,7 @@ templ AdminExerciseList(exercises []models.Exercise, userName string, isAuthenti
 							<td>
 								<div class="flex gap-2">
 									<a
-										href={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%d/edit", e.ID)) }
+										href={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%s/edit", e.ID)) }
 										class="btn-outline p-2"
 										title="Edit"
 									>
@@ -68,7 +68,7 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 		}
 
 		if data.IsEdit {
-			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%d", data.Exercise.ID)) } class="form grid gap-6">
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%s", data.Exercise.ID)) } class="form grid gap-6">
 				<fieldset class="grid gap-4">
 					<div class="grid gap-2">
 						<label for="name">Exercise Name</label>
