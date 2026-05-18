@@ -49,6 +49,10 @@ type Repository interface {
 	// GetEntriesByDateRange returns entries within an inclusive date range.
 	// Scopes to the given user ID.
 	GetEntriesByDateRange(start, end time.Time, userID int64) ([]ExerciseEntry, error)
+
+	// ListEntriesLast30Days returns entries from the last 30 days ordered by created_at descending.
+	// Scopes to the given user ID.
+	ListEntriesLast30Days(userID int64) ([]ExerciseEntry, error)
 }
 
 // UserRepo defines the interface for user data access.

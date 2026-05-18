@@ -16,7 +16,7 @@ import (
 // Dashboard renders the main dashboard page.
 func (h *Handler) Dashboard(c echo.Context) error {
 	claims := GetClaims(c)
-	entries, err := h.entryCtrl.ListEntries(claims.UserID)
+	entries, err := h.entryCtrl.ListEntriesLast30Days(claims.UserID)
 	if err != nil {
 		return err
 	}

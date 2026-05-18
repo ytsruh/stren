@@ -216,6 +216,22 @@ func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID int6
 	return result, nil
 }
 
+func (m *mockRepository) ListEntriesLast30Days(userID int64) ([]models.ExerciseEntry, error) {
+	if m.errListEntries != nil {
+		return nil, m.errListEntries
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+	var result []models.ExerciseEntry
+	for _, e := range m.entries {
+		if e.CreatedAt.After(thirtyDaysAgo) && e.UserID == userID {
+			result = append(result, e)
+		}
+	}
+	return result, nil
+}
+
 
 
 func setupEntryController(t *testing.T) (*EntryController, *mockRepository) {

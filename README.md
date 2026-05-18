@@ -8,6 +8,7 @@ A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS +
 - User based authentication
 - Track individual exercise sets with weight (in kg), set number, and notes
 - Exercise history view showing all sets for a specific exercise
+- Rest/countdown timer & an EMOM timer
 
 ## Environment Variables
 

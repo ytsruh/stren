@@ -10,12 +10,19 @@ import (
 // Dashboard renders the main dashboard page
 templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		<div class="flex justify-between items-center mb-6">
-			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Workout History"})
-		</div>
+		<section class="mb-8">
+			<div class="grid grid-cols-3 gap-2 sm:gap-4">
+				@components.ActionCard(components.ActionCardProps{Label: "Add Entry", Href: "/entries/new", Icon: "plus"})
+				@components.ActionCard(components.ActionCardProps{Label: "Timer", Href: "/timer", Icon: "timer"})
+				@components.ActionCard(components.ActionCardProps{Label: "EMOM", Href: "/timer/emom", Icon: "emom"})
+			</div>
+		</section>
 		if len(entries) == 0 {
 			@EmptyState()
 		} else {
+			<div class="flex justify-between items-center mb-6">
+				@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Workout History"})
+			</div>
 			@EntryList(entries)
 		}
 	}

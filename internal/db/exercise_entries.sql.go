@@ -256,6 +256,57 @@ func (q *Queries) ListEntries(ctx context.Context, userID sql.NullInt64) ([]List
 	return items, nil
 }
 
+const listEntriesLast30Days = `-- name: ListEntriesLast30Days :many
+SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.created_at
+FROM exercise_entries e
+JOIN exercises t ON e.exercise_id = t.id
+WHERE e.created_at >= datetime('now', '-30 days') AND e.user_id = ?
+ORDER BY e.created_at DESC
+`
+
+type ListEntriesLast30DaysRow struct {
+	ID           int64
+	ExerciseID   int64
+	ExerciseName string
+	UserID       sql.NullInt64
+	Reps         int64
+	Weight       float64
+	Notes        sql.NullString
+	CreatedAt    sql.NullTime
+}
+
+func (q *Queries) ListEntriesLast30Days(ctx context.Context, userID sql.NullInt64) ([]ListEntriesLast30DaysRow, error) {
+	rows, err := q.db.QueryContext(ctx, listEntriesLast30Days, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEntriesLast30DaysRow
+	for rows.Next() {
+		var i ListEntriesLast30DaysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExerciseID,
+			&i.ExerciseName,
+			&i.UserID,
+			&i.Reps,
+			&i.Weight,
+			&i.Notes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEntriesWithLimit = `-- name: ListEntriesWithLimit :many
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.created_at
 FROM exercise_entries e

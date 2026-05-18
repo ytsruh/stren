@@ -28,6 +28,7 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	List(ctx context.Context) ([]Exercise, error)
 	ListEntries(ctx context.Context, userID sql.NullInt64) ([]ListEntriesRow, error)
+	ListEntriesLast30Days(ctx context.Context, userID sql.NullInt64) ([]ListEntriesLast30DaysRow, error)
 	ListEntriesWithLimit(ctx context.Context, arg ListEntriesWithLimitParams) ([]ListEntriesWithLimitRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	Update(ctx context.Context, arg UpdateParams) (Exercise, error)

@@ -22,6 +22,11 @@ func (ec *EntryController) ListEntries(userID int64) ([]models.ExerciseEntry, er
 	return ec.repo.ListEntries(userID, 100)
 }
 
+// ListEntriesLast30Days returns entries from the last 30 days for a user.
+func (ec *EntryController) ListEntriesLast30Days(userID int64) ([]models.ExerciseEntry, error) {
+	return ec.repo.ListEntriesLast30Days(userID)
+}
+
 // GetEntry retrieves a single entry by ID, scoped to the user.
 func (ec *EntryController) GetEntry(id, userID int64) (*models.ExerciseEntry, error) {
 	return ec.repo.GetEntry(id, userID)
