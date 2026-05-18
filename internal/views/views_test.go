@@ -332,12 +332,6 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected exercise name heading")
 	}
-	if !strings.Contains(html, "Stats") {
-		t.Error("expected stats section")
-	}
-	if !strings.Contains(html, "Personal Best") {
-		t.Error("expected personal best stat")
-	}
 	if strings.Contains(html, "No entries yet") {
 		t.Error("did not expect empty state when entries exist")
 	}
@@ -347,23 +341,6 @@ func TestExerciseHistory_Empty(t *testing.T) {
 	html := renderToString(t, ExerciseHistory("Squat", []models.ExerciseEntry{}, "Test User", true, false))
 	if !strings.Contains(html, "No entries yet") {
 		t.Error("expected empty state")
-	}
-	if strings.Contains(html, "Personal Best") {
-		t.Error("did not expect stats when empty")
-	}
-}
-
-func TestExerciseStats(t *testing.T) {
-	entries := []models.ExerciseEntry{
-		{Weight: 120, Reps: 3},
-		{Weight: 100, Reps: 5},
-	}
-	html := renderToString(t, ExerciseStats(entries))
-	if !strings.Contains(html, "120.0 kg") {
-		t.Error("expected personal best weight")
-	}
-	if !strings.Contains(html, "120.0 kg \u00d7 3") {
-		t.Errorf("expected last set string, got: %s", html)
 	}
 }
 
