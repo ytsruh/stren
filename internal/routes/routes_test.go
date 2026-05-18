@@ -445,8 +445,9 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	adminCtrl := controllers.NewAdminController(mock)
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
+	timerCtrl := controllers.NewTimerController()
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, mockUser, jwtService, validator)
+	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, mockUser, jwtService, validator)
 	return h, mock, mockUser, e
 }
 

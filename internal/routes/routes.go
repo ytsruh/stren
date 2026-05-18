@@ -25,19 +25,21 @@ type Handler struct {
 	adminCtrl       *controllers.AdminController
 	adminUserCtrl   *controllers.AdminUserController
 	feedbackCtrl    *controllers.FeedbackController
+	timerCtrl       *controllers.TimerController
 	userRepo        models.UserRepo
 	jwtService      *utils.JWTService
 	validator       utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timerCtrl *controllers.TimerController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
 		authCtrl:        authCtrl,
 		entryCtrl:       entryCtrl,
 		adminCtrl:       adminCtrl,
 		adminUserCtrl:   adminUserCtrl,
 		feedbackCtrl:    feedbackCtrl,
+		timerCtrl:       timerCtrl,
 		userRepo:         userRepo,
 		jwtService:       jwtService,
 		validator:        validator,
@@ -83,6 +85,10 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	// Feedback
 	e.GET("/feedback", h.FeedbackForm)
 	e.POST("/feedback", h.SubmitFeedback)
+
+	// Timer
+	e.GET("/timer", h.TimerPage)
+	e.POST("/timer/error", h.TimerValidationError)
 
 	// Admin routes
 	admin := e.Group("/admin", AdminMiddleware())
