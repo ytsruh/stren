@@ -20,6 +20,7 @@ type ExerciseEntry struct {
 	Reps       int64
 	Weight     float64
 	Notes      sql.NullString
+	RestTime   int64
 	CreatedAt  sql.NullTime
 }
 

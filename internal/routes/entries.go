@@ -46,7 +46,7 @@ func (h *Handler) CreateEntry(c echo.Context) error {
 	if exerciseName == "" {
 		return render(c, views.EntryFormError("Exercise name is required"))
 	}
-	_, err = h.entryCtrl.CreateEntry(claims.UserID, exerciseName, entry.Notes, entry.Reps, entry.Weight)
+	_, err = h.entryCtrl.CreateEntry(claims.UserID, exerciseName, entry.Notes, entry.Reps, entry.Weight, entry.RestTime)
 	if err != nil {
 		return render(c, views.EntryFormError("Failed to save entry: "+err.Error()))
 	}
@@ -121,7 +121,7 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 		}
 	}
 
-	_, err = h.entryCtrl.UpdateEntry(id, claims.UserID, existing.ExerciseName, entry.Notes, entry.Reps, entry.Weight, createdAt)
+	_, err = h.entryCtrl.UpdateEntry(id, claims.UserID, existing.ExerciseName, entry.Notes, entry.Reps, entry.Weight, entry.RestTime, createdAt)
 	if err != nil {
 		return render(c, views.EntryFormError("Failed to update entry: "+err.Error()))
 	}

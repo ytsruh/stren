@@ -33,12 +33,13 @@ func (ec *EntryController) GetEntry(id, userID string) (*models.ExerciseEntry, e
 }
 
 // CreateEntry creates a new exercise entry for the given user.
-func (ec *EntryController) CreateEntry(userID string, exerciseName, notes string, reps int, weight float64) (*models.ExerciseEntry, error) {
+func (ec *EntryController) CreateEntry(userID string, exerciseName, notes string, reps int, weight float64, restTime int) (*models.ExerciseEntry, error) {
 	entry := &models.ExerciseEntry{
 		ExerciseName: exerciseName,
 		Notes:        notes,
 		Reps:         reps,
 		Weight:       weight,
+		RestTime:     restTime,
 		UserID:       userID,
 		CreatedAt:    time.Now(),
 	}
@@ -49,13 +50,14 @@ func (ec *EntryController) CreateEntry(userID string, exerciseName, notes string
 }
 
 // UpdateEntry updates an existing entry, including its timestamp.
-func (ec *EntryController) UpdateEntry(id, userID string, exerciseName, notes string, reps int, weight float64, createdAt time.Time) (*models.ExerciseEntry, error) {
+func (ec *EntryController) UpdateEntry(id, userID string, exerciseName, notes string, reps int, weight float64, restTime int, createdAt time.Time) (*models.ExerciseEntry, error) {
 	entry := &models.ExerciseEntry{
 		ID:           id,
 		ExerciseName: exerciseName,
 		Notes:        notes,
 		Reps:         reps,
 		Weight:       weight,
+		RestTime:     restTime,
 		UserID:       userID,
 		CreatedAt:    createdAt,
 	}

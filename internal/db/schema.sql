@@ -20,6 +20,7 @@ CREATE TABLE exercise_entries (
     reps INTEGER NOT NULL,
     weight REAL NOT NULL,
     notes TEXT,
+    rest_time INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id)
 );

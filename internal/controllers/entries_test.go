@@ -316,7 +316,7 @@ func TestEntryController_GetEntry_WrongUser(t *testing.T) {
 func TestEntryController_CreateEntry(t *testing.T) {
 	ec, _ := setupEntryController(t)
 
-	entry, err := ec.CreateEntry("user-1", "Squat", "great set", 5, 100)
+	entry, err := ec.CreateEntry("user-1", "Squat", "great set", 5, 100, 60)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestEntryController_CreateEntry_RepositoryError(t *testing.T) {
 	ec, mock := setupEntryController(t)
 	mock.errCreateEntry = errors.New("db error")
 
-	_, err := ec.CreateEntry("user-1", "Squat", "great set", 5, 100)
+	_, err := ec.CreateEntry("user-1", "Squat", "great set", 5, 100, 60)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -345,7 +345,7 @@ func TestEntryController_UpdateEntry(t *testing.T) {
 		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	entry, err := ec.UpdateEntry("entry-1", "user-1", "Squat", "even better", 6, 110, time.Now())
+	entry, err := ec.UpdateEntry("entry-1", "user-1", "Squat", "even better", 6, 110, 90, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

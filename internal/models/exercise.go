@@ -125,6 +125,7 @@ func (r *ExerciseRepository) CreateEntry(entry *ExerciseEntry) error {
 			Reps:       int64(entry.Reps),
 			Weight:     entry.Weight,
 			Notes:      stringToNullString(entry.Notes),
+			RestTime:   int64(entry.RestTime),
 			CreatedAt:  timeToNullTime(entry.CreatedAt),
 		})
 		if err != nil {
@@ -171,6 +172,7 @@ func (r *ExerciseRepository) UpdateEntry(entry *ExerciseEntry, userID string) er
 			Reps:       int64(entry.Reps),
 			Weight:     entry.Weight,
 			Notes:      stringToNullString(entry.Notes),
+			RestTime:   int64(entry.RestTime),
 			ID:         entry.ID,
 			UserID:     sql.NullString{String: userID, Valid: true},
 		})
@@ -200,6 +202,7 @@ func (r *ExerciseRepository) UpdateEntryWithDate(entry *ExerciseEntry, userID st
 			Reps:       int64(entry.Reps),
 			Weight:     entry.Weight,
 			Notes:      stringToNullString(entry.Notes),
+			RestTime:   int64(entry.RestTime),
 			CreatedAt:  timeToNullTime(entry.CreatedAt),
 			ID:         entry.ID,
 			UserID:     sql.NullString{String: userID, Valid: true},
@@ -304,6 +307,7 @@ func mapGetEntryRow(row db.GetEntryRow) *ExerciseEntry {
 		Reps:         int(row.Reps),
 		Weight:       row.Weight,
 		Notes:        nullStringToString(row.Notes),
+		RestTime:     int(row.RestTime),
 		CreatedAt:    nullTimeToTime(row.CreatedAt),
 	}
 }
@@ -319,6 +323,7 @@ func mapListEntriesRows(rows []db.ListEntriesRow) []ExerciseEntry {
 			Reps:         int(row.Reps),
 			Weight:       row.Weight,
 			Notes:        nullStringToString(row.Notes),
+			RestTime:     int(row.RestTime),
 			CreatedAt:    nullTimeToTime(row.CreatedAt),
 		}
 	}
@@ -336,6 +341,7 @@ func mapListEntriesWithLimitRows(rows []db.ListEntriesWithLimitRow) []ExerciseEn
 			Reps:         int(row.Reps),
 			Weight:       row.Weight,
 			Notes:        nullStringToString(row.Notes),
+			RestTime:     int(row.RestTime),
 			CreatedAt:    nullTimeToTime(row.CreatedAt),
 		}
 	}
@@ -353,6 +359,7 @@ func mapGetEntriesByExerciseRows(rows []db.GetEntriesByExerciseRow) []ExerciseEn
 			Reps:         int(row.Reps),
 			Weight:       row.Weight,
 			Notes:        nullStringToString(row.Notes),
+			RestTime:     int(row.RestTime),
 			CreatedAt:    nullTimeToTime(row.CreatedAt),
 		}
 	}
@@ -370,6 +377,7 @@ func mapGetEntriesByDateRangeRows(rows []db.GetEntriesByDateRangeRow) []Exercise
 			Reps:         int(row.Reps),
 			Weight:       row.Weight,
 			Notes:        nullStringToString(row.Notes),
+			RestTime:     int(row.RestTime),
 			CreatedAt:    nullTimeToTime(row.CreatedAt),
 		}
 	}
@@ -387,6 +395,7 @@ func mapListEntriesLast30DaysRows(rows []db.ListEntriesLast30DaysRow) []Exercise
 			Reps:         int(row.Reps),
 			Weight:       row.Weight,
 			Notes:        nullStringToString(row.Notes),
+			RestTime:     int(row.RestTime),
 			CreatedAt:    nullTimeToTime(row.CreatedAt),
 		}
 	}

@@ -20,6 +20,7 @@ type ExerciseEntry struct {
 	Reps         int
 	Weight       float64
 	Notes        string
+	RestTime     int
 	CreatedAt    time.Time
 }
 

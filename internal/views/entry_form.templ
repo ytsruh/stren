@@ -33,7 +33,7 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 						}
 					</select>
 				</div>
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-col-1 sm:grid-cols-3 gap-4">
 					<div class="grid gap-2">
 						<label for="reps">Reps</label>
 						<input
@@ -57,6 +57,18 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 							min="0"
 							placeholder="0.0"
 							required
+						/>
+					</div>
+					<div class="grid gap-2">
+						<label for="rest_time">Rest time (seconds)</label>
+						<input
+							class="input"
+							type="number"
+							id="rest_time"
+							name="rest_time"
+							min="0"
+							max="3600"
+							placeholder="0"
 						/>
 					</div>
 				</div>
@@ -128,7 +140,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 						disabled
 					/>
 				</div>
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-3 gap-4">
 					<div class="grid gap-2">
 						<label for="reps">Reps</label>
 						<input
@@ -154,6 +166,19 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 							value={ fmt.Sprintf("%.1f", entry.Weight) }
 							placeholder="0.0"
 							required
+						/>
+					</div>
+					<div class="grid gap-2">
+						<label for="rest_time">Rest time (seconds)</label>
+						<input
+							class="input"
+							type="number"
+							id="rest_time"
+							name="rest_time"
+							min="0"
+							max="3600"
+							value={ fmt.Sprintf("%d", entry.RestTime) }
+							placeholder="0"
 						/>
 					</div>
 				</div>
