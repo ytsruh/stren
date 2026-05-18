@@ -9,7 +9,9 @@ import (
 )
 
 func (h *Handler) EMOMPage(c echo.Context) error {
-	return h.emomCtrl.EMOMPage(c)
+	claims := GetClaims(c)
+	isAdmin := claims != nil && claims.IsAdmin
+	return h.emomCtrl.EMOMPage(c, isAdmin)
 }
 
 func (h *Handler) EMOMValidationError(c echo.Context) error {

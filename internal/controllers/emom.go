@@ -12,10 +12,11 @@ func NewEMOMController() *EMOMController {
 	return &EMOMController{}
 }
 
-func (ec *EMOMController) EMOMPage(c echo.Context) error {
+func (ec *EMOMController) EMOMPage(c echo.Context, isAdmin bool) error {
 	data := views.PageData{
 		Title:           "EMOM Timer",
 		IsAuthenticated: true,
+		IsAdmin:         isAdmin,
 	}
 	return views.EMOMPage(data).Render(c.Request().Context(), c.Response())
 }
