@@ -105,6 +105,17 @@ templ Layout(data PageData) {
 											<span>Timer</span>
 										</a>
 									</li>
+									<li>
+										<a
+											href="/timer/emom"
+											if data.CurrentPath == "/timer/emom" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "emom", Size: 18})
+											<span>EMOM</span>
+										</a>
+									</li>
 								</ul>
 							</div>
 							if data.IsAdmin {

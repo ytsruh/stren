@@ -446,8 +446,9 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	timerCtrl := controllers.NewTimerController()
+	emomCtrl := controllers.NewEMOMController()
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, mockUser, jwtService, validator)
+	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, mockUser, jwtService, validator)
 	return h, mock, mockUser, e
 }
 
@@ -1473,11 +1474,74 @@ func TestLogout(t *testing.T) {
 		t.Fatalf("expected redirect to '/login', got %q", loc)
 	}
 
-	// Verify cookie is cleared
 	cookies := rec.Result().Cookies()
 	for _, cookie := range cookies {
 		if cookie.Name == utils.CookieName && cookie.MaxAge >= 0 {
 			t.Fatal("expected auth cookie to be cleared")
 		}
+	}
+}
+
+func TestEMOMPage(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/timer/emom", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
+
+	if err := h.EMOMPage(c); err != nil {
+		t.Fatalf("EMOMPage failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "EMOM") {
+		t.Fatalf("expected emom page, got %q", body)
+	}
+}
+
+func TestEMOMValidationError(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/timer/emom/error", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
+
+	if err := h.EMOMValidationError(c); err != nil {
+		t.Fatalf("EMOMValidationError failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Invalid Rounds") {
+		t.Fatalf("expected toast error, got %q", body)
+	}
+}
+
+func TestEMOMRoundToast(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("round", "3")
+
+	req := httptest.NewRequest(http.MethodPost, "/timer/emom/round", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
+
+	if err := h.EMOMRoundToast(c); err != nil {
+		t.Fatalf("EMOMRoundToast failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Round 3 Complete") {
+		t.Fatalf("expected toast with round number, got %q", body)
 	}
 }

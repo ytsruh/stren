@@ -26,13 +26,14 @@ type Handler struct {
 	adminUserCtrl   *controllers.AdminUserController
 	feedbackCtrl    *controllers.FeedbackController
 	timerCtrl       *controllers.TimerController
+	emomCtrl        *controllers.EMOMController
 	userRepo        models.UserRepo
 	jwtService      *utils.JWTService
 	validator       utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timerCtrl *controllers.TimerController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timerCtrl *controllers.TimerController, emomCtrl *controllers.EMOMController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
 		authCtrl:        authCtrl,
 		entryCtrl:       entryCtrl,
@@ -40,6 +41,7 @@ func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.Ent
 		adminUserCtrl:   adminUserCtrl,
 		feedbackCtrl:    feedbackCtrl,
 		timerCtrl:       timerCtrl,
+		emomCtrl:        emomCtrl,
 		userRepo:         userRepo,
 		jwtService:       jwtService,
 		validator:        validator,
@@ -89,6 +91,11 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	// Timer
 	e.GET("/timer", h.TimerPage)
 	e.POST("/timer/error", h.TimerValidationError)
+
+	// EMOM
+	e.GET("/timer/emom", h.EMOMPage)
+	e.POST("/timer/emom/error", h.EMOMValidationError)
+	e.POST("/timer/emom/round", h.EMOMRoundToast)
 
 	// Admin routes
 	admin := e.Group("/admin", AdminMiddleware())
