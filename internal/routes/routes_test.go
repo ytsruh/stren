@@ -1202,6 +1202,46 @@ func TestRegisterForm(t *testing.T) {
 	}
 }
 
+func TestTimerPage(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/timer", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
+
+	if err := h.TimerPage(c); err != nil {
+		t.Fatalf("TimerPage failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Timer") {
+		t.Fatalf("expected timer page, got %q", body)
+	}
+}
+
+func TestTimerValidationError(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/timer/error", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, 1, "test@example.com", "Test User", false)
+
+	if err := h.TimerValidationError(c); err != nil {
+		t.Fatalf("TimerValidationError failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Invalid Duration") {
+		t.Fatalf("expected toast error, got %q", body)
+	}
+}
+
 func TestRegisterAndLogin(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 

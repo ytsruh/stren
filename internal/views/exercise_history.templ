@@ -27,7 +27,10 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 				</section>
 			</div>
 		} else {
-			@ExerciseStats(entries)
+			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6 mb-6">
+				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: getLastSet(entries)})
+				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
+			</div>
 			<h3 class="flex items-center gap-2 mb-4">
 				@components.Icon(components.IconProps{Name: "trending-up", Size: 20})
 				History
@@ -79,18 +82,6 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 			</div>
 		}
 	}
-}
-
-// ExerciseStats shows statistics for an exercise
-templ ExerciseStats(entries []models.ExerciseEntry) {
-	<h3 class="flex items-center gap-2 mb-4">
-		@components.Icon(components.IconProps{Name: "trending-up", Size: 20})
-		Stats
-	</h3>
-	<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-		@components.StatCard(components.StatCardProps{Label: "Last Set", Value: getLastSet(entries)})
-		@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
-	</div>
 }
 
 // Helper functions
