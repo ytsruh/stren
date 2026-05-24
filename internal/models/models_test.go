@@ -73,3 +73,55 @@ func TestExerciseEntry_FormattedDate(t *testing.T) {
 		})
 	}
 }
+
+func TestExerciseType_IsValid(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    ExerciseType
+		expected bool
+	}{
+		{name: "strength is valid", input: ExerciseTypeStrength, expected: true},
+		{name: "cardio is valid", input: ExerciseTypeCardio, expected: true},
+		{name: "other is valid", input: ExerciseTypeOther, expected: true},
+		{name: "empty is invalid", input: "", expected: false},
+		{name: "unknown is invalid", input: "hybrid", expected: false},
+		{name: "uppercase is invalid", input: "STRENGTH", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.input.IsValid()
+			if got != tt.expected {
+				t.Errorf("IsValid() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestValidateURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{name: "empty string is valid", input: "", expected: true},
+		{name: "valid https URL", input: "https://example.com/video.mp4", expected: true},
+		{name: "valid http URL", input: "http://example.com/image.jpg", expected: true},
+		{name: "valid URL with port", input: "https://example.com:8080/video.mp4", expected: true},
+		{name: "valid URL with query params", input: "https://youtube.com/watch?v=abc", expected: true},
+		{name: "no scheme is invalid", input: "example.com/video.mp4", expected: false},
+		{name: "no host is invalid", input: "https://", expected: false},
+		{name: "just path is invalid", input: "/video.mp4", expected: false},
+		{name: "relative path is invalid", input: "path/to/file.jpg", expected: false},
+		{name: "javascript scheme is invalid", input: "javascript:alert(1)", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ValidateURL(tt.input)
+			if got != tt.expected {
+				t.Errorf("ValidateURL(%q) = %v, want %v", tt.input, got, tt.expected)
+			}
+		})
+	}
+}

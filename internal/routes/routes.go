@@ -161,6 +161,7 @@ type entryFormInput struct {
 	Reps         int     `validate:"gte=1,lte=1000"`
 	Weight       float64 `validate:"gte=0,lte=5000"`
 	Notes        string  `validate:"max=500"`
+	RestTime     int     `validate:"gte=0,lte=3600"`
 }
 
 // parseEntryForm extracts form values, converts types, and validates the input.
@@ -182,6 +183,12 @@ func parseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, e
 	}
 	input.Weight = weight
 
+	restTime, err := strconv.Atoi(c.FormValue("rest_time"))
+	if err != nil {
+		restTime = 0
+	}
+	input.RestTime = restTime
+
 	if err := v.ValidateStruct(&input); err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, friendlyValidationError(err))
 	}
@@ -191,6 +198,7 @@ func parseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, e
 		Notes:        input.Notes,
 		Reps:         input.Reps,
 		Weight:       input.Weight,
+		RestTime:     input.RestTime,
 	}, nil
 }
 

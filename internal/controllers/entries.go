@@ -33,14 +33,15 @@ func (ec *EntryController) GetEntry(id, userID string) (*models.ExerciseEntry, e
 }
 
 // CreateEntry creates a new exercise entry for the given user.
-func (ec *EntryController) CreateEntry(userID string, exerciseName, notes string, reps int, weight float64) (*models.ExerciseEntry, error) {
+func (ec *EntryController) CreateEntry(userID string, exerciseID, notes string, reps int, weight float64, restTime int) (*models.ExerciseEntry, error) {
 	entry := &models.ExerciseEntry{
-		ExerciseName: exerciseName,
-		Notes:        notes,
-		Reps:         reps,
-		Weight:       weight,
-		UserID:       userID,
-		CreatedAt:    time.Now(),
+		ExerciseID: exerciseID,
+		Notes:      notes,
+		Reps:       reps,
+		Weight:     weight,
+		RestTime:   restTime,
+		UserID:     userID,
+		CreatedAt:  time.Now(),
 	}
 	if err := ec.repo.CreateEntry(entry); err != nil {
 		return nil, err
@@ -49,15 +50,16 @@ func (ec *EntryController) CreateEntry(userID string, exerciseName, notes string
 }
 
 // UpdateEntry updates an existing entry, including its timestamp.
-func (ec *EntryController) UpdateEntry(id, userID string, exerciseName, notes string, reps int, weight float64, createdAt time.Time) (*models.ExerciseEntry, error) {
+func (ec *EntryController) UpdateEntry(id, userID string, exerciseID, notes string, reps int, weight float64, restTime int, createdAt time.Time) (*models.ExerciseEntry, error) {
 	entry := &models.ExerciseEntry{
-		ID:           id,
-		ExerciseName: exerciseName,
-		Notes:        notes,
-		Reps:         reps,
-		Weight:       weight,
-		UserID:       userID,
-		CreatedAt:    createdAt,
+		ID:         id,
+		ExerciseID: exerciseID,
+		Notes:      notes,
+		Reps:       reps,
+		Weight:     weight,
+		RestTime:   restTime,
+		UserID:     userID,
+		CreatedAt:  createdAt,
 	}
 	if err := ec.repo.UpdateEntryWithDate(entry, userID); err != nil {
 		return nil, err
@@ -75,9 +77,9 @@ func (ec *EntryController) List() ([]models.Exercise, error) {
 	return ec.repo.List()
 }
 
-// GetEntriesByExercise returns all entries for a specific exercise name.
-func (ec *EntryController) GetEntriesByExercise(exerciseName string, userID string) ([]models.ExerciseEntry, error) {
-	return ec.repo.GetEntriesByExercise(exerciseName, userID)
+// GetEntriesByExercise returns all entries for a specific exercise ID.
+func (ec *EntryController) GetEntriesByExercise(exerciseID string, userID string) ([]models.ExerciseEntry, error) {
+	return ec.repo.GetEntriesByExercise(exerciseID, userID)
 }
 
 // GetExerciseByID returns an exercise by its UUID.

@@ -16,10 +16,11 @@ func NewTimerController() *TimerController {
 }
 
 // TimerPage renders the timer page.
-func (tc *TimerController) TimerPage(c echo.Context) error {
+func (tc *TimerController) TimerPage(c echo.Context, isAdmin bool) error {
 	data := views.PageData{
 		Title:           "Timer",
 		IsAuthenticated: true,
+		IsAdmin:         isAdmin,
 	}
 	return views.TimerPage(data).Render(c.Request().Context(), c.Response())
 }

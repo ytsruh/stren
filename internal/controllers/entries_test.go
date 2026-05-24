@@ -82,19 +82,13 @@ func (m *mockRepository) CreateEntry(entry *models.ExerciseEntry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var exerciseID string
 	for _, e := range m.exercises {
-		if e.Name == entry.ExerciseName {
-			exerciseID = e.ID
+		if e.ID == entry.ExerciseID {
+			entry.ExerciseName = e.Name
 			break
 		}
 	}
-	if exerciseID == "" {
-		exerciseID = "ex-" + entry.ExerciseName
-		m.exercises = append(m.exercises, models.Exercise{ID: exerciseID, Name: entry.ExerciseName})
-	}
-	entry.ExerciseID = exerciseID
-	entry.ID = "entry-" + entry.ExerciseName
+	entry.ID = "entry-" + entry.ExerciseID
 	m.entries = append(m.entries, *entry)
 	return nil
 }
@@ -177,7 +171,7 @@ func (m *mockRepository) ListEntries(userID string, limit int) ([]models.Exercis
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByExercise(exerciseName string, userID string) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) GetEntriesByExercise(exerciseID string, userID string) ([]models.ExerciseEntry, error) {
 	if m.errGetEntriesByExercise != nil {
 		return nil, m.errGetEntriesByExercise
 	}
@@ -185,7 +179,7 @@ func (m *mockRepository) GetEntriesByExercise(exerciseName string, userID string
 	defer m.mu.Unlock()
 	var result []models.ExerciseEntry
 	for _, e := range m.entries {
-		if e.ExerciseName == exerciseName && e.UserID == userID {
+		if e.ExerciseID == exerciseID && e.UserID == userID {
 			result = append(result, e)
 		}
 	}
@@ -316,12 +310,12 @@ func TestEntryController_GetEntry_WrongUser(t *testing.T) {
 func TestEntryController_CreateEntry(t *testing.T) {
 	ec, _ := setupEntryController(t)
 
-	entry, err := ec.CreateEntry("user-1", "Squat", "great set", 5, 100)
+	entry, err := ec.CreateEntry("user-1", "ex-1", "great set", 5, 100, 60)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if entry.ExerciseName != "Squat" {
-		t.Errorf("expected 'Squat', got %q", entry.ExerciseName)
+	if entry.ExerciseID != "ex-1" {
+		t.Errorf("expected 'ex-1', got %q", entry.ExerciseID)
 	}
 	if entry.Reps != 5 {
 		t.Errorf("expected 5 reps, got %d", entry.Reps)
@@ -332,7 +326,7 @@ func TestEntryController_CreateEntry_RepositoryError(t *testing.T) {
 	ec, mock := setupEntryController(t)
 	mock.errCreateEntry = errors.New("db error")
 
-	_, err := ec.CreateEntry("user-1", "Squat", "great set", 5, 100)
+	_, err := ec.CreateEntry("user-1", "ex-1", "great set", 5, 100, 60)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -342,10 +336,10 @@ func TestEntryController_UpdateEntry(t *testing.T) {
 	ec, _ := setupEntryController(t)
 	mock := ec.repo.(*mockRepository)
 	mock.entries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	entry, err := ec.UpdateEntry("entry-1", "user-1", "Squat", "even better", 6, 110, time.Now())
+	entry, err := ec.UpdateEntry("entry-1", "user-1", "ex-1", "even better", 6, 110, 90, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -395,12 +389,12 @@ func TestEntryController_List_Error(t *testing.T) {
 func TestEntryController_GetEntriesByExercise(t *testing.T) {
 	ec, mock := setupEntryController(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
-		{ID: "entry-2", UserID: "user-1", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
-		{ID: "entry-3", UserID: "user-1", ExerciseName: "Squat", Reps: 3, Weight: 110},
+		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
+		{ID: "entry-2", UserID: "user-1", ExerciseID: "ex-2", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
+		{ID: "entry-3", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 3, Weight: 110},
 	}
 
-	entries, err := ec.GetEntriesByExercise("Squat", "user-1")
+	entries, err := ec.GetEntriesByExercise("ex-1", "user-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

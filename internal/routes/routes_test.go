@@ -63,8 +63,20 @@ func (m *mockRepository) Create(_ *sql.Tx, name string) (string, error) {
 	return id, nil
 }
 
-func (m *mockRepository) CreateNoTx(name string) (string, error) {
-	return m.Create(nil, name)
+func (m *mockRepository) CreateNoTx(params models.CreateExerciseParams) (string, error) {
+	if m.errCreate != nil {
+		return "", m.errCreate
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, e := range m.exercises {
+		if e.Name == params.Name {
+			return e.ID, nil
+		}
+	}
+	id := "ex-" + params.Name
+	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: params.Name, Description: params.Description, VideoURL: params.VideoURL, ImgURL: params.ImgURL, Type: params.Type})
+	return id, nil
 }
 
 func (m *mockRepository) GetByID(id string) (*models.Exercise, error) {
@@ -112,7 +124,7 @@ func (m *mockRepository) GetByName(name string) (*models.Exercise, error) {
 	return nil, nil
 }
 
-func (m *mockRepository) Update(id string, name string) (*models.Exercise, error) {
+func (m *mockRepository) Update(id string, params models.UpdateExerciseParams) (*models.Exercise, error) {
 	if m.errUpdate != nil {
 		return nil, m.errUpdate
 	}
@@ -120,7 +132,11 @@ func (m *mockRepository) Update(id string, name string) (*models.Exercise, error
 	defer m.mu.Unlock()
 	for i, e := range m.exercises {
 		if e.ID == id {
-			m.exercises[i].Name = name
+			m.exercises[i].Name = params.Name
+			m.exercises[i].Description = params.Description
+			m.exercises[i].VideoURL = params.VideoURL
+			m.exercises[i].ImgURL = params.ImgURL
+			m.exercises[i].Type = params.Type
 			cp := m.exercises[i]
 			return &cp, nil
 		}
@@ -241,7 +257,7 @@ func (m *mockRepository) ListEntries(userID string, limit int) ([]models.Exercis
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByExercise(exerciseName string, userID string) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) GetEntriesByExercise(exerciseID string, userID string) ([]models.ExerciseEntry, error) {
 	if m.errGetEntriesByExercise != nil {
 		return nil, m.errGetEntriesByExercise
 	}
@@ -249,7 +265,7 @@ func (m *mockRepository) GetEntriesByExercise(exerciseName string, userID string
 	defer m.mu.Unlock()
 	var result []models.ExerciseEntry
 	for _, e := range m.entries {
-		if e.ExerciseName == exerciseName && e.UserID == userID {
+		if e.ExerciseID == exerciseID && e.UserID == userID {
 			result = append(result, e)
 		}
 	}
@@ -549,7 +565,7 @@ func TestCreateEntry(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
-	form.Set("exercise_name", "Squat")
+	form.Set("exercise_id", "ex-1")
 	form.Set("reps", "5")
 	form.Set("weight", "100")
 
@@ -574,7 +590,7 @@ func TestCreateEntry_HTMX(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
-	form.Set("exercise_name", "Squat")
+	form.Set("exercise_id", "ex-1")
 	form.Set("reps", "5")
 	form.Set("weight", "100")
 
@@ -600,7 +616,7 @@ func TestCreateEntry_InvalidReps(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
-	form.Set("exercise_name", "Squat")
+	form.Set("exercise_id", "ex-1")
 	form.Set("reps", "abc")
 	form.Set("weight", "100")
 
@@ -626,7 +642,7 @@ func TestCreateEntry_InvalidWeight(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
-	form.Set("exercise_name", "Squat")
+	form.Set("exercise_id", "ex-1")
 	form.Set("reps", "5")
 	form.Set("weight", "-10")
 
@@ -648,11 +664,11 @@ func TestCreateEntry_InvalidWeight(t *testing.T) {
 	}
 }
 
-func TestCreateEntry_MissingName(t *testing.T) {
+func TestCreateEntry_MissingExercise(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
-	form.Set("exercise_name", "")
+	form.Set("exercise_id", "")
 	form.Set("reps", "5")
 	form.Set("weight", "100")
 
@@ -669,8 +685,8 @@ func TestCreateEntry_MissingName(t *testing.T) {
 		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "name") && !strings.Contains(body, "Name") {
-		t.Fatalf("expected error message containing 'name', got %q", body)
+	if !strings.Contains(body, "Exercise") {
+		t.Fatalf("expected error message containing 'Exercise', got %q", body)
 	}
 }
 
@@ -679,7 +695,7 @@ func TestCreateEntry_RepositoryError(t *testing.T) {
 	mock.errCreateEntry = errors.New("db error")
 
 	form := url.Values{}
-	form.Set("exercise_name", "Squat")
+	form.Set("exercise_id", "ex-1")
 	form.Set("reps", "5")
 	form.Set("weight", "100")
 
@@ -792,11 +808,11 @@ func TestGetEntry_NotFound(t *testing.T) {
 func TestUpdateEntry(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 
 	form := url.Values{}
-	form.Set("exercise_name", "Squat")
+	form.Set("exercise_id", "ex-1")
 	form.Set("reps", "3")
 	form.Set("weight", "120")
 	form.Set("created_at", time.Now().Format("2006-01-02T15:04"))
@@ -825,11 +841,11 @@ func TestUpdateEntry(t *testing.T) {
 func TestUpdateEntry_Redirect(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 
 	form := url.Values{}
-	form.Set("exercise_name", "Squat")
+	form.Set("exercise_id", "ex-1")
 	form.Set("reps", "3")
 	form.Set("weight", "120")
 
@@ -856,11 +872,11 @@ func TestUpdateEntry_Redirect(t *testing.T) {
 func TestUpdateEntry_InvalidDate(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 
 	form := url.Values{}
-	form.Set("exercise_name", "Squat")
+	form.Set("exercise_id", "ex-1")
 	form.Set("reps", "3")
 	form.Set("weight", "120")
 	form.Set("created_at", "not-a-date")

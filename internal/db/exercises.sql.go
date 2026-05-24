@@ -7,29 +7,40 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const create = `-- name: Create :one
-INSERT INTO exercises (id, name)
-VALUES (?, ?)
-ON CONFLICT(name) DO UPDATE SET name=name
+INSERT INTO exercises (id, name, description, video_url, img_url, type)
+VALUES (?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type CreateParams struct {
-	ID   string
-	Name string
+	ID          string
+	Name        string
+	Description sql.NullString
+	VideoUrl    sql.NullString
+	ImgUrl      sql.NullString
+	Type        string
 }
 
 func (q *Queries) Create(ctx context.Context, arg CreateParams) (string, error) {
-	row := q.db.QueryRowContext(ctx, create, arg.ID, arg.Name)
+	row := q.db.QueryRowContext(ctx, create,
+		arg.ID,
+		arg.Name,
+		arg.Description,
+		arg.VideoUrl,
+		arg.ImgUrl,
+		arg.Type,
+	)
 	var id string
 	err := row.Scan(&id)
 	return id, err
 }
 
 const getByID = `-- name: GetByID :one
-SELECT id, name
+SELECT id, name, description, video_url, img_url, type
 FROM exercises
 WHERE id = ?
 `
@@ -37,12 +48,19 @@ WHERE id = ?
 func (q *Queries) GetByID(ctx context.Context, id string) (Exercise, error) {
 	row := q.db.QueryRowContext(ctx, getByID, id)
 	var i Exercise
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.VideoUrl,
+		&i.ImgUrl,
+		&i.Type,
+	)
 	return i, err
 }
 
 const getByName = `-- name: GetByName :one
-SELECT id, name
+SELECT id, name, description, video_url, img_url, type
 FROM exercises
 WHERE name = ?
 `
@@ -50,12 +68,19 @@ WHERE name = ?
 func (q *Queries) GetByName(ctx context.Context, name string) (Exercise, error) {
 	row := q.db.QueryRowContext(ctx, getByName, name)
 	var i Exercise
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.VideoUrl,
+		&i.ImgUrl,
+		&i.Type,
+	)
 	return i, err
 }
 
 const list = `-- name: List :many
-SELECT id, name
+SELECT id, name, description, video_url, img_url, type
 FROM exercises
 ORDER BY name
 `
@@ -69,7 +94,14 @@ func (q *Queries) List(ctx context.Context) ([]Exercise, error) {
 	var items []Exercise
 	for rows.Next() {
 		var i Exercise
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.VideoUrl,
+			&i.ImgUrl,
+			&i.Type,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -85,19 +117,37 @@ func (q *Queries) List(ctx context.Context) ([]Exercise, error) {
 
 const update = `-- name: Update :one
 UPDATE exercises
-SET name = ?
+SET name = ?, description = ?, video_url = ?, img_url = ?, type = ?
 WHERE id = ?
-RETURNING id, name
+RETURNING id, name, description, video_url, img_url, type
 `
 
 type UpdateParams struct {
-	Name string
-	ID   string
+	Name        string
+	Description sql.NullString
+	VideoUrl    sql.NullString
+	ImgUrl      sql.NullString
+	Type        string
+	ID          string
 }
 
 func (q *Queries) Update(ctx context.Context, arg UpdateParams) (Exercise, error) {
-	row := q.db.QueryRowContext(ctx, update, arg.Name, arg.ID)
+	row := q.db.QueryRowContext(ctx, update,
+		arg.Name,
+		arg.Description,
+		arg.VideoUrl,
+		arg.ImgUrl,
+		arg.Type,
+		arg.ID,
+	)
 	var i Exercise
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.VideoUrl,
+		&i.ImgUrl,
+		&i.Type,
+	)
 	return i, err
 }

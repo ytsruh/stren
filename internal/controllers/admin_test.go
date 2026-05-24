@@ -37,7 +37,7 @@ func (m *mockAdminRepository) GetByID(id string) (*models.Exercise, error) {
 	return nil, nil
 }
 
-func (m *mockAdminRepository) Update(id string, name string) (*models.Exercise, error) {
+func (m *mockAdminRepository) Update(id string, params models.UpdateExerciseParams) (*models.Exercise, error) {
 	if m.errUpdate != nil {
 		return nil, m.errUpdate
 	}
@@ -45,7 +45,11 @@ func (m *mockAdminRepository) Update(id string, name string) (*models.Exercise, 
 	defer m.mu.Unlock()
 	for i, e := range m.exercises {
 		if e.ID == id {
-			m.exercises[i].Name = name
+			m.exercises[i].Name = params.Name
+			m.exercises[i].Description = params.Description
+			m.exercises[i].VideoURL = params.VideoURL
+			m.exercises[i].ImgURL = params.ImgURL
+			m.exercises[i].Type = params.Type
 			cp := m.exercises[i]
 			return &cp, nil
 		}
@@ -53,19 +57,19 @@ func (m *mockAdminRepository) Update(id string, name string) (*models.Exercise, 
 	return nil, nil
 }
 
-func (m *mockAdminRepository) CreateNoTx(name string) (string, error) {
+func (m *mockAdminRepository) CreateNoTx(params models.CreateExerciseParams) (string, error) {
 	if m.errCreateNoTx != nil {
 		return "", m.errCreateNoTx
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.exercises {
-		if e.Name == name {
+		if e.Name == params.Name {
 			return e.ID, nil
 		}
 	}
-	id := "mock-id-" + name
-	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: name})
+	id := "mock-id-" + params.Name
+	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: params.Name, Description: params.Description, VideoURL: params.VideoURL, ImgURL: params.ImgURL, Type: params.Type})
 	return id, nil
 }
 
@@ -150,7 +154,7 @@ func TestAdminController_Create(t *testing.T) {
 	ctrl := NewAdminController(mock)
 
 	t.Run("success", func(t *testing.T) {
-		ex, err := ctrl.Create("Deadlift")
+		ex, err := ctrl.Create(models.CreateExerciseParams{Name: "Deadlift"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -160,7 +164,7 @@ func TestAdminController_Create(t *testing.T) {
 	})
 
 	t.Run("empty name", func(t *testing.T) {
-		_, err := ctrl.Create("   ")
+		_, err := ctrl.Create(models.CreateExerciseParams{Name: "   "})
 		if err == nil {
 			t.Fatal("expected error for empty name, got nil")
 		}
@@ -168,7 +172,7 @@ func TestAdminController_Create(t *testing.T) {
 
 	t.Run("repository error", func(t *testing.T) {
 		mock.errCreateNoTx = errors.New("database error")
-		_, err := ctrl.Create("Squat")
+		_, err := ctrl.Create(models.CreateExerciseParams{Name: "Squat"})
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -185,7 +189,7 @@ func TestAdminController_Update(t *testing.T) {
 	ctrl := NewAdminController(mock)
 
 	t.Run("success", func(t *testing.T) {
-		ex, err := ctrl.Update("ex-1", "Front Squat")
+		ex, err := ctrl.Update("ex-1", models.UpdateExerciseParams{Name: "Front Squat"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -195,7 +199,7 @@ func TestAdminController_Update(t *testing.T) {
 	})
 
 	t.Run("empty name", func(t *testing.T) {
-		_, err := ctrl.Update("ex-1", "   ")
+		_, err := ctrl.Update("ex-1", models.UpdateExerciseParams{Name: "   "})
 		if err == nil {
 			t.Fatal("expected error for empty name, got nil")
 		}
@@ -203,10 +207,118 @@ func TestAdminController_Update(t *testing.T) {
 
 	t.Run("repository error", func(t *testing.T) {
 		mock.errUpdate = errors.New("database error")
-		_, err := ctrl.Update("ex-1", "Squat")
+		_, err := ctrl.Update("ex-1", models.UpdateExerciseParams{Name: "Squat"})
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
 		mock.errUpdate = nil
+	})
+}
+
+func TestAdminController_Create_Validation(t *testing.T) {
+	mock := newMockAdminRepository()
+	ctrl := NewAdminController(mock)
+
+	t.Run("invalid type defaults to other", func(t *testing.T) {
+		ex, err := ctrl.Create(models.CreateExerciseParams{Name: "Test", Type: "invalid"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ex.Type != models.ExerciseTypeOther {
+			t.Errorf("expected type 'other', got %q", ex.Type)
+		}
+	})
+
+	t.Run("invalid video URL returns error", func(t *testing.T) {
+		_, err := ctrl.Create(models.CreateExerciseParams{
+			Name:     "Test",
+			VideoURL: "not-a-valid-url",
+		})
+		if err == nil {
+			t.Fatal("expected error for invalid video URL, got nil")
+		}
+		if err.Error() != "video URL must be a valid URL" {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("invalid image URL returns error", func(t *testing.T) {
+		_, err := ctrl.Create(models.CreateExerciseParams{
+			Name:    "Test",
+			ImgURL:  "://no-scheme.com/image.jpg",
+		})
+		if err == nil {
+			t.Fatal("expected error for invalid image URL, got nil")
+		}
+		if err.Error() != "image URL must be a valid URL" {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("all fields are set on returned exercise", func(t *testing.T) {
+		params := models.CreateExerciseParams{
+			Name:        "Full Exercise",
+			Description: "A description",
+			VideoURL:    "https://example.com/video.mp4",
+			ImgURL:      "https://example.com/image.jpg",
+			Type:        models.ExerciseTypeStrength,
+		}
+		ex, err := ctrl.Create(params)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ex.Name != params.Name {
+			t.Errorf("Name = %q, want %q", ex.Name, params.Name)
+		}
+		if ex.Description != params.Description {
+			t.Errorf("Description = %q, want %q", ex.Description, params.Description)
+		}
+		if ex.VideoURL != params.VideoURL {
+			t.Errorf("VideoURL = %q, want %q", ex.VideoURL, params.VideoURL)
+		}
+		if ex.ImgURL != params.ImgURL {
+			t.Errorf("ImgURL = %q, want %q", ex.ImgURL, params.ImgURL)
+		}
+		if ex.Type != params.Type {
+			t.Errorf("Type = %q, want %q", ex.Type, params.Type)
+		}
+	})
+}
+
+func TestAdminController_Update_Validation(t *testing.T) {
+	mock := newMockAdminRepository()
+	mock.exercises = []models.Exercise{
+		{ID: "ex-1", Name: "Squat"},
+	}
+	ctrl := NewAdminController(mock)
+
+	t.Run("invalid type defaults to other", func(t *testing.T) {
+		ex, err := ctrl.Update("ex-1", models.UpdateExerciseParams{Name: "Squat", Type: "invalid"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ex.Type != models.ExerciseTypeOther {
+			t.Errorf("expected type 'other', got %q", ex.Type)
+		}
+	})
+
+	t.Run("invalid video URL returns error", func(t *testing.T) {
+		_, err := ctrl.Update("ex-1", models.UpdateExerciseParams{
+			Name:     "Squat",
+			VideoURL: "missing-scheme.com",
+		})
+		if err == nil {
+			t.Fatal("expected error for invalid video URL, got nil")
+		}
+	})
+
+	t.Run("invalid image URL returns error", func(t *testing.T) {
+		_, err := ctrl.Update("ex-1", models.UpdateExerciseParams{
+			Name:    "Squat",
+			ImgURL:  "://missing-scheme.com/image.jpg",
+		})
+		if err == nil {
+			t.Fatal("expected error for invalid image URL, got nil")
+		}
 	})
 }

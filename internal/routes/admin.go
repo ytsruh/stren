@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/controllers"
+	"stren/internal/models"
 	"stren/internal/views"
 )
 
@@ -49,7 +50,15 @@ func (h *Handler) AdminCreateExercise(c echo.Context) error {
 		return render(c, views.AdminExerciseFormError("Exercise name is required"))
 	}
 
-	_, err := h.adminCtrl.Create(name)
+	params := models.CreateExerciseParams{
+		Name:        name,
+		Description: c.FormValue("description"),
+		VideoURL:    c.FormValue("video_url"),
+		ImgURL:      c.FormValue("img_url"),
+		Type:        models.ExerciseType(c.FormValue("type")),
+	}
+
+	_, err := h.adminCtrl.Create(params)
 	if err != nil {
 		return render(c, views.AdminExerciseFormError(err.Error()))
 	}
@@ -82,7 +91,15 @@ func (h *Handler) AdminUpdateExercise(c echo.Context) error {
 		return render(c, views.AdminExerciseFormError("Exercise name is required"))
 	}
 
-	_, err := h.adminCtrl.Update(id, name)
+	params := models.UpdateExerciseParams{
+		Name:        name,
+		Description: c.FormValue("description"),
+		VideoURL:    c.FormValue("video_url"),
+		ImgURL:      c.FormValue("img_url"),
+		Type:        models.ExerciseType(c.FormValue("type")),
+	}
+
+	_, err := h.adminCtrl.Update(id, params)
 	if err != nil {
 		if errors.Is(err, controllers.ErrNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "Exercise not found")

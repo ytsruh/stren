@@ -9,7 +9,9 @@ import (
 
 // TimerPage renders the timer page.
 func (h *Handler) TimerPage(c echo.Context) error {
-	return h.timerCtrl.TimerPage(c)
+	claims := GetClaims(c)
+	isAdmin := claims != nil && claims.IsAdmin
+	return h.timerCtrl.TimerPage(c, isAdmin)
 }
 
 // TimerValidationError returns a toast for invalid timer input.
