@@ -1,6 +1,10 @@
 CREATE TABLE exercises (
     id TEXT PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL
+    name TEXT UNIQUE NOT NULL,
+    description TEXT,
+    video_url TEXT,
+    img_url TEXT,
+    type TEXT NOT NULL DEFAULT 'other'
 );
 
 CREATE TABLE users (

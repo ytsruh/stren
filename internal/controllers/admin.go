@@ -38,28 +38,59 @@ func (ac *AdminController) Get(id string) (*models.Exercise, error) {
 }
 
 // Create creates a new exercise. Returns the created exercise.
-func (ac *AdminController) Create(name string) (*models.Exercise, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
+func (ac *AdminController) Create(params models.CreateExerciseParams) (*models.Exercise, error) {
+	params.Name = strings.TrimSpace(params.Name)
+	if params.Name == "" {
 		return nil, errors.New("exercise name cannot be empty")
 	}
 
-	id, err := ac.repo.CreateNoTx(name)
+	if !params.Type.IsValid() {
+		params.Type = models.ExerciseTypeOther
+	}
+
+	if !models.ValidateURL(params.VideoURL) {
+		return nil, errors.New("video URL must be a valid URL")
+	}
+
+	if !models.ValidateURL(params.ImgURL) {
+		return nil, errors.New("image URL must be a valid URL")
+	}
+
+	id, err := ac.repo.CreateNoTx(params)
 	if err != nil {
 		return nil, err
 	}
 
-	return &models.Exercise{ID: id, Name: name}, nil
+	return &models.Exercise{
+		ID:          id,
+		Name:        params.Name,
+		Description: params.Description,
+		VideoURL:    params.VideoURL,
+		ImgURL:      params.ImgURL,
+		Type:        params.Type,
+	}, nil
 }
 
-// Update updates an existing exercise's name.
-func (ac *AdminController) Update(id string, name string) (*models.Exercise, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
+// Update updates an existing exercise's metadata.
+func (ac *AdminController) Update(id string, params models.UpdateExerciseParams) (*models.Exercise, error) {
+	params.Name = strings.TrimSpace(params.Name)
+	if params.Name == "" {
 		return nil, errors.New("exercise name cannot be empty")
 	}
 
-	exercise, err := ac.repo.Update(id, name)
+	if !params.Type.IsValid() {
+		params.Type = models.ExerciseTypeOther
+	}
+
+	if !models.ValidateURL(params.VideoURL) {
+		return nil, errors.New("video URL must be a valid URL")
+	}
+
+	if !models.ValidateURL(params.ImgURL) {
+		return nil, errors.New("image URL must be a valid URL")
+	}
+
+	exercise, err := ac.repo.Update(id, params)
 	if err != nil {
 		return nil, err
 	}

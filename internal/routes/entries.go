@@ -42,11 +42,11 @@ func (h *Handler) CreateEntry(c echo.Context) error {
 	}
 
 	claims := GetClaims(c)
-	exerciseName := c.FormValue("exercise_name")
-	if exerciseName == "" {
-		return render(c, views.EntryFormError("Exercise name is required"))
+	exerciseID := c.FormValue("exercise_id")
+	if exerciseID == "" {
+		return render(c, views.EntryFormError("Exercise is required"))
 	}
-	_, err = h.entryCtrl.CreateEntry(claims.UserID, exerciseName, entry.Notes, entry.Reps, entry.Weight, entry.RestTime)
+	_, err = h.entryCtrl.CreateEntry(claims.UserID, exerciseID, entry.Notes, entry.Reps, entry.Weight, entry.RestTime)
 	if err != nil {
 		return render(c, views.EntryFormError("Failed to save entry: "+err.Error()))
 	}
@@ -121,7 +121,7 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 		}
 	}
 
-	_, err = h.entryCtrl.UpdateEntry(id, claims.UserID, existing.ExerciseName, entry.Notes, entry.Reps, entry.Weight, entry.RestTime, createdAt)
+	_, err = h.entryCtrl.UpdateEntry(id, claims.UserID, existing.ExerciseID, entry.Notes, entry.Reps, entry.Weight, entry.RestTime, createdAt)
 	if err != nil {
 		return render(c, views.EntryFormError("Failed to update entry: "+err.Error()))
 	}
@@ -161,7 +161,7 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 		return err
 	}
 
-	entries, err := h.entryCtrl.GetEntriesByExercise(exercise.Name, claims.UserID)
+	entries, err := h.entryCtrl.GetEntriesByExercise(exercise.ID, claims.UserID)
 	if err != nil {
 		return err
 	}

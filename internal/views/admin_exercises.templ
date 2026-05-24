@@ -16,7 +16,6 @@ templ AdminExerciseList(exercises []models.Exercise, userName string, isAuthenti
 				New Exercise
 			</a>
 		</div>
-
 		if len(exercises) == 0 {
 			<div class="text-center py-12 text-muted-foreground">
 				<p>No exercises yet.</p>
@@ -26,6 +25,7 @@ templ AdminExerciseList(exercises []models.Exercise, userName string, isAuthenti
 				<thead>
 					<tr>
 						<th>Name</th>
+						<th>Type</th>
 						<th>Actions</th>
 					</tr>
 				</thead>
@@ -33,6 +33,9 @@ templ AdminExerciseList(exercises []models.Exercise, userName string, isAuthenti
 					for _, e := range exercises {
 						<tr>
 							<td>{ e.Name }</td>
+							<td>
+								<span class="badge capitalize">{ string(e.Type) }</span>
+							</td>
 							<td>
 								<div class="flex gap-2">
 									<a
@@ -66,7 +69,6 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 		} else {
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Exercise"})
 		}
-
 		if data.IsEdit {
 			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%s", data.Exercise.ID)) } class="form grid gap-6">
 				<fieldset class="grid gap-4">
@@ -79,10 +81,50 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 							name="name"
 							placeholder="e.g. Bench Press"
 							value={ data.Exercise.Name }
-							required/>
+							required
+						/>
+					</div>
+					<div class="grid gap-2">
+						<label for="type">Type</label>
+						<select class="input" id="type" name="type">
+							<option value="strength" selected?={ string(data.Exercise.Type) == "strength" }>Strength</option>
+							<option value="cardio" selected?={ string(data.Exercise.Type) == "cardio" }>Cardio</option>
+							<option value="other" selected?={ string(data.Exercise.Type) == "other" }>Other</option>
+						</select>
+					</div>
+					<div class="grid gap-2">
+						<label for="description">Description</label>
+						<textarea
+							class="input"
+							id="description"
+							name="description"
+							placeholder="Brief description of the exercise"
+							rows="3"
+						>{ data.Exercise.Description }</textarea>
+					</div>
+					<div class="grid gap-2">
+						<label for="video_url">Video URL</label>
+						<input
+							class="input"
+							type="url"
+							id="video_url"
+							name="video_url"
+							placeholder="https://example.com/video.mp4"
+							value={ data.Exercise.VideoURL }
+						/>
+					</div>
+					<div class="grid gap-2">
+						<label for="img_url">Image URL</label>
+						<input
+							class="input"
+							type="url"
+							id="img_url"
+							name="img_url"
+							placeholder="https://example.com/image.jpg"
+							value={ data.Exercise.ImgURL }
+						/>
 					</div>
 				</fieldset>
-
 				<div class="flex gap-3">
 					<button type="submit" class="btn">
 						@components.Icon(components.IconProps{Name: "check", Size: 18})
@@ -105,10 +147,48 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 							id="name"
 							name="name"
 							placeholder="e.g. Bench Press"
-							required/>
+							required
+						/>
+					</div>
+					<div class="grid gap-2">
+						<label for="type">Type</label>
+						<select class="input" id="type" name="type">
+							<option value="strength">Strength</option>
+							<option value="cardio">Cardio</option>
+							<option value="other" selected>Other</option>
+						</select>
+					</div>
+					<div class="grid gap-2">
+						<label for="description">Description</label>
+						<textarea
+							class="input"
+							id="description"
+							name="description"
+							placeholder="Brief description of the exercise"
+							rows="3"
+						></textarea>
+					</div>
+					<div class="grid gap-2">
+						<label for="video_url">Video URL</label>
+						<input
+							class="input"
+							type="url"
+							id="video_url"
+							name="video_url"
+							placeholder="https://example.com/video.mp4"
+						/>
+					</div>
+					<div class="grid gap-2">
+						<label for="img_url">Image URL</label>
+						<input
+							class="input"
+							type="url"
+							id="img_url"
+							name="img_url"
+							placeholder="https://example.com/image.jpg"
+						/>
 					</div>
 				</fieldset>
-
 				<div class="flex gap-3">
 					<button type="submit" class="btn">
 						@components.Icon(components.IconProps{Name: "check", Size: 18})

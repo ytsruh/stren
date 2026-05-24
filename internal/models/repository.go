@@ -46,9 +46,9 @@ type Repository interface {
 	// If limit > 0, results are capped at that count. Scopes to the given user ID.
 	ListEntries(userID string, limit int) ([]ExerciseEntry, error)
 
-	// GetEntriesByExercise returns all entries for a specific exercise name.
+	// GetEntriesByExercise returns all entries for a specific exercise ID.
 	// Scopes to the given user ID.
-	GetEntriesByExercise(exerciseName string, userID string) ([]ExerciseEntry, error)
+	GetEntriesByExercise(exerciseID string, userID string) ([]ExerciseEntry, error)
 
 	// GetEntriesByDateRange returns entries within an inclusive date range.
 	// Scopes to the given user ID.

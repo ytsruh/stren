@@ -120,13 +120,13 @@ const getEntriesByExercise = `-- name: GetEntriesByExercise :many
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
-WHERE t.name = ? AND e.user_id = ?
+WHERE e.exercise_id = ? AND e.user_id = ?
 ORDER BY e.created_at DESC
 `
 
 type GetEntriesByExerciseParams struct {
-	Name   string
-	UserID sql.NullString
+	ExerciseID string
+	UserID     sql.NullString
 }
 
 type GetEntriesByExerciseRow struct {
@@ -142,7 +142,7 @@ type GetEntriesByExerciseRow struct {
 }
 
 func (q *Queries) GetEntriesByExercise(ctx context.Context, arg GetEntriesByExerciseParams) ([]GetEntriesByExerciseRow, error) {
-	rows, err := q.db.QueryContext(ctx, getEntriesByExercise, arg.Name, arg.UserID)
+	rows, err := q.db.QueryContext(ctx, getEntriesByExercise, arg.ExerciseID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}

@@ -43,12 +43,9 @@ func TestExerciseRepository_Create(t *testing.T) {
 		t.Fatal("expected non-empty id")
 	}
 
-	id2, err := repo.Create(nil, "Test Create")
-	if err != nil {
-		t.Fatalf("Create duplicate failed: %v", err)
-	}
-	if id2 != id {
-		t.Fatalf("expected same id %s, got %s", id, id2)
+	_, err = repo.Create(nil, "Test Create")
+	if err == nil {
+		t.Fatal("expected error for duplicate name, got nil")
 	}
 }
 
@@ -130,16 +127,21 @@ func TestExerciseRepository_CreateEntry(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
-	entry := &ExerciseEntry{
-		ExerciseName: "Squat",
-		UserID:       userID,
-		Reps:         5,
-		Weight:       140.0,
-		Notes:        "Test entry",
-		CreatedAt:    time.Now(),
+	exercise, err := repo.Create(nil, "Squat")
+	if err != nil {
+		t.Fatalf("Create exercise failed: %v", err)
 	}
 
-	err := repo.CreateEntry(entry)
+	entry := &ExerciseEntry{
+		ExerciseID: exercise,
+		UserID:     userID,
+		Reps:       5,
+		Weight:     140.0,
+		Notes:      "Test entry",
+		CreatedAt:  time.Now(),
+	}
+
+	err = repo.CreateEntry(entry)
 	if err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
@@ -152,27 +154,24 @@ func TestExerciseRepository_GetEntry(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
-	entry, err := repo.GetEntry("non-existent-id", userID)
+	exercise, err := repo.Create(nil, "Bench Press")
 	if err != nil {
-		t.Fatalf("GetEntry failed: %v", err)
-	}
-	if entry != nil {
-		t.Fatalf("expected nil for non-existing entry, got %+v", entry)
+		t.Fatalf("Create exercise failed: %v", err)
 	}
 
 	created := &ExerciseEntry{
-		ExerciseName: "Bench Press",
-		UserID:       userID,
-		Reps:         8,
-		Weight:       80.0,
-		Notes:        "",
-		CreatedAt:    time.Now(),
+		ExerciseID: exercise,
+		UserID:     userID,
+		Reps:       8,
+		Weight:     80.0,
+		Notes:      "",
+		CreatedAt:  time.Now(),
 	}
 	if err := repo.CreateEntry(created); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 
-	entry, err = repo.GetEntry(created.ID, userID)
+	entry, err := repo.GetEntry(created.ID, userID)
 	if err != nil {
 		t.Fatalf("GetEntry failed: %v", err)
 	}
@@ -194,13 +193,18 @@ func TestExerciseRepository_UpdateEntry(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
+	exercise, err := repo.Create(nil, "Deadlift")
+	if err != nil {
+		t.Fatalf("Create exercise failed: %v", err)
+	}
+
 	created := &ExerciseEntry{
-		ExerciseName: "Deadlift",
-		UserID:       userID,
-		Reps:         5,
-		Weight:       180.0,
-		Notes:        "heavy",
-		CreatedAt:    time.Now(),
+		ExerciseID: exercise,
+		UserID:     userID,
+		Reps:       5,
+		Weight:     180.0,
+		Notes:      "heavy",
+		CreatedAt:  time.Now(),
 	}
 	if err := repo.CreateEntry(created); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
@@ -209,7 +213,6 @@ func TestExerciseRepository_UpdateEntry(t *testing.T) {
 	created.Reps = 3
 	created.Weight = 200.0
 	created.Notes = "pr"
-	created.ExerciseName = "Deadlift"
 
 	if err := repo.UpdateEntry(created, userID); err != nil {
 		t.Fatalf("UpdateEntry failed: %v", err)
@@ -234,14 +237,19 @@ func TestExerciseRepository_UpdateEntryWithDate(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
+	exercise, err := repo.Create(nil, "Overhead Press")
+	if err != nil {
+		t.Fatalf("Create exercise failed: %v", err)
+	}
+
 	originalTime := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
 	created := &ExerciseEntry{
-		ExerciseName: "Overhead Press",
-		UserID:       userID,
-		Reps:         5,
-		Weight:       60.0,
-		Notes:        "",
-		CreatedAt:    originalTime,
+		ExerciseID: exercise,
+		UserID:     userID,
+		Reps:       5,
+		Weight:     60.0,
+		Notes:      "",
+		CreatedAt:  originalTime,
 	}
 	if err := repo.CreateEntry(created); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
@@ -271,13 +279,18 @@ func TestExerciseRepository_DeleteEntry(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
+	exercise, err := repo.Create(nil, "Pull Up")
+	if err != nil {
+		t.Fatalf("Create exercise failed: %v", err)
+	}
+
 	created := &ExerciseEntry{
-		ExerciseName: "Pull Up",
-		UserID:       userID,
-		Reps:         10,
-		Weight:       0,
-		Notes:        "bw",
-		CreatedAt:    time.Now(),
+		ExerciseID: exercise,
+		UserID:     userID,
+		Reps:       10,
+		Weight:     0,
+		Notes:      "bw",
+		CreatedAt:  time.Now(),
 	}
 	if err := repo.CreateEntry(created); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
@@ -300,13 +313,18 @@ func TestExerciseRepository_ListEntries(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
+	exercise, err := repo.Create(nil, "Dips")
+	if err != nil {
+		t.Fatalf("Create exercise failed: %v", err)
+	}
+
 	for i := 0; i < 5; i++ {
 		entry := &ExerciseEntry{
-			ExerciseName: "Dips",
-			UserID:       userID,
-			Reps:         i + 1,
-			Weight:       float64(i * 10),
-			CreatedAt:    time.Now().Add(time.Duration(i) * time.Hour),
+			ExerciseID: exercise,
+			UserID:     userID,
+			Reps:       i + 1,
+			Weight:     float64(i * 10),
+			CreatedAt:  time.Now().Add(time.Duration(i) * time.Hour),
 		}
 		if err := repo.CreateEntry(entry); err != nil {
 			t.Fatalf("CreateEntry failed: %v", err)
@@ -338,17 +356,26 @@ func TestExerciseRepository_GetEntriesByExercise(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 100, CreatedAt: time.Now()}); err != nil {
+	squat, err := repo.Create(nil, "Squat")
+	if err != nil {
+		t.Fatalf("Create exercise failed: %v", err)
+	}
+	bench, err := repo.Create(nil, "Bench Press")
+	if err != nil {
+		t.Fatalf("Create exercise failed: %v", err)
+	}
+
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseID: squat, UserID: userID, Reps: 5, Weight: 100, CreatedAt: time.Now()}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Bench Press", UserID: userID, Reps: 8, Weight: 80, CreatedAt: time.Now()}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseID: bench, UserID: userID, Reps: 8, Weight: 80, CreatedAt: time.Now()}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 105, CreatedAt: time.Now().Add(time.Hour)}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseID: squat, UserID: userID, Reps: 5, Weight: 105, CreatedAt: time.Now().Add(time.Hour)}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 
-	entries, err := repo.GetEntriesByExercise("Squat", userID)
+	entries, err := repo.GetEntriesByExercise(squat, userID)
 	if err != nil {
 		t.Fatalf("GetEntriesByExercise failed: %v", err)
 	}
@@ -360,6 +387,9 @@ func TestExerciseRepository_GetEntriesByExercise(t *testing.T) {
 		if e.ExerciseName != "Squat" {
 			t.Fatalf("expected exercise name 'Squat', got %q", e.ExerciseName)
 		}
+		if e.ExerciseID != squat {
+			t.Fatalf("expected exercise ID %q, got %q", squat, e.ExerciseID)
+		}
 	}
 }
 
@@ -367,18 +397,23 @@ func TestExerciseRepository_GetEntriesByDateRange(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()
 
+	exercise, err := repo.Create(nil, "Squat")
+	if err != nil {
+		t.Fatalf("Create exercise failed: %v", err)
+	}
+
 	loc := time.UTC
 	day1 := time.Date(2024, 1, 1, 10, 0, 0, 0, loc)
 	day2 := time.Date(2024, 1, 2, 10, 0, 0, 0, loc)
 	day3 := time.Date(2024, 1, 3, 10, 0, 0, 0, loc)
 
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 100, CreatedAt: day1}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseID: exercise, UserID: userID, Reps: 5, Weight: 100, CreatedAt: day1}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 105, CreatedAt: day2}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseID: exercise, UserID: userID, Reps: 5, Weight: 105, CreatedAt: day2}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if err := repo.CreateEntry(&ExerciseEntry{ExerciseName: "Squat", UserID: userID, Reps: 5, Weight: 110, CreatedAt: day3}); err != nil {
+	if err := repo.CreateEntry(&ExerciseEntry{ExerciseID: exercise, UserID: userID, Reps: 5, Weight: 110, CreatedAt: day3}); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 
