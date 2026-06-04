@@ -112,7 +112,7 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 		return render(c, views.EntryFormError(friendlyError(err)))
 	}
 
-	createdAt := time.Now()
+	createdAt := existing.CreatedAt
 
 	if dateStr := c.FormValue("created_at"); dateStr != "" {
 		createdAt, err = time.Parse("2006-01-02T15:04", dateStr)
