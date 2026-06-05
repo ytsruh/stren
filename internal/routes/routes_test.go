@@ -961,7 +961,7 @@ func TestListExercises(t *testing.T) {
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.ListExercises(c); err != nil {
+	if err := h.ListExercisesJSON(c); err != nil {
 		t.Fatalf("ListExercises failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -989,7 +989,7 @@ func TestListExercises_RepositoryError(t *testing.T) {
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	err := h.ListExercises(c)
+	err := h.ListExercisesJSON(c)
 	if err == nil {
 		t.Fatal("expected error from repository, got nil")
 	}

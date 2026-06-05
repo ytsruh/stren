@@ -6,10 +6,37 @@ import (
 	"stren/internal/views/components"
 )
 
-// ExerciseHistory shows all entries for a specific exercise
-templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: exerciseName, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: exerciseName})
+// ExerciseHistory shows all entries for a specific exercise.
+templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		<div class="mb-6">
+			<div class="flex items-center justify-between mb-4">
+				@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: exercise.Name})
+				<span class="badge capitalize">{ string(exercise.Type) }</span>
+			</div>
+			<div class="mb-4 flex items-start gap-4">
+				<div class="flex-1">
+					if exercise.ImgURL != "" {
+						<img src={ exercise.ImgURL } alt={ exercise.Name } class="w-full h-48 object-cover rounded-lg"/>
+					} else {
+						<div class="w-full h-48 bg-muted rounded-lg flex items-center justify-center">
+							@components.Icon(components.IconProps{Name: "dumbbell", Size: 48})
+						</div>
+					}
+				</div>
+				if exercise.VideoURL != "" {
+					<a href={ templ.SafeURL(exercise.VideoURL) } target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+						@components.Icon(components.IconProps{Name: "play", Size: 18})
+						Watch Video
+					</a>
+				}
+			</div>
+			if exercise.Description != "" {
+				<p class="text-muted-foreground">{ exercise.Description }</p>
+			} else {
+				<p class="text-muted-foreground text-sm">No description available</p>
+			}
+		</div>
 		if len(entries) == 0 {
 			<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
 				<header class="flex max-w-sm flex-col items-center gap-3 text-center">
@@ -17,7 +44,7 @@ templ ExerciseHistory(exerciseName string, entries []models.ExerciseEntry, userN
 						@components.Icon(components.IconProps{Name: "dumbbell", Size: 24})
 					</div>
 					@components.Title(components.TitleProps{Size: "md", Color: "default", Title: "No entries yet"})
-					<p class="text-muted-foreground text-sm">You haven't logged any sets for { exerciseName } yet.</p>
+					<p class="text-muted-foreground text-sm">You haven't logged any sets for { exercise.Name } yet.</p>
 				</header>
 				<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
 					<a href="/entries/new" class="btn">

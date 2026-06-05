@@ -328,7 +328,8 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 	entries := []models.ExerciseEntry{
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
-	html := renderToString(t, ExerciseHistory("Squat", entries, "Test User", true, false))
+	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
+	html := renderToString(t, ExerciseHistory(exercise, entries, "Test User", true, false))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected exercise name heading")
 	}
@@ -338,7 +339,8 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 }
 
 func TestExerciseHistory_Empty(t *testing.T) {
-	html := renderToString(t, ExerciseHistory("Squat", []models.ExerciseEntry{}, "Test User", true, false))
+	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
+	html := renderToString(t, ExerciseHistory(exercise, []models.ExerciseEntry{}, "Test User", true, false))
 	if !strings.Contains(html, "No entries yet") {
 		t.Error("expected empty state")
 	}
