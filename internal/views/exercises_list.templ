@@ -2,6 +2,8 @@ package views
 
 import (
 	"fmt"
+	"strings"
+
 	"stren/internal/models"
 	"stren/internal/views/components"
 )
@@ -12,15 +14,24 @@ templ ExercisesList(exercises []models.Exercise, userName string, isAuthenticate
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Exercises"})
 		</div>
+		<div class="mb-6">
+			<input
+				type="search"
+				id="exercise-search"
+				placeholder="Search exercises..."
+				class="input"
+			/>
+		</div>
 		if len(exercises) == 0 {
 			<div class="text-center py-12 text-muted-foreground">
 				<p>No exercises available.</p>
 			</div>
 		} else {
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+			<div id="exercise-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
 				for _, exercise := range exercises {
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", exercise.ID)) }
+						data-name={ strings.ToLower(exercise.Name) }
 						class="card p-6 hover:shadow-md transition-shadow h-24 lg:h-36 hover:border hover:border-orange-600"
 					>
 						<div class="h-full flex flex-col">
@@ -30,6 +41,37 @@ templ ExercisesList(exercises []models.Exercise, userName string, isAuthenticate
 					</a>
 				}
 			</div>
+			<div id="no-results" class="hidden text-center py-12 text-muted-foreground">
+				<p>No exercises found.</p>
+			</div>
 		}
+		<script>
+			(function() {
+				const searchInput = document.getElementById('exercise-search');
+				const cards = document.querySelectorAll('.exercise-card');
+				const noResults = document.getElementById('no-results');
+				let debounceTimer;
+
+				searchInput.addEventListener('input', function() {
+					clearTimeout(debounceTimer);
+					debounceTimer = setTimeout(function() {
+						const query = searchInput.value.toLowerCase().trim();
+						let visibleCount = 0;
+
+						cards.forEach(function(card) {
+							const name = card.getAttribute('data-name');
+							if (name.includes(query)) {
+								card.classList.remove('hidden');
+								visibleCount++;
+							} else {
+								card.classList.add('hidden');
+							}
+						});
+
+						noResults.classList.toggle('hidden', visibleCount > 0);
+					}, 200);
+				});
+			})();
+		</script>
 	}
 }
