@@ -82,6 +82,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.DELETE("/entries/:id", h.DeleteEntry)
 
 	// Exercise history
+	e.GET("/exercises", h.ListExercisesUI)
 	e.GET("/exercises/:id", h.ExerciseHistory)
 
 	// Feedback
@@ -110,7 +111,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	admin.GET("/users", h.AdminListUsers)
 
 	// API routes for htmx
-	e.GET("/api/exercises", h.ListExercises)
+	e.GET("/api/exercises", h.ListExercisesJSON)
 
 	// Static files (PWA assets, icons, etc.) - registered last as catch-all
 	e.Static("/", "public")

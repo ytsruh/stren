@@ -166,15 +166,26 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.ExerciseHistory(exercise.Name, entries, claims.Name, true, claims.IsAdmin))
+	return render(c, views.ExerciseHistory(exercise, entries, claims.Name, true, claims.IsAdmin))
 }
 
-// ListExercises returns all exercises as JSON (for autocomplete).
-func (h *Handler) ListExercises(c echo.Context) error {
+// ListExercisesJSON returns all exercises as JSON (for autocomplete).
+func (h *Handler) ListExercisesJSON(c echo.Context) error {
 	exercises, err := h.entryCtrl.List()
 	if err != nil {
 		return err
 	}
 
 	return c.JSON(http.StatusOK, exercises)
+}
+
+// ListExercisesUI renders the exercises list page.
+func (h *Handler) ListExercisesUI(c echo.Context) error {
+	claims := GetClaims(c)
+	exercises, err := h.entryCtrl.List()
+	if err != nil {
+		return err
+	}
+
+	return render(c, views.ExercisesList(exercises, claims.Name, true, claims.IsAdmin))
 }

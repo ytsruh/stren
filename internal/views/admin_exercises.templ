@@ -2,6 +2,8 @@ package views
 
 import (
 	"fmt"
+	"strings"
+
 	"stren/internal/models"
 	"stren/internal/views/components"
 )
@@ -15,6 +17,14 @@ templ AdminExerciseList(exercises []models.Exercise, userName string, isAuthenti
 				@components.Icon(components.IconProps{Name: "plus", Size: 18})
 				New Exercise
 			</a>
+		</div>
+		<div class="mb-6">
+			<input
+				type="search"
+				id="exercise-search"
+				placeholder="Search exercises..."
+				class="input"
+			/>
 		</div>
 		if len(exercises) == 0 {
 			<div class="text-center py-12 text-muted-foreground">
@@ -31,7 +41,7 @@ templ AdminExerciseList(exercises []models.Exercise, userName string, isAuthenti
 				</thead>
 				<tbody>
 					for _, e := range exercises {
-						<tr>
+						<tr class="exercise-row" data-name={ strings.ToLower(e.Name) }>
 							<td>{ e.Name }</td>
 							<td>
 								<span class="badge capitalize">{ string(e.Type) }</span>
@@ -51,7 +61,38 @@ templ AdminExerciseList(exercises []models.Exercise, userName string, isAuthenti
 					}
 				</tbody>
 			</table>
+			<div id="no-results" class="hidden text-center py-12 text-muted-foreground">
+				<p>No exercises found.</p>
+			</div>
 		}
+		<script>
+			(function() {
+				const searchInput = document.getElementById('exercise-search');
+				const rows = document.querySelectorAll('.exercise-row');
+				const noResults = document.getElementById('no-results');
+				let debounceTimer;
+
+				searchInput.addEventListener('input', function() {
+					clearTimeout(debounceTimer);
+					debounceTimer = setTimeout(function() {
+						const query = searchInput.value.toLowerCase().trim();
+						let visibleCount = 0;
+
+						rows.forEach(function(row) {
+							const name = row.getAttribute('data-name');
+							if (name.includes(query)) {
+								row.classList.remove('hidden');
+								visibleCount++;
+							} else {
+								row.classList.add('hidden');
+							}
+						});
+
+						noResults.classList.toggle('hidden', visibleCount > 0);
+					}, 200);
+				});
+			})();
+		</script>
 	}
 }
 

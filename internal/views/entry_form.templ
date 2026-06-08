@@ -129,7 +129,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 			class="form grid gap-6"
 		>
 			<fieldset class="grid gap-4">
-				<input type="hidden" name="exercise_id" value={ entry.ExerciseID } />
+				<input type="hidden" name="exercise_id" value={ entry.ExerciseID }/>
 				<div class="grid gap-2">
 					<label for="exercise-name">Exercise</label>
 					<input
@@ -141,7 +141,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 						disabled
 					/>
 				</div>
-				<div class="grid grid-cols-3 gap-4">
+				<div class="grid grid-col-1 sm:grid-cols-3 gap-4">
 					<div class="grid gap-2">
 						<label for="reps">Reps</label>
 						<input

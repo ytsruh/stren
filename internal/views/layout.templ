@@ -96,6 +96,17 @@ templ Layout(data PageData) {
 									</li>
 									<li>
 										<a
+											href="/exercises"
+											if data.CurrentPath == "/exercises" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "dumbbell", Size: 18})
+											<span>Exercises</span>
+										</a>
+									</li>
+									<li>
+										<a
 											href="/timer"
 											if data.CurrentPath == "/timer" {
 												aria-current="page"
