@@ -190,7 +190,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 						type="datetime-local"
 						id="date"
 						name="created_at"
-						value={ formatDateTimeLocal(entry.CreatedAt) }
+						value={ FormatDateTimeLocal(entry.CreatedAt) }
 						required
 					/>
 				</div>
@@ -251,6 +251,6 @@ templ EntryFormSuccessToast(message string) {
 	@Toast("success", "Entry saved!", message)
 }
 
-func formatDateTimeLocal(t time.Time) string {
+func FormatDateTimeLocal(t time.Time) string {
 	return t.Format("2006-01-02T15:04")
 }

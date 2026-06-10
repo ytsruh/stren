@@ -27,13 +27,14 @@ type Handler struct {
 	feedbackCtrl    *controllers.FeedbackController
 	timerCtrl       *controllers.TimerController
 	emomCtrl        *controllers.EMOMController
+	weightCtrl      *controllers.WeightController
 	userRepo        models.UserRepo
 	jwtService      *utils.JWTService
 	validator       utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timerCtrl *controllers.TimerController, emomCtrl *controllers.EMOMController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timerCtrl *controllers.TimerController, emomCtrl *controllers.EMOMController, weightCtrl *controllers.WeightController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
 		authCtrl:        authCtrl,
 		entryCtrl:       entryCtrl,
@@ -42,6 +43,7 @@ func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.Ent
 		feedbackCtrl:    feedbackCtrl,
 		timerCtrl:       timerCtrl,
 		emomCtrl:        emomCtrl,
+		weightCtrl:      weightCtrl,
 		userRepo:         userRepo,
 		jwtService:       jwtService,
 		validator:        validator,
@@ -97,6 +99,14 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/timer/emom", h.EMOMPage)
 	e.POST("/timer/emom/error", h.EMOMValidationError)
 	e.POST("/timer/emom/round", h.EMOMRoundToast)
+
+	// Weight entries
+	e.GET("/weight", h.WeightPage)
+	e.GET("/weight/new", h.NewWeightForm)
+	e.POST("/weight", h.CreateWeight)
+	e.GET("/weight/:id/edit", h.EditWeightForm)
+	e.PUT("/weight/:id", h.UpdateWeight)
+	e.DELETE("/weight/:id", h.DeleteWeight)
 
 	// Admin routes
 	admin := e.Group("/admin", AdminMiddleware())
@@ -226,8 +236,14 @@ func friendlyError(err error) string {
 	if strings.Contains(msg, "ExerciseName") && strings.Contains(msg, "min") {
 		return "Exercise name is required"
 	}
-	if strings.Contains(msg, "Notes") && strings.Contains(msg, "max") {
+	if strings.Contains(msg, "Notes") && strings.Contains(msg, "max") && strings.Contains(msg, "500") {
 		return "Notes must be 500 characters or less"
+	}
+	if strings.Contains(msg, "Notes") && strings.Contains(msg, "max") && strings.Contains(msg, "1000") {
+		return "Notes must be 1000 characters or less"
+	}
+	if strings.Contains(msg, "Weight") && strings.Contains(msg, "lte") {
+		return "Weight must be 1000 or less"
 	}
 	return msg
 }

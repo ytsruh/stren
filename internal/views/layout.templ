@@ -127,6 +127,17 @@ templ Layout(data PageData) {
 											<span>EMOM</span>
 										</a>
 									</li>
+									<li>
+										<a
+											href="/weight"
+											if data.CurrentPath == "/weight" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "scale", Size: 18})
+											<span>Weight</span>
+										</a>
+									</li>
 								</ul>
 							</div>
 							if data.IsAdmin {

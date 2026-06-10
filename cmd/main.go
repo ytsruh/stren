@@ -33,6 +33,7 @@ func main() {
 	repo := models.NewExerciseRepository(database)
 	userRepo := models.NewUserRepository(database)
 	adminUserRepo := models.NewUserAdminRepository(database)
+	weightRepo := models.NewWeightRepository(database)
 
 	// Initialize auth service
 	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
@@ -45,10 +46,11 @@ func main() {
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
 	timerCtrl := controllers.NewTimerController()
 	emomCtrl := controllers.NewEMOMController()
+	weightCtrl := controllers.NewWeightController(weightRepo)
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
-	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, userRepo, jwtService, validator)
+	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, weightCtrl, userRepo, jwtService, validator)
 
 	// Create Echo instance
 	e := echo.New()

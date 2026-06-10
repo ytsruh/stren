@@ -14,7 +14,9 @@ type Querier interface {
 	CreateEntry(ctx context.Context, arg CreateEntryParams) (string, error)
 	CreateFeedback(ctx context.Context, arg CreateFeedbackParams) (Feedback, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (string, error)
+	CreateWeightEntry(ctx context.Context, arg CreateWeightEntryParams) (WeightEntry, error)
 	DeleteEntry(ctx context.Context, arg DeleteEntryParams) error
+	DeleteWeightEntry(ctx context.Context, arg DeleteWeightEntryParams) error
 	GetAll(ctx context.Context) ([]GetAllRow, error)
 	GetAllClosed(ctx context.Context) ([]GetAllClosedRow, error)
 	GetAllOpen(ctx context.Context) ([]GetAllOpenRow, error)
@@ -26,16 +28,19 @@ type Querier interface {
 	GetFeedbackByID(ctx context.Context, id string) (GetFeedbackByIDRow, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id string) (User, error)
+	GetWeightEntry(ctx context.Context, arg GetWeightEntryParams) (WeightEntry, error)
 	List(ctx context.Context) ([]Exercise, error)
 	ListEntries(ctx context.Context, userID sql.NullString) ([]ListEntriesRow, error)
 	ListEntriesLast30Days(ctx context.Context, userID sql.NullString) ([]ListEntriesLast30DaysRow, error)
 	ListEntriesWithLimit(ctx context.Context, arg ListEntriesWithLimitParams) ([]ListEntriesWithLimitRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	ListWeightEntries(ctx context.Context, userID string) ([]WeightEntry, error)
 	Update(ctx context.Context, arg UpdateParams) (Exercise, error)
 	UpdateEntry(ctx context.Context, arg UpdateEntryParams) error
 	UpdateEntryWithDate(ctx context.Context, arg UpdateEntryWithDateParams) error
 	UpdateStatus(ctx context.Context, arg UpdateStatusParams) (Feedback, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) error
+	UpdateWeightEntry(ctx context.Context, arg UpdateWeightEntryParams) error
 }
 
 var _ Querier = (*Queries)(nil)
