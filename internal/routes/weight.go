@@ -149,6 +149,7 @@ func (h *Handler) UpdateWeight(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/weight"}`)
 		return render(c, views.WeightFormSuccessToast("Weight entry updated!"))
 	}
 

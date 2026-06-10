@@ -1,0 +1,145 @@
+package components
+
+// Default chart color used when a dataset's Color field is empty.
+const chartDefaultColor = "#f54900"
+
+// Fraction of the value range added as padding on each side of the y-axis
+// so the line is not flush with the top/bottom of the chart.
+const chartYAxisPadding = 0.10
+
+// ChartProps configures a generic time-series line/area chart.
+type ChartProps struct {
+	ID       string         // unique canvas id (required)
+	Title    string         // optional heading rendered above the canvas
+	Labels   []string       // x-axis labels
+	Datasets []ChartDataset // one or more series
+}
+
+// ChartDataset is a single line/area series on the chart.
+// Color is a CSS hex string used for both the line and the fill (alpha applied in JS).
+// If empty, a default blue is used.
+type ChartDataset struct {
+	Label  string    // tooltip/legend label (e.g., "Weight")
+	Values []float64 // y-axis values, in label order
+	Color  string    // line/fill color; defaults to blue
+}
+
+// chartSeries is the JSON-serialised form of a dataset with the color resolved.
+type chartSeries struct {
+	Label  string    `json:"label"`
+	Values []float64 `json:"values"`
+	Color  string    `json:"color"`
+}
+
+// Chart renders a generic ChartJS line/area chart. The data is embedded in
+// a <script type="application/json"> block so the inline <script> can read it
+// without an extra fetch. The component renders nothing when there are fewer
+// than 2 labels or no datasets.
+templ Chart(props ChartProps) {
+	{{
+		series := make([]chartSeries, 0, len(props.Datasets))
+		for _, d := range props.Datasets {
+			color := d.Color
+			if color == "" {
+				color = chartDefaultColor
+			}
+			series = append(series, chartSeries{
+				Label:  d.Label,
+				Values: d.Values,
+				Color:  color,
+			})
+		}
+		payload := struct {
+			Labels   []string      `json:"labels"`
+			Datasets []chartSeries `json:"datasets"`
+		}{
+			Labels:   props.Labels,
+			Datasets: series,
+		}
+		canvasID := props.ID
+		dataID := props.ID + "-data"
+	}}
+	if len(props.Labels) >= 2 && len(props.Datasets) > 0 {
+		if props.Title != "" {
+			<h3 class="text-sm font-semibold mb-2">{ props.Title }</h3>
+		}
+		<div class="w-full h-44 sm:h-52 md:h-60">
+			<canvas id={ canvasID }></canvas>
+		</div>
+		@templ.JSONScript(dataID, payload)
+		<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+		<script>
+			(function() {
+				var canvas = document.getElementById("{{ canvasID }}");
+				if (!canvas || typeof Chart === 'undefined') return;
+				var dataEl = document.getElementById("{{ dataID }}");
+				if (!dataEl) return;
+				var data;
+				try { data = JSON.parse(dataEl.textContent); } catch (e) { return; }
+				if (!data || !data.labels || !data.datasets) return;
+				function hexToRgba(hex, alpha) {
+					var h = hex.replace('#', '');
+					if (h.length === 3) h = h.split('').map(function(c){return c+c;}).join('');
+					var r = parseInt(h.substring(0,2), 16);
+					var g = parseInt(h.substring(2,4), 16);
+					var b = parseInt(h.substring(4,6), 16);
+					return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+				}
+				var ds = data.datasets.map(function(d) {
+					return {
+						label: d.label,
+						data: d.values,
+						borderColor: d.color,
+						backgroundColor: hexToRgba(d.color, 0.2),
+						fill: true,
+						tension: 0.25,
+						pointRadius: 3,
+						pointHoverRadius: 5
+					};
+				});
+				// Compute y-axis min/max with 10% padding either side so the
+				// line isn't flush with the top/bottom of the chart.
+				var allValues = [];
+				ds.forEach(function(d) { (d.data || []).forEach(function(v) { if (typeof v === 'number' && isFinite(v)) allValues.push(v); }); });
+				var yMin, yMax;
+				if (allValues.length > 0) {
+					var mn = Math.min.apply(null, allValues);
+					var mx = Math.max.apply(null, allValues);
+					if (mx === mn) { mn = mn - 1; mx = mx + 1; }
+					var pad = (mx - mn) * 0.10;
+					yMin = mn - pad;
+					yMax = mx + pad;
+				}
+				new Chart(canvas.getContext('2d'), {
+					type: 'line',
+					data: { labels: data.labels, datasets: ds },
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						interaction: { mode: 'index', intersect: false },
+						plugins: {
+							legend: { display: ds.length > 1 },
+							tooltip: {
+								callbacks: {
+									labelColor: function(context) {
+										return {
+											borderColor: context.dataset.borderColor,
+											backgroundColor: context.dataset.borderColor
+										};
+									}
+								}
+							}
+						},
+						scales: {
+							y: {
+								beginAtZero: false,
+								suggestedMin: yMin,
+								suggestedMax: yMax
+							}
+						}
+					}
+				});
+			})();
+		</script>
+	}
+}

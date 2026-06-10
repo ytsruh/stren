@@ -54,7 +54,7 @@ templ PhotoUpload(props PhotoUploadProps) {
 			</div>
 		}
 		<input
-			class="input"
+			class="input pt-2"
 			type="file"
 			id={ inputID }
 			accept="image/*"
@@ -72,7 +72,9 @@ templ PhotoUpload(props PhotoUploadProps) {
 				alt="New photo preview"
 			/>
 			<span id={ spinnerID } class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground">
-				<span class="animate-spin">@Icon(IconProps{Name: "loader", Size: 14})</span>
+				<span class="animate-spin">
+					@Icon(IconProps{Name: "loader", Size: 14})
+				</span>
 				Uploading...
 			</span>
 		</div>

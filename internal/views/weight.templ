@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"sort"
 	"stren/internal/models"
 	"stren/internal/views/components"
 )
@@ -16,11 +17,38 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 				Log Weight
 			</a>
 		</div>
+		@components.Chart(chartDataForWeight(entries))
 		if len(entries) == 0 {
 			@WeightEmptyState()
 		} else {
 			@WeightList(entries)
 		}
+	}
+}
+
+// chartDataForWeight converts a list of weight entries into the generic Chart
+// props expected by components.Chart. Entries are sorted ascending by date so
+// the line runs left-to-right. Labels are short dates ("10 Jun"). The chart
+// renders nothing when fewer than 2 entries are provided (handled inside Chart).
+func chartDataForWeight(entries []models.WeightEntry) components.ChartProps {
+	sorted := make([]models.WeightEntry, len(entries))
+	copy(sorted, entries)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
+	})
+	labels := make([]string, len(sorted))
+	values := make([]float64, len(sorted))
+	for i, e := range sorted {
+		labels[i] = e.CreatedAt.Format("02 Jan")
+		values[i] = e.Weight
+	}
+	return components.ChartProps{
+		ID:     "weight-chart",
+		Title:  "Weight Over Time",
+		Labels: labels,
+		Datasets: []components.ChartDataset{
+			{Label: "Weight (kg)", Values: values},
+		},
 	}
 }
 

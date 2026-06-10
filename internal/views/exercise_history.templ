@@ -59,7 +59,7 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
 			</div>
 			<h3 class="flex items-center gap-2 mb-4">
-				@components.Icon(components.IconProps{Name: "trending-up", Size: 20})
+				@components.Icon(components.IconProps{Name: "dumbbell", Size: 20})
 				History
 			</h3>
 			<div class="overflow-x-auto">
