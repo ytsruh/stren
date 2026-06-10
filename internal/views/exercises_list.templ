@@ -32,7 +32,7 @@ templ ExercisesList(exercises []models.Exercise, userName string, isAuthenticate
 					<a
 						href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", exercise.ID)) }
 						data-name={ strings.ToLower(exercise.Name) }
-						class="card p-6 hover:shadow-md transition-shadow h-24 lg:h-36 hover:border hover:border-orange-600"
+						class="card exercise-card p-6 hover:shadow-md transition-shadow h-24 lg:h-36 hover:border hover:border-orange-600"
 					>
 						<div class="h-full flex flex-col">
 							<span class="badge capitalize text-xs mb-2">{ string(exercise.Type) }</span>

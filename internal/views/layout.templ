@@ -127,6 +127,11 @@ templ Layout(data PageData) {
 											<span>EMOM</span>
 										</a>
 									</li>
+								</ul>
+							</div>
+							<div>
+								<h3>Tracking</h3>
+								<ul>
 									<li>
 										<a
 											href="/weight"
@@ -192,6 +197,17 @@ templ Layout(data PageData) {
 										>
 											@components.Icon(components.IconProps{Name: "user", Size: 18})
 											<span>Profile</span>
+										</a>
+									</li>
+									<li>
+										<a
+											href="/feedback"
+											if data.CurrentPath == "/feedback" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "message", Size: 18})
+											<span>Feedback</span>
 										</a>
 									</li>
 									<li>
