@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"stren/internal/db"
+	"stren/internal/utils"
 
 	"github.com/google/uuid"
 )
@@ -17,6 +18,7 @@ type WeightEntry struct {
 	UserID    string
 	Weight    float64
 	Notes     string
+	PhotoKey  string
 	CreatedAt time.Time
 }
 
@@ -28,6 +30,16 @@ func (w *WeightEntry) FormattedWeight() string {
 // FormattedDate returns the date in UK format (DD/MM/YY).
 func (w *WeightEntry) FormattedDate() string {
 	return w.CreatedAt.Format("02/01/06")
+}
+
+// HasPhoto returns true if the entry has an associated photo in R2.
+func (w *WeightEntry) HasPhoto() bool {
+	return w.PhotoKey != ""
+}
+
+// PhotoURL returns the public URL for the entry's photo, or "" if none.
+func (w *WeightEntry) PhotoURL() string {
+	return utils.PublicURLFor(w.PhotoKey)
 }
 
 // WeightRepository provides CRUD operations for weight entries using sqlc-generated queries.
@@ -53,6 +65,7 @@ func (r *WeightRepository) Create(entry *WeightEntry) error {
 		UserID:    entry.UserID,
 		Weight:    entry.Weight,
 		Notes:     stringToNullString(entry.Notes),
+		PhotoKey:  optionalString(entry.PhotoKey),
 		CreatedAt: entry.CreatedAt,
 	})
 	if err != nil {
@@ -96,6 +109,7 @@ func (r *WeightRepository) Update(entry *WeightEntry, userID string) error {
 	err := r.queries.UpdateWeightEntry(ctx, db.UpdateWeightEntryParams{
 		Weight:    entry.Weight,
 		Notes:     stringToNullString(entry.Notes),
+		PhotoKey:  optionalString(entry.PhotoKey),
 		CreatedAt: entry.CreatedAt,
 		ID:        entry.ID,
 		UserID:    userID,
@@ -127,6 +141,7 @@ func mapWeightEntryRow(row db.WeightEntry) *WeightEntry {
 		UserID:    row.UserID,
 		Weight:    row.Weight,
 		Notes:     nullStringToString(row.Notes),
+		PhotoKey:  nullStringToString(row.PhotoKey),
 		CreatedAt: row.CreatedAt,
 	}
 }
@@ -139,8 +154,17 @@ func mapWeightEntryRows(rows []db.WeightEntry) []WeightEntry {
 			UserID:    row.UserID,
 			Weight:    row.Weight,
 			Notes:     nullStringToString(row.Notes),
+			PhotoKey:  nullStringToString(row.PhotoKey),
 			CreatedAt: row.CreatedAt,
 		}
 	}
 	return entries
+}
+
+// optionalString returns a sql.NullString that is NULL when s is empty.
+// This is used for fields like photo_key that should be NULLABLE in the DB
+// when no value is provided (as opposed to the existing stringToNullString
+// helper which always returns Valid: true).
+func optionalString(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: s != ""}
 }

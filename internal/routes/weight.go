@@ -20,6 +20,8 @@ type weightFormInput struct {
 
 // parseWeightForm extracts form values, converts types, and validates the input.
 // It returns an HTTP error with a user-friendly message if any validation fails.
+// The returned entry contains the typed values plus the photo_key from the
+// hidden form field (empty string if not provided).
 func parseWeightForm(c echo.Context, v utils.Validator) (*models.WeightEntry, error) {
 	input := weightFormInput{
 		Notes: c.FormValue("notes"),
@@ -36,8 +38,9 @@ func parseWeightForm(c echo.Context, v utils.Validator) (*models.WeightEntry, er
 	}
 
 	return &models.WeightEntry{
-		Weight: input.Weight,
-		Notes:  input.Notes,
+		Weight:   input.Weight,
+		Notes:    input.Notes,
+		PhotoKey: c.FormValue("photo_key"),
 	}, nil
 }
 
@@ -66,7 +69,7 @@ func (h *Handler) CreateWeight(c echo.Context) error {
 	}
 
 	claims := GetClaims(c)
-	_, err = h.weightCtrl.CreateWeightEntry(claims.UserID, entry.Weight, entry.Notes)
+	_, err = h.weightCtrl.CreateWeightEntry(claims.UserID, entry.Weight, entry.Notes, entry.PhotoKey)
 	if err != nil {
 		return render(c, views.WeightFormError("Failed to save weight entry: "+err.Error()))
 	}
@@ -122,7 +125,25 @@ func (h *Handler) UpdateWeight(c echo.Context) error {
 		}
 	}
 
-	_, err = h.weightCtrl.UpdateWeightEntry(id, claims.UserID, entry.Weight, entry.Notes, createdAt)
+	// Resolve the final photo_key:
+	//  - if "remove_photo" is checked, clear it (and best-effort delete from R2)
+	//  - else if a new photo_key was uploaded, use it
+	//  - else keep the existing one
+	photoKey := existing.PhotoKey
+	removePhoto := c.FormValue("remove_photo") == "true"
+	if removePhoto {
+		if existing.HasPhoto() {
+			if delErr := utils.DeleteObject(existing.PhotoKey); delErr != nil {
+				// log but don't fail the update
+				c.Logger().Warnf("failed to delete weight photo %q from R2: %v", existing.PhotoKey, delErr)
+			}
+		}
+		photoKey = ""
+	} else if entry.PhotoKey != "" {
+		photoKey = entry.PhotoKey
+	}
+
+	_, err = h.weightCtrl.UpdateWeightEntry(id, claims.UserID, entry.Weight, entry.Notes, photoKey, createdAt)
 	if err != nil {
 		return render(c, views.WeightFormError("Failed to update weight entry: "+err.Error()))
 	}

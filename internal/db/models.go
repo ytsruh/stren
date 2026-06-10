@@ -54,5 +54,6 @@ type WeightEntry struct {
 	UserID    string
 	Weight    float64
 	Notes     sql.NullString
+	PhotoKey  sql.NullString
 	CreatedAt time.Time
 }

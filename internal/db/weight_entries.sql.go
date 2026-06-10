@@ -12,9 +12,9 @@ import (
 )
 
 const createWeightEntry = `-- name: CreateWeightEntry :one
-INSERT INTO weight_entries (id, user_id, weight, notes, created_at)
-VALUES (?, ?, ?, ?, ?)
-RETURNING id, user_id, weight, notes, created_at
+INSERT INTO weight_entries (id, user_id, weight, notes, photo_key, created_at)
+VALUES (?, ?, ?, ?, ?, ?)
+RETURNING id, user_id, weight, notes, photo_key, created_at
 `
 
 type CreateWeightEntryParams struct {
@@ -22,6 +22,7 @@ type CreateWeightEntryParams struct {
 	UserID    string
 	Weight    float64
 	Notes     sql.NullString
+	PhotoKey  sql.NullString
 	CreatedAt time.Time
 }
 
@@ -31,6 +32,7 @@ func (q *Queries) CreateWeightEntry(ctx context.Context, arg CreateWeightEntryPa
 		arg.UserID,
 		arg.Weight,
 		arg.Notes,
+		arg.PhotoKey,
 		arg.CreatedAt,
 	)
 	var i WeightEntry
@@ -39,6 +41,7 @@ func (q *Queries) CreateWeightEntry(ctx context.Context, arg CreateWeightEntryPa
 		&i.UserID,
 		&i.Weight,
 		&i.Notes,
+		&i.PhotoKey,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -60,7 +63,7 @@ func (q *Queries) DeleteWeightEntry(ctx context.Context, arg DeleteWeightEntryPa
 }
 
 const getWeightEntry = `-- name: GetWeightEntry :one
-SELECT id, user_id, weight, notes, created_at FROM weight_entries
+SELECT id, user_id, weight, notes, photo_key, created_at FROM weight_entries
 WHERE id = ? AND user_id = ?
 `
 
@@ -77,13 +80,14 @@ func (q *Queries) GetWeightEntry(ctx context.Context, arg GetWeightEntryParams) 
 		&i.UserID,
 		&i.Weight,
 		&i.Notes,
+		&i.PhotoKey,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listWeightEntries = `-- name: ListWeightEntries :many
-SELECT id, user_id, weight, notes, created_at FROM weight_entries
+SELECT id, user_id, weight, notes, photo_key, created_at FROM weight_entries
 WHERE user_id = ?
 ORDER BY created_at DESC
 `
@@ -102,6 +106,7 @@ func (q *Queries) ListWeightEntries(ctx context.Context, userID string) ([]Weigh
 			&i.UserID,
 			&i.Weight,
 			&i.Notes,
+			&i.PhotoKey,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -119,13 +124,14 @@ func (q *Queries) ListWeightEntries(ctx context.Context, userID string) ([]Weigh
 
 const updateWeightEntry = `-- name: UpdateWeightEntry :exec
 UPDATE weight_entries
-SET weight = ?, notes = ?, created_at = ?
+SET weight = ?, notes = ?, photo_key = ?, created_at = ?
 WHERE id = ? AND user_id = ?
 `
 
 type UpdateWeightEntryParams struct {
 	Weight    float64
 	Notes     sql.NullString
+	PhotoKey  sql.NullString
 	CreatedAt time.Time
 	ID        string
 	UserID    string
@@ -135,6 +141,7 @@ func (q *Queries) UpdateWeightEntry(ctx context.Context, arg UpdateWeightEntryPa
 	_, err := q.db.ExecContext(ctx, updateWeightEntry,
 		arg.Weight,
 		arg.Notes,
+		arg.PhotoKey,
 		arg.CreatedAt,
 		arg.ID,
 		arg.UserID,

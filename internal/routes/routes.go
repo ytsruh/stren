@@ -108,6 +108,9 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.PUT("/weight/:id", h.UpdateWeight)
 	e.DELETE("/weight/:id", h.DeleteWeight)
 
+	// Photo upload (presigned URL for direct browser → R2)
+	e.POST("/api/weight/photo-upload", h.PhotoUploadURL)
+
 	// Admin routes
 	admin := e.Group("/admin", AdminMiddleware())
 	admin.GET("/exercises", h.AdminListExercises)

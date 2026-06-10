@@ -1,0 +1,202 @@
+package components
+
+import "fmt"
+
+// PhotoUploadProps configures the photo upload widget.
+type PhotoUploadProps struct {
+	Name       string // Form field name (used for the hidden key input)
+	Label      string // Label text (default: "Photo")
+	CurrentURL string // Existing photo URL (for edit forms); empty for new entries
+	CurrentKey string // Existing photo storage key (for edit forms); empty for new entries
+	MaxSizeMB  int    // Max file size in MB; default 5
+}
+
+// PhotoUpload renders a photo upload widget that:
+//   1. Shows the current photo (if CurrentURL is set) with a "Remove" checkbox
+//   2. Lets the user pick a new file; on change, JS requests a presigned URL,
+//      PUTs the file to R2, sets the hidden key input, and shows a preview
+//
+// On form submit, the hidden `photo_key` field carries the new key back to
+// the server (or the original if no replacement was uploaded). The
+// `remove_photo` checkbox clears the photo on save.
+templ PhotoUpload(props PhotoUploadProps) {
+	{{
+		maxSize := props.MaxSizeMB
+		if maxSize <= 0 {
+			maxSize = 5
+		}
+		inputID := "photo-input-" + props.Name
+		previewID := "photo-preview-" + props.Name
+		hiddenID := "photo-key-" + props.Name
+		currentID := "photo-current-" + props.Name
+		removeID := "photo-remove-" + props.Name
+		spinnerID := "photo-spinner-" + props.Name
+	}}
+	<div class="grid gap-2" data-photo-upload={ props.Name } data-max-size-mb={ templ.SafeURL(fmt.Sprintf("%d", maxSize)) }>
+		<label for={ inputID }>{ props.Label }</label>
+		if props.CurrentURL != "" {
+			<div id={ currentID } class="flex items-start gap-4">
+				<img
+					src={ templ.SafeURL(props.CurrentURL) }
+					alt="Current photo"
+					class="size-32 rounded-md object-cover border"
+				/>
+				<div class="flex items-center gap-2 pt-2">
+					<input
+						type="checkbox"
+						id={ removeID }
+						name="remove_photo"
+						value="true"
+						class="checkbox"
+					/>
+					<label for={ removeID } class="text-sm">Remove current photo</label>
+				</div>
+			</div>
+		}
+		<input
+			class="input"
+			type="file"
+			id={ inputID }
+			accept="image/*"
+		/>
+		<input
+			type="hidden"
+			id={ hiddenID }
+			name="photo_key"
+			value={ props.CurrentKey }
+		/>
+		<div class="flex items-center gap-3">
+			<img
+				id={ previewID }
+				class="size-32 rounded-md object-cover border hidden"
+				alt="New photo preview"
+			/>
+			<span id={ spinnerID } class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground">
+				<span class="animate-spin">@Icon(IconProps{Name: "loader", Size: 14})</span>
+				Uploading...
+			</span>
+		</div>
+	</div>
+	<script>
+		(function() {
+			var MAX_SIZE_MB = 5;
+			// showToast appends a Basecoat toast to the global #toaster. The
+			// structure mirrors the templ Toast component in layout.templ
+			// (keep in sync if the server-rendered toast changes).
+			var TOAST_ICONS = {
+				success: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>',
+				error: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>',
+				warning: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>',
+				default: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>'
+			};
+			function showToast(category, title, message) {
+				var toaster = document.getElementById('toaster');
+				if (!toaster) return;
+				var cat = TOAST_ICONS[category] ? category : 'default';
+				var icon = TOAST_ICONS[cat];
+				var descHTML = message ? '<p>' + message + '</p>' : '';
+				var el = document.createElement('div');
+				el.className = 'toast';
+				el.setAttribute('role', 'status');
+				el.setAttribute('aria-atomic', 'true');
+				el.setAttribute('aria-hidden', 'false');
+				el.setAttribute('data-category', cat);
+				el.innerHTML = '<div class="toast-content">' + icon + '<section><h2>' + title + '</h2>' + descHTML + '</section></div>';
+				toaster.appendChild(el);
+			}
+
+			document.querySelectorAll('[data-photo-upload]').forEach(function(root) {
+				if (root.dataset.bound === '1') return;
+				root.dataset.bound = '1';
+				var name = root.getAttribute('data-photo-upload');
+				var maxMB = parseInt(root.getAttribute('data-max-size-mb') || '5', 10) || MAX_SIZE_MB;
+				var input = document.getElementById('photo-input-' + name);
+				var preview = document.getElementById('photo-preview-' + name);
+				var hidden = document.getElementById('photo-key-' + name);
+				var current = document.getElementById('photo-current-' + name);
+				var remove = document.getElementById('photo-remove-' + name);
+				var spinner = document.getElementById('photo-spinner-' + name);
+				if (!input) return;
+
+				function clearPreview() {
+					preview.src = '';
+					preview.classList.add('hidden');
+				}
+
+				input.addEventListener('change', function() {
+					var file = input.files && input.files[0];
+					if (!file) {
+						clearPreview();
+						return;
+					}
+					if (!file.type.startsWith('image/')) {
+						showToast('error', 'Upload failed', 'Please select an image file.');
+						input.value = '';
+						return;
+					}
+					if (file.size > maxMB * 1024 * 1024) {
+						showToast('error', 'Upload failed', 'File is too large. Max size is ' + maxMB + 'MB.');
+						input.value = '';
+						return;
+					}
+					// If the user is uploading a new photo, uncheck "remove"
+					if (remove) remove.checked = false;
+					// Local preview
+					var reader = new FileReader();
+					reader.onload = function(e) {
+						preview.src = e.target.result;
+						preview.classList.remove('hidden');
+					};
+					reader.readAsDataURL(file);
+
+					// Request presigned URL and PUT
+					spinner.classList.remove('htmx-indicator');
+					spinner.style.display = 'inline-flex';
+					fetch('/api/weight/photo-upload', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ filename: file.name, content_type: file.type })
+					}).then(function(r) {
+						if (!r.ok) throw new Error('Failed to get upload URL');
+						return r.json();
+					}).then(function(data) {
+						return fetch(data.url, {
+							method: 'PUT',
+							headers: { 'Content-Type': file.type },
+							body: file
+						}).then(function(resp) {
+							if (!resp.ok) throw new Error('Upload failed (status ' + resp.status + ')');
+							hidden.value = data.key;
+							showToast('success', 'Photo uploaded', 'Ready to save.');
+						});
+					}).catch(function(e) {
+						showToast('error', 'Upload failed', e.message);
+						input.value = '';
+						clearPreview();
+					}).finally(function() {
+						spinner.classList.add('htmx-indicator');
+						spinner.style.display = '';
+					});
+				});
+
+				if (remove) {
+					remove.addEventListener('change', function() {
+						if (remove.checked) {
+							hidden.value = '';
+							if (current) current.style.opacity = '0.4';
+						} else {
+							hidden.value = (root.getAttribute('data-original-key') || '');
+							if (current) current.style.opacity = '';
+						}
+					});
+				}
+			});
+			// Store original key on load for the remove-checkbox restore behaviour
+			document.querySelectorAll('[data-photo-upload]').forEach(function(root) {
+				var name = root.getAttribute('data-photo-upload');
+				var hidden = document.getElementById('photo-key-' + name);
+				if (hidden) root.setAttribute('data-original-key', hidden.value);
+			});
+		})();
+	</script>
+}

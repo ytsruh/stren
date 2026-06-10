@@ -111,6 +111,8 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 				class="btn-sm-icon-destructive relative inline-flex"
 				hx-delete={ fmt.Sprintf("/entries/%s", entry.ID) }
 				hx-confirm="Are you sure you want to delete this entry?"
+				hx-target="#toaster"
+				hx-swap="beforeend"
 				hx-indicator="#delete-spinner"
 			>
 				<span class="flex items-center justify-around gap-2">

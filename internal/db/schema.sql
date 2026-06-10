@@ -53,6 +53,7 @@ CREATE TABLE weight_entries (
     user_id TEXT NOT NULL REFERENCES users(id),
     weight REAL NOT NULL,
     notes TEXT,
+    photo_key TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

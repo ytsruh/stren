@@ -22,6 +22,11 @@ func main() {
 		log.Fatalf("Failed to load environment variables: %v", err)
 	}
 
+	// Load and validate storage (R2) configuration
+	if _, err := utils.LoadStorageConfig(); err != nil {
+		log.Fatalf("Failed to load storage configuration: %v", err)
+	}
+
 	// Initialize database
 	database, err := db.NewConnection(cfg.DB_PATH, cfg.TURSO_DATABASE_URL, cfg.TURSO_AUTH_TOKEN)
 	if err != nil {

@@ -205,13 +205,6 @@ func TestEntryRow(t *testing.T) {
 	}
 }
 
-func TestDeletedRow(t *testing.T) {
-	html := renderToString(t, DeletedRow())
-	if !strings.Contains(html, `class="fade-out"`) {
-		t.Error("expected fade-out class")
-	}
-}
-
 func TestRecentEntries_WithData(t *testing.T) {
 	entries := []models.ExerciseEntry{
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100},

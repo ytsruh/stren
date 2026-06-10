@@ -31,6 +31,7 @@ templ WeightList(entries []models.WeightEntry) {
 			<tr>
 				<th>Date</th>
 				<th>Weight</th>
+				<th class="hidden lg:table-cell">Photo</th>
 				<th class="hidden lg:table-cell">Notes</th>
 				<th></th>
 			</tr>
@@ -48,6 +49,15 @@ templ WeightRow(entry models.WeightEntry) {
 	<tr id={ fmt.Sprintf("weight-%s", entry.ID) }>
 		<td>{ entry.FormattedDate() }</td>
 		<td>{ entry.FormattedWeight() }</td>
+		<td class="hidden lg:table-cell">
+			if entry.HasPhoto() {
+				<img
+					src={ templ.SafeURL(entry.PhotoURL()) }
+					alt="Weight photo"
+					class="size-12 rounded object-cover border"
+				/>
+			}
+		</td>
 		<td class="hidden lg:table-cell">{ entry.Notes }</td>
 		<td>
 			<div class="flex gap-2">
