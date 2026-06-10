@@ -291,6 +291,11 @@ templ Layout(data PageData) {
 						dialog.close();
 					}
 				});
+				document.body.addEventListener('triggerRedirect', function(evt) {
+					setTimeout(function() {
+						window.location.href = evt.detail.value;
+					}, 750);
+				});
 			</script>
 			<script>
 				if ('serviceWorker' in navigator) {

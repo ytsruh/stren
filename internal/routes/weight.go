@@ -72,9 +72,8 @@ func (h *Handler) CreateWeight(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/weight")
-		c.Response().WriteHeader(http.StatusSeeOther)
-		return nil
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/weight"}`)
+		return render(c, views.WeightFormSuccessToast("Weight saved!"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/weight")
@@ -145,9 +144,8 @@ func (h *Handler) DeleteWeight(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/weight")
-		c.Response().WriteHeader(http.StatusSeeOther)
-		return render(c, views.Toast("success", "Weight entry deleted!", ""))
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/weight"}`)
+		return render(c, views.WeightDeleteSuccess())
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/weight")

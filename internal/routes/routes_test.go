@@ -692,11 +692,15 @@ func TestCreateEntry_HTMX(t *testing.T) {
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("expected status 303, got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
 	}
-	if hxRedir := rec.Header().Get("HX-Redirect"); hxRedir != "/" {
-		t.Fatalf("expected HX-Redirect to /, got %q", hxRedir)
+	if hxTrigger := rec.Header().Get("HX-Trigger"); hxTrigger != `{"triggerRedirect": "/"}` {
+		t.Fatalf("expected HX-Trigger to be set, got %q", hxTrigger)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Entry saved") {
+		t.Fatalf("expected toast with 'Entry saved', got body: %s", body)
 	}
 }
 
