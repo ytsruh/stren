@@ -96,6 +96,9 @@
       completeDiv.classList.add('flex');
     }
     vibrate();
+    if (window.WakeLock) {
+      window.WakeLock.release();
+    }
   }
 
   function tick() {
@@ -109,6 +112,9 @@
   function startEMOM() {
     if (timer) return;
     if (totalRounds <= 0) return;
+    if (window.WakeLock) {
+      window.WakeLock.acquire();
+    }
     timer = setInterval(tick, 1000);
     showControls();
   }
@@ -117,6 +123,9 @@
     if (timer) {
       clearInterval(timer);
       timer = null;
+    }
+    if (window.WakeLock) {
+      window.WakeLock.release();
     }
   }
 
