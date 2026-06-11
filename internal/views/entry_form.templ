@@ -7,8 +7,9 @@ import (
 	"time"
 )
 
-// EntryForm renders the form for creating a new entry
-templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
+// EntryForm renders the form for creating a new entry.
+// preselectedExerciseID, when non-empty, marks the matching <option> as selected.
+templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Entry"})
 		<form
@@ -29,7 +30,11 @@ templ EntryForm(exercises []models.Exercise, userName string, isAuthenticated bo
 					>
 						<option value="">-- Select an exercise --</option>
 						for _, e := range exercises {
-							<option value={ e.ID }>{ e.Name }</option>
+							if e.ID == preselectedExerciseID {
+								<option value={ e.ID } selected>{ e.Name }</option>
+							} else {
+								<option value={ e.ID }>{ e.Name }</option>
+							}
 						}
 					</select>
 				</div>

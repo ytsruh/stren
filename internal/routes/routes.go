@@ -87,6 +87,9 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/exercises", h.ListExercisesUI)
 	e.GET("/exercises/:id", h.ExerciseHistory)
 
+	// New entry pre-filled for a specific exercise
+	e.GET("/exercises/:id/new", h.NewEntryForm)
+
 	// Feedback
 	e.GET("/feedback", h.FeedbackForm)
 	e.POST("/feedback", h.SubmitFeedback)

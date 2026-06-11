@@ -649,6 +649,53 @@ func TestNewEntryForm(t *testing.T) {
 	}
 }
 
+func TestNewEntryForm_Preselected(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/ex-1/new", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("ex-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.NewEntryForm(c); err != nil {
+		t.Fatalf("NewEntryForm failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<option value="ex-1" selected>Squat</option>`) {
+		t.Fatalf("expected Squat option to be preselected, got body: %s", body)
+	}
+	if strings.Contains(body, `<option value="ex-2" selected>Bench Press</option>`) {
+		t.Fatalf("expected Bench Press option NOT to be preselected, got body: %s", body)
+	}
+}
+
+func TestNewEntryForm_PreselectedInvalid(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/non-existent/new", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("non-existent")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.NewEntryForm(c); err != nil {
+		t.Fatalf("NewEntryForm failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (graceful fallback), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, `selected>`) {
+		t.Fatalf("expected no preselected option for unknown exercise, got body: %s", body)
+	}
+}
+
 func TestCreateEntry(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 

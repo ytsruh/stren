@@ -254,7 +254,7 @@ func TestEntryForm_New(t *testing.T) {
 		{ID: "ex-1", Name: "Squat"},
 		{ID: "ex-2", Name: "Bench Press"},
 	}
-	html := renderToString(t, EntryForm(types, "Test User", true, false))
+	html := renderToString(t, EntryForm(types, "", "Test User", true, false))
 	if !strings.Contains(html, "New Entry") {
 		t.Error("expected new entry title")
 	}

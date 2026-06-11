@@ -24,6 +24,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 }
 
 // NewEntryForm renders the form for creating a new entry.
+// When reached via /exercises/:id/new the path param preselects that exercise.
 func (h *Handler) NewEntryForm(c echo.Context) error {
 	exercises, err := h.entryCtrl.List()
 	if err != nil {
@@ -31,7 +32,19 @@ func (h *Handler) NewEntryForm(c echo.Context) error {
 	}
 
 	claims := GetClaims(c)
-	return render(c, views.EntryForm(exercises, claims.Name, true, claims.IsAdmin))
+
+	preselectedID := ""
+	if id := c.Param("id"); id != "" {
+		exercise, err := h.entryCtrl.GetExerciseByID(id, claims.UserID)
+		if err != nil {
+			return err
+		}
+		if exercise != nil {
+			preselectedID = exercise.ID
+		}
+	}
+
+	return render(c, views.EntryForm(exercises, preselectedID, claims.Name, true, claims.IsAdmin))
 }
 
 // CreateEntry handles the creation of a new entry.

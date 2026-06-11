@@ -11,9 +11,20 @@ import (
 templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="mb-6">
-			<div class="flex items-center justify-between mb-4">
-				@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: exercise.Name})
-				<span class="badge capitalize">{ string(exercise.Type) }</span>
+			<div class="flex items-center justify-between mb-4 gap-4">
+				<div class="flex items-center gap-2">
+					@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: exercise.Name})
+					<span class="badge capitalize hidden sm:flex">{ string(exercise.Type) }</span>
+				</div>
+				<div class="flex items-center gap-2">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/new", exercise.ID)) }
+						class="btn"
+					>
+						@components.Icon(components.IconProps{Name: "plus", Size: 18})
+						Add
+					</a>
+				</div>
 			</div>
 			<div class="mb-4 flex items-start gap-4">
 				<div class="flex-1">
@@ -54,7 +65,7 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 					<p class="text-muted-foreground text-sm">You haven't logged any sets for { exercise.Name } yet.</p>
 				</header>
 				<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
-					<a href="/entries/new" class="btn">
+					<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/new", exercise.ID)) } class="btn">
 						@components.Icon(components.IconProps{Name: "plus", Size: 18})
 						Log First Set
 					</a>

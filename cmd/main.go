@@ -60,6 +60,7 @@ func main() {
 	// Create Echo instance
 	e := echo.New()
 	e.HideBanner = true
+	e.HidePort = true
 
 	// Custom HTTP error handler - renders error pages instead of JSON
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
