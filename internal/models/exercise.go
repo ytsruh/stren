@@ -317,15 +317,15 @@ func (r *ExerciseRepository) GetEntriesByDateRange(start, end time.Time, userID 
 	return mapGetEntriesByDateRangeRows(rows), nil
 }
 
-// ListEntriesLast30Days returns entries from the last 30 days ordered by created_at descending.
+// ListEntriesLast7Days returns entries from the last 7 days ordered by created_at descending.
 // Scopes to the given user ID.
-func (r *ExerciseRepository) ListEntriesLast30Days(userID string) ([]ExerciseEntry, error) {
+func (r *ExerciseRepository) ListEntriesLast7Days(userID string) ([]ExerciseEntry, error) {
 	ctx := context.Background()
-	rows, err := r.queries.ListEntriesLast30Days(ctx, sql.NullString{String: userID, Valid: true})
+	rows, err := r.queries.ListEntriesLast7Days(ctx, sql.NullString{String: userID, Valid: true})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list entries last 30 days: %w", err)
+		return nil, fmt.Errorf("failed to list entries last 7 days: %w", err)
 	}
-	return mapListEntriesLast30DaysRows(rows), nil
+	return mapListEntriesLast7DaysRows(rows), nil
 }
 
 // --- Mapping helpers ---
@@ -416,7 +416,7 @@ func mapGetEntriesByDateRangeRows(rows []db.GetEntriesByDateRangeRow) []Exercise
 	return entries
 }
 
-func mapListEntriesLast30DaysRows(rows []db.ListEntriesLast30DaysRow) []ExerciseEntry {
+func mapListEntriesLast7DaysRows(rows []db.ListEntriesLast7DaysRow) []ExerciseEntry {
 	entries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
 		entries[i] = ExerciseEntry{

@@ -31,7 +31,7 @@ type Querier interface {
 	GetWeightEntry(ctx context.Context, arg GetWeightEntryParams) (WeightEntry, error)
 	List(ctx context.Context) ([]Exercise, error)
 	ListEntries(ctx context.Context, userID sql.NullString) ([]ListEntriesRow, error)
-	ListEntriesLast30Days(ctx context.Context, userID sql.NullString) ([]ListEntriesLast30DaysRow, error)
+	ListEntriesLast7Days(ctx context.Context, userID sql.NullString) ([]ListEntriesLast7DaysRow, error)
 	ListEntriesWithLimit(ctx context.Context, arg ListEntriesWithLimitParams) ([]ListEntriesWithLimitRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWeightEntries(ctx context.Context, userID string) ([]WeightEntry, error)

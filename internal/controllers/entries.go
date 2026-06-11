@@ -22,9 +22,9 @@ func (ec *EntryController) ListEntries(userID string) ([]models.ExerciseEntry, e
 	return ec.repo.ListEntries(userID, 100)
 }
 
-// ListEntriesLast30Days returns entries from the last 30 days for a user.
-func (ec *EntryController) ListEntriesLast30Days(userID string) ([]models.ExerciseEntry, error) {
-	return ec.repo.ListEntriesLast30Days(userID)
+// ListEntriesLast7Days returns entries from the last 7 days for a user.
+func (ec *EntryController) ListEntriesLast7Days(userID string) ([]models.ExerciseEntry, error) {
+	return ec.repo.ListEntriesLast7Days(userID)
 }
 
 // GetEntry retrieves a single entry by ID, scoped to the user.

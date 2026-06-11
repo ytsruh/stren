@@ -21,7 +21,7 @@ templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated
 			@EmptyState()
 		} else {
 			<div class="flex justify-between items-center mb-6">
-				@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "30 Day History"})
+				@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "7 Day History"})
 			</div>
 			@EntryList(entries)
 		}

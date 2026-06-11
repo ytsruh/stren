@@ -268,15 +268,15 @@ func (q *Queries) ListEntries(ctx context.Context, userID sql.NullString) ([]Lis
 	return items, nil
 }
 
-const listEntriesLast30Days = `-- name: ListEntriesLast30Days :many
+const listEntriesLast7Days = `-- name: ListEntriesLast7Days :many
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
-WHERE e.created_at >= datetime('now', '-30 days') AND e.user_id = ?
+WHERE e.created_at >= datetime('now', '-7 days') AND e.user_id = ?
 ORDER BY e.created_at DESC
 `
 
-type ListEntriesLast30DaysRow struct {
+type ListEntriesLast7DaysRow struct {
 	ID           string
 	ExerciseID   string
 	ExerciseName string
@@ -288,15 +288,15 @@ type ListEntriesLast30DaysRow struct {
 	CreatedAt    sql.NullTime
 }
 
-func (q *Queries) ListEntriesLast30Days(ctx context.Context, userID sql.NullString) ([]ListEntriesLast30DaysRow, error) {
-	rows, err := q.db.QueryContext(ctx, listEntriesLast30Days, userID)
+func (q *Queries) ListEntriesLast7Days(ctx context.Context, userID sql.NullString) ([]ListEntriesLast7DaysRow, error) {
+	rows, err := q.db.QueryContext(ctx, listEntriesLast7Days, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListEntriesLast30DaysRow
+	var items []ListEntriesLast7DaysRow
 	for rows.Next() {
-		var i ListEntriesLast30DaysRow
+		var i ListEntriesLast7DaysRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ExerciseID,

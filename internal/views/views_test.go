@@ -143,7 +143,7 @@ func TestDashboard_WithEntries(t *testing.T) {
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 	html := renderToString(t, Dashboard(entries, "Test User", true, false))
-	if !strings.Contains(html, "30 Day History") {
+	if !strings.Contains(html, "7 Day History") {
 		t.Error("expected page title")
 	}
 	if !strings.Contains(html, "Squat") {
