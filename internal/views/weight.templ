@@ -1,0 +1,121 @@
+package views
+
+import (
+	"fmt"
+	"sort"
+	"stren/internal/models"
+	"stren/internal/views/components"
+)
+
+// WeightPage renders the weight entries list page
+templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: "Weight", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		<div class="flex justify-between items-center mb-6">
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Body Weight"})
+			<a href="/weight/new" class="btn">
+				@components.Icon(components.IconProps{Name: "plus", Size: 18})
+				Log Weight
+			</a>
+		</div>
+		@components.Chart(chartDataForWeight(entries))
+		if len(entries) == 0 {
+			@WeightEmptyState()
+		} else {
+			@WeightList(entries)
+		}
+	}
+}
+
+// chartDataForWeight converts a list of weight entries into the generic Chart
+// props expected by components.Chart. Entries are sorted ascending by date so
+// the line runs left-to-right. Labels are short dates ("10 Jun"). The chart
+// renders nothing when fewer than 2 entries are provided (handled inside Chart).
+func chartDataForWeight(entries []models.WeightEntry) components.ChartProps {
+	sorted := make([]models.WeightEntry, len(entries))
+	copy(sorted, entries)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
+	})
+	labels := make([]string, len(sorted))
+	values := make([]float64, len(sorted))
+	for i, e := range sorted {
+		labels[i] = e.CreatedAt.Format("02 Jan")
+		values[i] = e.Weight
+	}
+	return components.ChartProps{
+		ID:     "weight-chart",
+		Title:  "Weight Over Time",
+		Labels: labels,
+		Datasets: []components.ChartDataset{
+			{Label: "Weight (kg)", Values: values},
+		},
+	}
+}
+
+// WeightList renders a table of weight entries
+templ WeightList(entries []models.WeightEntry) {
+	<table class="table w-full">
+		<thead>
+			<tr>
+				<th>Date</th>
+				<th>Weight</th>
+				<th class="hidden lg:table-cell">Photo</th>
+				<th class="hidden lg:table-cell">Notes</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tbody id="weight-table">
+			for _, entry := range entries {
+				@WeightRow(entry)
+			}
+		</tbody>
+	</table>
+}
+
+// WeightRow renders a single weight entry row
+templ WeightRow(entry models.WeightEntry) {
+	<tr id={ fmt.Sprintf("weight-%s", entry.ID) }>
+		<td>{ entry.FormattedDate() }</td>
+		<td>{ entry.FormattedWeight() }</td>
+		<td class="hidden lg:table-cell">
+			if entry.HasPhoto() {
+				<img
+					src={ templ.SafeURL(entry.PhotoURL()) }
+					alt="Weight photo"
+					class="size-12 rounded object-cover border"
+				/>
+			}
+		</td>
+		<td class="hidden lg:table-cell">{ entry.Notes }</td>
+		<td>
+			<div class="flex gap-2">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/weight/%s/edit", entry.ID)) }
+					class="btn-outline p-2"
+					title="Edit"
+				>
+					@components.Icon(components.IconProps{Name: "edit", Size: 16})
+				</a>
+			</div>
+		</td>
+	</tr>
+}
+
+// WeightEmptyState shows when no weight entries exist
+templ WeightEmptyState() {
+	<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
+		<header class="flex max-w-sm flex-col items-center gap-3 text-center">
+			<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
+				@components.Icon(components.IconProps{Name: "scale", Size: 24})
+			</div>
+			<h3 class="text-lg font-semibold">No weight entries yet</h3>
+			<p class="text-muted-foreground text-sm">Start tracking your body weight by logging your first entry.</p>
+		</header>
+		<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
+			<a href="/weight/new" class="btn">
+				@components.Icon(components.IconProps{Name: "plus", Size: 18})
+				Log Your First Weight
+			</a>
+		</section>
+	</div>
+}

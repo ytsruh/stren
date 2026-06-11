@@ -4,13 +4,22 @@ import (
 	"testing"
 )
 
-func TestLoadAndValidateEnv_Success(t *testing.T) {
-	// Ensure all required variables are set
+func setValidEnv(t *testing.T) {
+	t.Helper()
 	t.Setenv("PORT", "8080")
 	t.Setenv("DB_PATH", "test.db")
 	t.Setenv("TURSO_DATABASE_URL", "libsql://test.turso.io")
 	t.Setenv("TURSO_AUTH_TOKEN", "test-token")
 	t.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("STORAGE_ENDPOINT", "https://test.r2.cloudflarestorage.com")
+	t.Setenv("STORAGE_ACCESS_KEY", "test-access")
+	t.Setenv("STORAGE_SECRET_KEY", "test-secret-key")
+	t.Setenv("STORAGE_BUCKET", "test-bucket")
+	t.Setenv("STORAGE_PUBLIC_URL", "https://pub.test-bucket.r2.dev")
+}
+
+func TestLoadAndValidateEnv_Success(t *testing.T) {
+	setValidEnv(t)
 
 	cfg, err := LoadAndValidateEnv()
 	if err != nil {
@@ -32,14 +41,18 @@ func TestLoadAndValidateEnv_Success(t *testing.T) {
 	if cfg.JWT_SECRET != "test-secret" {
 		t.Errorf("expected JWT_SECRET to be 'test-secret', got: %s", cfg.JWT_SECRET)
 	}
+	if cfg.STORAGE_ENDPOINT != "https://test.r2.cloudflarestorage.com" {
+		t.Errorf("expected STORAGE_ENDPOINT to be set, got: %s", cfg.STORAGE_ENDPOINT)
+	}
+	if cfg.STORAGE_BUCKET != "test-bucket" {
+		t.Errorf("expected STORAGE_BUCKET to be 'test-bucket', got: %s", cfg.STORAGE_BUCKET)
+	}
 }
 
 func TestLoadAndValidateEnv_MissingPort(t *testing.T) {
 	t.Setenv("PORT", "")
-	t.Setenv("DB_PATH", "test.db")
-	t.Setenv("TURSO_DATABASE_URL", "libsql://test.turso.io")
-	t.Setenv("TURSO_AUTH_TOKEN", "test-token")
-	t.Setenv("JWT_SECRET", "test-secret")
+	setValidEnv(t)
+	t.Setenv("PORT", "")
 
 	_, err := LoadAndValidateEnv()
 	if err == nil {
@@ -48,11 +61,9 @@ func TestLoadAndValidateEnv_MissingPort(t *testing.T) {
 }
 
 func TestLoadAndValidateEnv_MissingDBPath(t *testing.T) {
-	t.Setenv("PORT", "8080")
 	t.Setenv("DB_PATH", "")
-	t.Setenv("TURSO_DATABASE_URL", "libsql://test.turso.io")
-	t.Setenv("TURSO_AUTH_TOKEN", "test-token")
-	t.Setenv("JWT_SECRET", "test-secret")
+	setValidEnv(t)
+	t.Setenv("DB_PATH", "")
 
 	_, err := LoadAndValidateEnv()
 	if err == nil {
@@ -60,12 +71,27 @@ func TestLoadAndValidateEnv_MissingDBPath(t *testing.T) {
 	}
 }
 
-func TestLoadAndValidateEnv_MissingBoth(t *testing.T) {
+func TestLoadAndValidateEnv_MissingStorage(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("STORAGE_BUCKET", "")
+
+	_, err := LoadAndValidateEnv()
+	if err == nil {
+		t.Fatal("expected error for missing STORAGE_BUCKET, got nil")
+	}
+}
+
+func TestLoadAndValidateEnv_MissingAll(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("DB_PATH", "")
 	t.Setenv("TURSO_DATABASE_URL", "")
 	t.Setenv("TURSO_AUTH_TOKEN", "")
 	t.Setenv("JWT_SECRET", "")
+	t.Setenv("STORAGE_ENDPOINT", "")
+	t.Setenv("STORAGE_ACCESS_KEY", "")
+	t.Setenv("STORAGE_SECRET_KEY", "")
+	t.Setenv("STORAGE_BUCKET", "")
+	t.Setenv("STORAGE_PUBLIC_URL", "")
 
 	_, err := LoadAndValidateEnv()
 	if err == nil {
@@ -80,39 +106,98 @@ func TestValidateEnvVars(t *testing.T) {
 		expected []string
 	}{
 		{
-			name:     "all fields present",
-			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
+			name: "all fields present",
+			env: EnvVar{
+				PORT: "8080", DB_PATH: "test.db",
+				TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token",
+				JWT_SECRET: "test-secret",
+				STORAGE_ENDPOINT: "https://test.r2.cloudflarestorage.com",
+				STORAGE_ACCESS_KEY: "ak", STORAGE_SECRET_KEY: "sk",
+				STORAGE_BUCKET: "b", STORAGE_PUBLIC_URL: "https://pub.test.r2.dev",
+			},
 			expected: []string{},
 		},
 		{
-			name:     "missing port",
-			env:      EnvVar{PORT: "", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
+			name: "missing port",
+			env: EnvVar{
+				DB_PATH: "test.db",
+				TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token",
+				JWT_SECRET: "test-secret",
+				STORAGE_ENDPOINT: "https://test.r2.cloudflarestorage.com",
+				STORAGE_ACCESS_KEY: "ak", STORAGE_SECRET_KEY: "sk",
+				STORAGE_BUCKET: "b", STORAGE_PUBLIC_URL: "https://pub.test.r2.dev",
+			},
 			expected: []string{"PORT"},
 		},
 		{
-			name:     "missing db_path",
-			env:      EnvVar{PORT: "8080", DB_PATH: "", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
+			name: "missing db_path",
+			env: EnvVar{
+				PORT: "8080",
+				TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token",
+				JWT_SECRET: "test-secret",
+				STORAGE_ENDPOINT: "https://test.r2.cloudflarestorage.com",
+				STORAGE_ACCESS_KEY: "ak", STORAGE_SECRET_KEY: "sk",
+				STORAGE_BUCKET: "b", STORAGE_PUBLIC_URL: "https://pub.test.r2.dev",
+			},
 			expected: []string{"DB_PATH"},
 		},
 		{
-			name:     "missing both",
-			env:      EnvVar{PORT: "", DB_PATH: "", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
+			name: "missing both",
+			env: EnvVar{
+				TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token",
+				JWT_SECRET: "test-secret",
+				STORAGE_ENDPOINT: "https://test.r2.cloudflarestorage.com",
+				STORAGE_ACCESS_KEY: "ak", STORAGE_SECRET_KEY: "sk",
+				STORAGE_BUCKET: "b", STORAGE_PUBLIC_URL: "https://pub.test.r2.dev",
+			},
 			expected: []string{"PORT", "DB_PATH"},
 		},
 		{
-			name:     "missing turso url",
-			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: "test-secret"},
+			name: "missing turso url",
+			env: EnvVar{
+				PORT: "8080", DB_PATH: "test.db",
+				TURSO_AUTH_TOKEN: "test-token",
+				JWT_SECRET: "test-secret",
+				STORAGE_ENDPOINT: "https://test.r2.cloudflarestorage.com",
+				STORAGE_ACCESS_KEY: "ak", STORAGE_SECRET_KEY: "sk",
+				STORAGE_BUCKET: "b", STORAGE_PUBLIC_URL: "https://pub.test.r2.dev",
+			},
 			expected: []string{"TURSO_DATABASE_URL"},
 		},
 		{
-			name:     "missing turso token",
-			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "", JWT_SECRET: "test-secret"},
+			name: "missing turso token",
+			env: EnvVar{
+				PORT: "8080", DB_PATH: "test.db",
+				TURSO_DATABASE_URL: "libsql://test.turso.io",
+				JWT_SECRET: "test-secret",
+				STORAGE_ENDPOINT: "https://test.r2.cloudflarestorage.com",
+				STORAGE_ACCESS_KEY: "ak", STORAGE_SECRET_KEY: "sk",
+				STORAGE_BUCKET: "b", STORAGE_PUBLIC_URL: "https://pub.test.r2.dev",
+			},
 			expected: []string{"TURSO_AUTH_TOKEN"},
 		},
 		{
-			name:     "missing jwt secret",
-			env:      EnvVar{PORT: "8080", DB_PATH: "test.db", TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token", JWT_SECRET: ""},
+			name: "missing jwt secret",
+			env: EnvVar{
+				PORT: "8080", DB_PATH: "test.db",
+				TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token",
+				STORAGE_ENDPOINT: "https://test.r2.cloudflarestorage.com",
+				STORAGE_ACCESS_KEY: "ak", STORAGE_SECRET_KEY: "sk",
+				STORAGE_BUCKET: "b", STORAGE_PUBLIC_URL: "https://pub.test.r2.dev",
+			},
 			expected: []string{"JWT_SECRET"},
+		},
+		{
+			name: "missing storage bucket",
+			env: EnvVar{
+				PORT: "8080", DB_PATH: "test.db",
+				TURSO_DATABASE_URL: "libsql://test.turso.io", TURSO_AUTH_TOKEN: "test-token",
+				JWT_SECRET: "test-secret",
+				STORAGE_ENDPOINT: "https://test.r2.cloudflarestorage.com",
+				STORAGE_ACCESS_KEY: "ak", STORAGE_SECRET_KEY: "sk",
+				STORAGE_PUBLIC_URL: "https://pub.test.r2.dev",
+			},
+			expected: []string{"STORAGE_BUCKET"},
 		},
 	}
 
@@ -132,12 +217,10 @@ func TestValidateEnvVars(t *testing.T) {
 }
 
 func TestGetEnvVars(t *testing.T) {
-	// Set up a valid config first
+	t.Setenv("PORT", "9090")
+	setValidEnv(t)
 	t.Setenv("PORT", "9090")
 	t.Setenv("DB_PATH", "getenv.db")
-	t.Setenv("TURSO_DATABASE_URL", "libsql://getenv.turso.io")
-	t.Setenv("TURSO_AUTH_TOKEN", "getenv-token")
-	t.Setenv("JWT_SECRET", "getenv-secret")
 
 	_, err := LoadAndValidateEnv()
 	if err != nil {
@@ -154,19 +237,18 @@ func TestGetEnvVars(t *testing.T) {
 	if cfg.DB_PATH != "getenv.db" {
 		t.Errorf("expected DB_PATH 'getenv.db', got '%s'", cfg.DB_PATH)
 	}
-	if cfg.TURSO_DATABASE_URL != "libsql://getenv.turso.io" {
-		t.Errorf("expected TURSO_DATABASE_URL 'libsql://getenv.turso.io', got '%s'", cfg.TURSO_DATABASE_URL)
+	if cfg.TURSO_DATABASE_URL != "libsql://test.turso.io" {
+		t.Errorf("expected TURSO_DATABASE_URL to match, got '%s'", cfg.TURSO_DATABASE_URL)
 	}
-	if cfg.TURSO_AUTH_TOKEN != "getenv-token" {
-		t.Errorf("expected TURSO_AUTH_TOKEN 'getenv-token', got '%s'", cfg.TURSO_AUTH_TOKEN)
+	if cfg.TURSO_AUTH_TOKEN != "test-token" {
+		t.Errorf("expected TURSO_AUTH_TOKEN to match, got '%s'", cfg.TURSO_AUTH_TOKEN)
 	}
-	if cfg.JWT_SECRET != "getenv-secret" {
-		t.Errorf("expected JWT_SECRET 'getenv-secret', got '%s'", cfg.JWT_SECRET)
+	if cfg.JWT_SECRET != "test-secret" {
+		t.Errorf("expected JWT_SECRET to match, got '%s'", cfg.JWT_SECRET)
 	}
 }
 
 func TestGetEnvVars_NotLoaded(t *testing.T) {
-	// Reset global state by setting config to nil
 	configMu.Lock()
 	config = nil
 	configMu.Unlock()

@@ -129,6 +129,22 @@ templ Layout(data PageData) {
 									</li>
 								</ul>
 							</div>
+							<div>
+								<h3>Tracking</h3>
+								<ul>
+									<li>
+										<a
+											href="/weight"
+											if data.CurrentPath == "/weight" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "scale", Size: 18})
+											<span>Weight</span>
+										</a>
+									</li>
+								</ul>
+							</div>
 							if data.IsAdmin {
 								<div>
 									<h3>Admin</h3>
@@ -184,6 +200,17 @@ templ Layout(data PageData) {
 										</a>
 									</li>
 									<li>
+										<a
+											href="/feedback"
+											if data.CurrentPath == "/feedback" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "message", Size: 18})
+											<span>Feedback</span>
+										</a>
+									</li>
+									<li>
 										<form method="POST" action="/logout">
 											<button type="submit" class="hover:cursor-pointer flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:bg-sidebar-accent active:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0">
 												@components.Icon(components.IconProps{Name: "log-out", Size: 18})
@@ -219,11 +246,6 @@ templ Layout(data PageData) {
 									<li>
 										<a href="/entries/new" class="btn-ghost">
 											@components.Icon(components.IconProps{Name: "plus", Size: 20})
-										</a>
-									</li>
-									<li class="hidden sm:block">
-										<a href="/feedback" class="btn-ghost">
-											@components.Icon(components.IconProps{Name: "message", Size: 20})
 										</a>
 									</li>
 								</div>
@@ -279,6 +301,11 @@ templ Layout(data PageData) {
 					if (dialog.open) {
 						dialog.close();
 					}
+				});
+				document.body.addEventListener('triggerRedirect', function(evt) {
+					setTimeout(function() {
+						window.location.href = evt.detail.value;
+					}, 750);
 				});
 			</script>
 			<script>

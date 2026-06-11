@@ -22,6 +22,11 @@ func main() {
 		log.Fatalf("Failed to load environment variables: %v", err)
 	}
 
+	// Load and validate storage (R2) configuration
+	if _, err := utils.LoadStorageConfig(); err != nil {
+		log.Fatalf("Failed to load storage configuration: %v", err)
+	}
+
 	// Initialize database
 	database, err := db.NewConnection(cfg.DB_PATH, cfg.TURSO_DATABASE_URL, cfg.TURSO_AUTH_TOKEN)
 	if err != nil {
@@ -33,6 +38,7 @@ func main() {
 	repo := models.NewExerciseRepository(database)
 	userRepo := models.NewUserRepository(database)
 	adminUserRepo := models.NewUserAdminRepository(database)
+	weightRepo := models.NewWeightRepository(database)
 
 	// Initialize auth service
 	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
@@ -45,10 +51,11 @@ func main() {
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
 	timerCtrl := controllers.NewTimerController()
 	emomCtrl := controllers.NewEMOMController()
+	weightCtrl := controllers.NewWeightController(weightRepo)
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
-	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, userRepo, jwtService, validator)
+	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, weightCtrl, userRepo, jwtService, validator)
 
 	// Create Echo instance
 	e := echo.New()

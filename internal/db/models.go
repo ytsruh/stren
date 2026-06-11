@@ -6,6 +6,7 @@ package db
 
 import (
 	"database/sql"
+	"time"
 )
 
 type Exercise struct {
@@ -46,4 +47,13 @@ type User struct {
 	IsAdmin      int64
 	CreatedAt    sql.NullTime
 	UpdatedAt    sql.NullTime
+}
+
+type WeightEntry struct {
+	ID        string
+	UserID    string
+	Weight    float64
+	Notes     sql.NullString
+	PhotoKey  sql.NullString
+	CreatedAt time.Time
 }

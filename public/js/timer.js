@@ -68,6 +68,9 @@
     if ('vibrate' in navigator) {
       navigator.vibrate([200, 100, 200]);
     }
+    if (window.WakeLock) {
+      window.WakeLock.release();
+    }
   }
 
   function tick() {
@@ -83,6 +86,9 @@
   function startTimer() {
     if (timer) return;
     if (remainingSeconds <= 0) return;
+    if (window.WakeLock) {
+      window.WakeLock.acquire();
+    }
     timer = setInterval(tick, 1000);
     showControls();
   }
@@ -91,6 +97,9 @@
     if (timer) {
       clearInterval(timer);
       timer = null;
+    }
+    if (window.WakeLock) {
+      window.WakeLock.release();
     }
   }
 

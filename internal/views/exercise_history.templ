@@ -59,7 +59,7 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
 			</div>
 			<h3 class="flex items-center gap-2 mb-4">
-				@components.Icon(components.IconProps{Name: "trending-up", Size: 20})
+				@components.Icon(components.IconProps{Name: "dumbbell", Size: 20})
 				History
 			</h3>
 			<div class="overflow-x-auto">
@@ -81,26 +81,13 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 								<td>{ entry.FormattedWeight() }</td>
 								<td>{ entry.Notes }</td>
 								<td>
-									<div class="flex gap-2">
-										<a
-											href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
-											class="btn-outline p-2"
-											title="Edit"
-										>
-											@components.Icon(components.IconProps{Name: "edit", Size: 16})
-										</a>
-										<button
-											class="btn-destructive p-2"
-											title="Delete"
-											hx-delete={ fmt.Sprintf("/entries/%s", entry.ID) }
-											hx-confirm="Delete this entry?"
-											hx-indicator="#confirm-spinner"
-											hx-target={ fmt.Sprintf("#entry-%s", entry.ID) }
-											hx-swap="outerHTML swap:0.3s"
-										>
-											@components.Icon(components.IconProps{Name: "trash", Size: 16})
-										</button>
-									</div>
+									<a
+										href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
+										class="btn-outline p-2"
+										title="Edit"
+									>
+										@components.Icon(components.IconProps{Name: "edit", Size: 16})
+									</a>
 								</td>
 							</tr>
 						}

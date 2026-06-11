@@ -85,3 +85,15 @@ type FeedbackRepoInterface interface {
 	GetByID(id string) (*Feedback, error)
 	UpdateStatus(id string, isClosed bool) error
 }
+
+// WeightRepo defines the interface for weight entry data access.
+type WeightRepo interface {
+	Create(entry *WeightEntry) error
+	GetByID(id string, userID string) (*WeightEntry, error)
+	List(userID string) ([]WeightEntry, error)
+	Update(entry *WeightEntry, userID string) error
+	Delete(id string, userID string) error
+}
+
+// Compile-time check to ensure WeightRepository implements WeightRepo.
+var _ WeightRepo = (*WeightRepository)(nil)

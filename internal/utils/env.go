@@ -20,6 +20,11 @@ type EnvVar struct {
 	TURSO_DATABASE_URL string `env:"TURSO_DATABASE_URL"`
 	TURSO_AUTH_TOKEN   string `env:"TURSO_AUTH_TOKEN"`
 	JWT_SECRET         string `env:"JWT_SECRET"`
+	STORAGE_ENDPOINT   string `env:"STORAGE_ENDPOINT"`
+	STORAGE_ACCESS_KEY string `env:"STORAGE_ACCESS_KEY"`
+	STORAGE_SECRET_KEY string `env:"STORAGE_SECRET_KEY"`
+	STORAGE_BUCKET     string `env:"STORAGE_BUCKET"`
+	STORAGE_PUBLIC_URL string `env:"STORAGE_PUBLIC_URL"`
 }
 
 var (
@@ -42,6 +47,11 @@ func LoadAndValidateEnv() (*EnvVar, error) {
 		TURSO_DATABASE_URL: os.Getenv("TURSO_DATABASE_URL"),
 		TURSO_AUTH_TOKEN:   os.Getenv("TURSO_AUTH_TOKEN"),
 		JWT_SECRET:         os.Getenv("JWT_SECRET"),
+		STORAGE_ENDPOINT:   os.Getenv("STORAGE_ENDPOINT"),
+		STORAGE_ACCESS_KEY: os.Getenv("STORAGE_ACCESS_KEY"),
+		STORAGE_SECRET_KEY: os.Getenv("STORAGE_SECRET_KEY"),
+		STORAGE_BUCKET:     os.Getenv("STORAGE_BUCKET"),
+		STORAGE_PUBLIC_URL: os.Getenv("STORAGE_PUBLIC_URL"),
 	}
 
 	// Validate that all required environment variables are set

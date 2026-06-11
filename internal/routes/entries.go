@@ -53,9 +53,8 @@ func (h *Handler) CreateEntry(c echo.Context) error {
 
 	// Check if htmx request
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/")
-		c.Response().WriteHeader(http.StatusSeeOther)
-		return nil
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
+		return render(c, views.EntryFormSuccessToast("Entry saved!"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/")
@@ -143,8 +142,7 @@ func (h *Handler) DeleteEntry(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/")
-		c.Response().WriteHeader(http.StatusSeeOther)
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
 		return render(c, views.Toast("success", "Entry deleted!", ""))
 	}
 

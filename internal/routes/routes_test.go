@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -455,6 +456,91 @@ func (m *mockFeedbackRepository) UpdateStatus(id string, isClosed bool) error {
 	return nil
 }
 
+type mockWeightRepository struct {
+	mu       sync.Mutex
+	entries  []models.WeightEntry
+
+	errCreate    error
+	errGetByID   error
+	errList      error
+	errUpdate    error
+	errDelete    error
+}
+
+func newMockWeightRepository() *mockWeightRepository {
+	return &mockWeightRepository{}
+}
+
+func (m *mockWeightRepository) Create(entry *models.WeightEntry) error {
+	if m.errCreate != nil {
+		return m.errCreate
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	entry.ID = "weight-" + fmt.Sprintf("%d", len(m.entries)+1)
+	m.entries = append(m.entries, *entry)
+	return nil
+}
+
+func (m *mockWeightRepository) GetByID(id string, userID string) (*models.WeightEntry, error) {
+	if m.errGetByID != nil {
+		return nil, m.errGetByID
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, e := range m.entries {
+		if e.ID == id && e.UserID == userID {
+			return &e, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockWeightRepository) List(userID string) ([]models.WeightEntry, error) {
+	if m.errList != nil {
+		return nil, m.errList
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []models.WeightEntry
+	for _, e := range m.entries {
+		if e.UserID == userID {
+			result = append(result, e)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockWeightRepository) Update(entry *models.WeightEntry, userID string) error {
+	if m.errUpdate != nil {
+		return m.errUpdate
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, e := range m.entries {
+		if e.ID == entry.ID && e.UserID == userID {
+			m.entries[i] = *entry
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *mockWeightRepository) Delete(id string, userID string) error {
+	if m.errDelete != nil {
+		return m.errDelete
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, e := range m.entries {
+		if e.ID == id && e.UserID == userID {
+			m.entries = append(m.entries[:i], m.entries[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
 func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository, *echo.Echo) {
 	t.Helper()
 	e := echo.New()
@@ -462,6 +548,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	mockUser := newMockUserRepository()
 	mockAdminUser := newMockAdminUserRepository()
 	mockFeedback := newMockFeedbackRepository()
+	mockWeight := newMockWeightRepository()
 	jwtService := utils.NewJWTService("test-secret")
 	mock.exercises = []models.Exercise{
 		{ID: "ex-1", Name: "Squat"},
@@ -474,8 +561,9 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	timerCtrl := controllers.NewTimerController()
 	emomCtrl := controllers.NewEMOMController()
+	weightCtrl := controllers.NewWeightController(mockWeight)
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, mockUser, jwtService, validator)
+	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, weightCtrl, mockUser, jwtService, validator)
 	return h, mock, mockUser, e
 }
 
@@ -604,11 +692,15 @@ func TestCreateEntry_HTMX(t *testing.T) {
 	if err := h.CreateEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("expected status 303, got %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
 	}
-	if hxRedir := rec.Header().Get("HX-Redirect"); hxRedir != "/" {
-		t.Fatalf("expected HX-Redirect to /, got %q", hxRedir)
+	if hxTrigger := rec.Header().Get("HX-Trigger"); hxTrigger != `{"triggerRedirect": "/"}` {
+		t.Fatalf("expected HX-Trigger to be set, got %q", hxTrigger)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Entry saved") {
+		t.Fatalf("expected toast with 'Entry saved', got body: %s", body)
 	}
 }
 

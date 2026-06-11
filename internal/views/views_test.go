@@ -26,9 +26,9 @@ func renderToString(t *testing.T, component templ.Component) string {
 
 func TestFormatDateTimeLocal(t *testing.T) {
 	tm := time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC)
-	got := formatDateTimeLocal(tm)
+	got := FormatDateTimeLocal(tm)
 	if got != "2024-06-15T14:30" {
-		t.Errorf("formatDateTimeLocal = %q, want %q", got, "2024-06-15T14:30")
+		t.Errorf("FormatDateTimeLocal = %q, want %q", got, "2024-06-15T14:30")
 	}
 }
 
@@ -143,7 +143,7 @@ func TestDashboard_WithEntries(t *testing.T) {
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 	html := renderToString(t, Dashboard(entries, "Test User", true, false))
-	if !strings.Contains(html, "Workout History") {
+	if !strings.Contains(html, "30 Day History") {
 		t.Error("expected page title")
 	}
 	if !strings.Contains(html, "Squat") {
@@ -202,13 +202,6 @@ func TestEntryRow(t *testing.T) {
 	}
 	if !strings.Contains(html, "/entries/entry-1/edit") {
 		t.Error("expected edit link")
-	}
-}
-
-func TestDeletedRow(t *testing.T) {
-	html := renderToString(t, DeletedRow())
-	if !strings.Contains(html, `class="fade-out"`) {
-		t.Error("expected fade-out class")
 	}
 }
 
