@@ -155,13 +155,13 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 						/>
 					</div>
 					<div class="grid gap-2">
-						<label for="img_url">Image URL</label>
+						<label for="img_url">Image Path</label>
 						<input
 							class="input"
-							type="url"
+							type="text"
 							id="img_url"
 							name="img_url"
-							placeholder="https://example.com/image.jpg"
+							placeholder="exercises/image.jpg"
 							value={ data.Exercise.ImgURL }
 						/>
 					</div>

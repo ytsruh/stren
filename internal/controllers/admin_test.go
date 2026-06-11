@@ -242,19 +242,6 @@ func TestAdminController_Create_Validation(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid image URL returns error", func(t *testing.T) {
-		_, err := ctrl.Create(models.CreateExerciseParams{
-			Name:    "Test",
-			ImgURL:  "://no-scheme.com/image.jpg",
-		})
-		if err == nil {
-			t.Fatal("expected error for invalid image URL, got nil")
-		}
-		if err.Error() != "image URL must be a valid URL" {
-			t.Errorf("unexpected error message: %v", err)
-		}
-	})
-
 	t.Run("all fields are set on returned exercise", func(t *testing.T) {
 		params := models.CreateExerciseParams{
 			Name:        "Full Exercise",
@@ -309,16 +296,6 @@ func TestAdminController_Update_Validation(t *testing.T) {
 		})
 		if err == nil {
 			t.Fatal("expected error for invalid video URL, got nil")
-		}
-	})
-
-	t.Run("invalid image URL returns error", func(t *testing.T) {
-		_, err := ctrl.Update("ex-1", models.UpdateExerciseParams{
-			Name:    "Squat",
-			ImgURL:  "://missing-scheme.com/image.jpg",
-		})
-		if err == nil {
-			t.Fatal("expected error for invalid image URL, got nil")
 		}
 	})
 }

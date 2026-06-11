@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"stren/internal/models"
+	"stren/internal/utils"
 	"stren/internal/views/components"
 )
 
@@ -17,7 +18,7 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 			<div class="mb-4 flex items-start gap-4">
 				<div class="flex-1">
 					if exercise.ImgURL != "" {
-						<img src={ exercise.ImgURL } alt={ exercise.Name } class="w-full h-48 object-cover rounded-lg"/>
+						<img src={ utils.PublicURLFor(exercise.ImgURL) } alt={ exercise.Name } class="w-full h-48 object-cover rounded-lg"/>
 					} else {
 						<div class="w-full h-48 bg-muted rounded-lg flex items-center justify-center">
 							@components.Icon(components.IconProps{Name: "dumbbell", Size: 48})

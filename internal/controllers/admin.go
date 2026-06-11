@@ -52,10 +52,6 @@ func (ac *AdminController) Create(params models.CreateExerciseParams) (*models.E
 		return nil, errors.New("video URL must be a valid URL")
 	}
 
-	if !models.ValidateURL(params.ImgURL) {
-		return nil, errors.New("image URL must be a valid URL")
-	}
-
 	id, err := ac.repo.CreateNoTx(params)
 	if err != nil {
 		return nil, err
@@ -84,10 +80,6 @@ func (ac *AdminController) Update(id string, params models.UpdateExerciseParams)
 
 	if !models.ValidateURL(params.VideoURL) {
 		return nil, errors.New("video URL must be a valid URL")
-	}
-
-	if !models.ValidateURL(params.ImgURL) {
-		return nil, errors.New("image URL must be a valid URL")
 	}
 
 	exercise, err := ac.repo.Update(id, params)
