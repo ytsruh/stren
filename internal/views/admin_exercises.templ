@@ -111,7 +111,12 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Exercise"})
 		}
 		if data.IsEdit {
-			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%s", data.Exercise.ID)) } class="form grid gap-6">
+			<form
+				hx-post={ templ.SafeURL(fmt.Sprintf("/admin/exercises/%s", data.Exercise.ID)) }
+				hx-target="#toaster"
+				hx-swap="beforeend"
+				class="form grid gap-6"
+			>
 				<fieldset class="grid gap-4">
 					<div class="grid gap-2">
 						<label for="name">Exercise Name</label>
@@ -167,9 +172,14 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 					</div>
 				</fieldset>
 				<div class="flex gap-3">
-					<button type="submit" class="btn">
-						@components.Icon(components.IconProps{Name: "check", Size: 18})
-						Update
+					<button type="submit" hx-indicator="#edit-exercise-spinner" class="btn relative inline-flex">
+						<span class="btn-text flex items-center justify-around gap-2">
+							@components.Icon(components.IconProps{Name: "check", Size: 18})
+							Update
+						</span>
+						<span id="edit-exercise-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+							@components.Icon(components.IconProps{Name: "loader", Size: 18})
+						</span>
 					</button>
 					<a href="/admin/exercises" class="btn-outline">
 						@components.Icon(components.IconProps{Name: "x", Size: 18})
@@ -178,7 +188,12 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 				</div>
 			</form>
 		} else {
-			<form method="POST" action="/admin/exercises" class="form grid gap-6">
+			<form
+				hx-post="/admin/exercises"
+				hx-target="#toaster"
+				hx-swap="beforeend"
+				class="form grid gap-6"
+			>
 				<fieldset class="grid gap-4">
 					<div class="grid gap-2">
 						<label for="name">Exercise Name</label>
@@ -231,9 +246,14 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 					</div>
 				</fieldset>
 				<div class="flex gap-3">
-					<button type="submit" class="btn">
-						@components.Icon(components.IconProps{Name: "check", Size: 18})
-						Save
+					<button type="submit" hx-indicator="#new-exercise-spinner" class="btn relative inline-flex">
+						<span class="btn-text flex items-center justify-around gap-2">
+							@components.Icon(components.IconProps{Name: "check", Size: 18})
+							Save
+						</span>
+						<span id="new-exercise-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+							@components.Icon(components.IconProps{Name: "loader", Size: 18})
+						</span>
 					</button>
 					<a href="/admin/exercises" class="btn-outline">
 						@components.Icon(components.IconProps{Name: "x", Size: 18})
