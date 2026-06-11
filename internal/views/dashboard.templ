@@ -35,8 +35,8 @@ templ EntryList(entries []models.ExerciseEntry) {
 			<tr>
 				<th>Date</th>
 				<th>Exercise</th>
-				<th>Reps</th>
-				<th>Weight</th>
+				<th class="hidden sm:table-cell">Reps</th>
+				<th class="hidden sm:table-cell">Weight</th>
 				<th class="hidden lg:table-cell">Notes</th>
 				<th></th>
 			</tr>
@@ -59,8 +59,8 @@ templ EntryRow(entry models.ExerciseEntry) {
 				{ entry.ExerciseName }
 			</a>
 		</td>
-		<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
-		<td>{ entry.FormattedWeight() }</td>
+		<td class="hidden sm:table-cell">{ fmt.Sprintf("%d", entry.Reps) }</td>
+		<td class="hidden sm:table-cell">{ entry.FormattedWeight() }</td>
 		<td class="hidden lg:table-cell">{ entry.Notes }</td>
 		<td>
 			<div class="flex gap-2">
