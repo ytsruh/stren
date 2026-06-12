@@ -72,7 +72,7 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 				</section>
 			</div>
 		} else {
-			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6 mb-6">
+			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 my-6">
 				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: getLastSet(entries)})
 				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
 			</div>
