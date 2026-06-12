@@ -1,6 +1,16 @@
 @import "tailwindcss";
 @import "./basecoat.css";
 
+/* Mobile-safe toaster: avoid iPhone home indicator + curved corner clipping */
+@media (hover: none) and (pointer: coarse) {
+  .toaster {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /* HTMX Loading Indicator */
