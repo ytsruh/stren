@@ -10,8 +10,8 @@ import (
 // ExerciseHistory shows all entries for a specific exercise.
 templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		<div class="mb-6">
-			<div class="flex items-center justify-between mb-4 gap-4">
+		<div class="">
+			<div class="flex items-center justify-between mb-2 gap-4">
 				<div class="flex items-center gap-2">
 					@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: exercise.Name})
 					<span class="badge capitalize hidden sm:flex">{ string(exercise.Type) }</span>
@@ -26,8 +26,42 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 					</a>
 				</div>
 			</div>
-			<div class="mb-4 flex items-start gap-4">
-				<div class="flex-1">
+			<div class="hidden md:flex mb-4 flex-col items-start gap-4">
+				if exercise.ImgURL != "" {
+					<img src={ utils.PublicURLFor(exercise.ImgURL) } alt={ exercise.Name } class="w-full h-48 object-cover rounded-lg hover:cursor-pointer" type="button" onclick="document.getElementById('dialog-show-image').showModal()"/>
+					<dialog id="dialog-show-image" class="dialog w-full sm:max-w-[425px] max-h-[612px]" aria-labelledby="demo-dialog-edit-profile-title" aria-describedby="demo-dialog-edit-profile-description" onclick="if (event.target === this) this.close()">
+						<div class="max-h-full max-w-full" onclick="this.closest('dialog').close()">
+							<button class="btn btn-secondary" onclick="this.closest('dialog').close()">X</button>
+							<img src={ utils.PublicURLFor(exercise.ImgURL) } alt={ exercise.Name } class="w-full"/>
+						</div>
+					</dialog>
+				} else {
+					<div class="w-full h-48 bg-muted rounded-lg flex items-center justify-center">
+						@components.Icon(components.IconProps{Name: "dumbbell", Size: 48})
+					</div>
+				}
+				if exercise.VideoURL != "" {
+					<a href={ templ.SafeURL(exercise.VideoURL) } target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+						@components.Icon(components.IconProps{Name: "play", Size: 18})
+						Watch Video
+					</a>
+				}
+				if exercise.Description != "" {
+					<p class="text-muted-foreground">{ exercise.Description }</p>
+				} else {
+					<p class="text-muted-foreground text-sm">No description available</p>
+				}
+			</div>
+			<details class="flex md:hidden flex-col">
+				<summary class="w-full focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] transition-all outline-none rounded-md">
+					<h2 class="flex flex-1 items-start gap-4 py-2 text-left text-sm">
+						More info
+						<span class="text-muted-foreground pointer-events-none size-4 shrink-0 translate-y-0.5 transition-transform duration-200 group-open:rotate-180">
+							@components.Icon(components.IconProps{Name: "arrow-down", Size: 18})
+						</span>
+					</h2>
+				</summary>
+				<section class="flex flex-col items-start gap-4 mb-2">
 					if exercise.ImgURL != "" {
 						<img src={ utils.PublicURLFor(exercise.ImgURL) } alt={ exercise.Name } class="w-full h-48 object-cover rounded-lg hover:cursor-pointer" type="button" onclick="document.getElementById('dialog-show-image').showModal()"/>
 						<dialog id="dialog-show-image" class="dialog w-full sm:max-w-[425px] max-h-[612px]" aria-labelledby="demo-dialog-edit-profile-title" aria-describedby="demo-dialog-edit-profile-description" onclick="if (event.target === this) this.close()">
@@ -41,19 +75,19 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 							@components.Icon(components.IconProps{Name: "dumbbell", Size: 48})
 						</div>
 					}
-				</div>
-				if exercise.VideoURL != "" {
-					<a href={ templ.SafeURL(exercise.VideoURL) } target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
-						@components.Icon(components.IconProps{Name: "play", Size: 18})
-						Watch Video
-					</a>
-				}
-			</div>
-			if exercise.Description != "" {
-				<p class="text-muted-foreground">{ exercise.Description }</p>
-			} else {
-				<p class="text-muted-foreground text-sm">No description available</p>
-			}
+					if exercise.VideoURL != "" {
+						<a href={ templ.SafeURL(exercise.VideoURL) } target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+							@components.Icon(components.IconProps{Name: "play", Size: 18})
+							Watch Video
+						</a>
+					}
+					if exercise.Description != "" {
+						<p class="text-muted-foreground">{ exercise.Description }</p>
+					} else {
+						<p class="text-muted-foreground text-sm">No description available</p>
+					}
+				</section>
+			</details>
 		</div>
 		if len(entries) == 0 {
 			<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
@@ -72,7 +106,7 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 				</section>
 			</div>
 		} else {
-			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 my-6">
+			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
 				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: getLastSet(entries)})
 				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
 			</div>
