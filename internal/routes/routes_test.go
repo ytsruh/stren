@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -559,11 +560,10 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	adminCtrl := controllers.NewAdminController(mock)
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
-	timerCtrl := controllers.NewTimerController()
-	emomCtrl := controllers.NewEMOMController()
+	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(mockWeight)
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, weightCtrl, mockUser, jwtService, validator)
+	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timersCtrl, weightCtrl, mockUser, jwtService, validator)
 	return h, mock, mockUser, e
 }
 
@@ -1306,6 +1306,30 @@ func TestTimerPage(t *testing.T) {
 	if !strings.Contains(body, "Timer") {
 		t.Fatalf("expected timer page, got %q", body)
 	}
+	if !strings.Contains(body, `role="tablist"`) {
+		t.Fatalf("expected tablist on timer page, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-tab-timer"`) {
+		t.Fatalf("expected Timer tab button, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-tab-emom"`) {
+		t.Fatalf("expected EMOM tab button, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-panel-timer"`) {
+		t.Fatalf("expected Timer tab panel, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-panel-emom"`) {
+		t.Fatalf("expected EMOM tab panel, got %q", body)
+	}
+	// Timer tab must be the active one when on /timer
+	timerActiveRegex := regexp.MustCompile(`id="timers-tab-timer"[^>]*aria-selected="true"`)
+	emomActiveRegex := regexp.MustCompile(`id="timers-tab-emom"[^>]*aria-selected="true"`)
+	if !timerActiveRegex.MatchString(body) {
+		t.Fatalf("expected Timer tab to be active on /timer, got %q", body)
+	}
+	if emomActiveRegex.MatchString(body) {
+		t.Fatalf("expected EMOM tab to be inactive on /timer, got %q", body)
+	}
 }
 
 func TestTimerValidationError(t *testing.T) {
@@ -1580,6 +1604,24 @@ func TestEMOMPage(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "EMOM") {
 		t.Fatalf("expected emom page, got %q", body)
+	}
+	if !strings.Contains(body, `role="tablist"`) {
+		t.Fatalf("expected tablist on emom page, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-tab-timer"`) {
+		t.Fatalf("expected Timer tab button, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-tab-emom"`) {
+		t.Fatalf("expected EMOM tab button, got %q", body)
+	}
+	// EMOM tab must be the active one when on /timer/emom
+	timerActiveRegex := regexp.MustCompile(`id="timers-tab-timer"[^>]*aria-selected="true"`)
+	emomActiveRegex := regexp.MustCompile(`id="timers-tab-emom"[^>]*aria-selected="true"`)
+	if !emomActiveRegex.MatchString(body) {
+		t.Fatalf("expected EMOM tab to be active on /timer/emom, got %q", body)
+	}
+	if timerActiveRegex.MatchString(body) {
+		t.Fatalf("expected Timer tab to be inactive on /timer/emom, got %q", body)
 	}
 }
 

@@ -20,33 +20,31 @@ import (
 
 // Handler holds dependencies for HTTP route handlers.
 type Handler struct {
-	authCtrl        *controllers.AuthController
-	entryCtrl       *controllers.EntryController
-	adminCtrl       *controllers.AdminController
-	adminUserCtrl   *controllers.AdminUserController
-	feedbackCtrl    *controllers.FeedbackController
-	timerCtrl       *controllers.TimerController
-	emomCtrl        *controllers.EMOMController
-	weightCtrl      *controllers.WeightController
-	userRepo        models.UserRepo
-	jwtService      *utils.JWTService
-	validator       utils.Validator
+	authCtrl      *controllers.AuthController
+	entryCtrl     *controllers.EntryController
+	adminCtrl     *controllers.AdminController
+	adminUserCtrl *controllers.AdminUserController
+	feedbackCtrl  *controllers.FeedbackController
+	timersCtrl    *controllers.TimersController
+	weightCtrl    *controllers.WeightController
+	userRepo      models.UserRepo
+	jwtService    *utils.JWTService
+	validator     utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timerCtrl *controllers.TimerController, emomCtrl *controllers.EMOMController, weightCtrl *controllers.WeightController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
-		authCtrl:        authCtrl,
-		entryCtrl:       entryCtrl,
-		adminCtrl:       adminCtrl,
-		adminUserCtrl:   adminUserCtrl,
-		feedbackCtrl:    feedbackCtrl,
-		timerCtrl:       timerCtrl,
-		emomCtrl:        emomCtrl,
-		weightCtrl:      weightCtrl,
-		userRepo:         userRepo,
-		jwtService:       jwtService,
-		validator:        validator,
+		authCtrl:      authCtrl,
+		entryCtrl:     entryCtrl,
+		adminCtrl:     adminCtrl,
+		adminUserCtrl: adminUserCtrl,
+		feedbackCtrl:  feedbackCtrl,
+		timersCtrl:    timersCtrl,
+		weightCtrl:    weightCtrl,
+		userRepo:      userRepo,
+		jwtService:    jwtService,
+		validator:     validator,
 	}
 }
 

@@ -108,23 +108,12 @@ templ Layout(data PageData) {
 									<li>
 										<a
 											href="/timer"
-											if data.CurrentPath == "/timer" {
+											if data.CurrentPath == "/timer" || data.CurrentPath == "/timer/emom" {
 												aria-current="page"
 											}
 										>
 											@components.Icon(components.IconProps{Name: "timer", Size: 18})
 											<span>Timer</span>
-										</a>
-									</li>
-									<li>
-										<a
-											href="/timer/emom"
-											if data.CurrentPath == "/timer/emom" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "emom", Size: 18})
-											<span>EMOM</span>
 										</a>
 									</li>
 								</ul>
