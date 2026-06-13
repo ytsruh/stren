@@ -2,9 +2,11 @@ package views
 
 import (
 	"fmt"
+	"sort"
 	"stren/internal/models"
 	"stren/internal/utils"
 	"stren/internal/views/components"
+	"time"
 )
 
 // historyTableWrapID is the id of the swappable region around the history
@@ -16,9 +18,13 @@ const historyTableWrapID = "history-table-wrap"
 const historySpinnerID = "history-spinner"
 
 // ExerciseHistory renders the full exercise history page, including the
-// header, lifetime stats, and the paginated table. The pagination controls
-// swap only the table region via htmx.
-templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPage, userName string, isAuthenticated bool, isAdmin bool) {
+// header, lifetime stats, the weight-progression chart, and the paginated
+// table. The pagination controls swap only the table region via htmx.
+//
+// chartEntries is the most recent slice of entries used to drive the line
+// chart shown next to the stat cards. May be nil or short; the chart
+// renders nothing when fewer than 2 unique calendar days are present.
+templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPage, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="">
 			<div class="flex items-center justify-between mb-2 gap-4">
@@ -119,6 +125,14 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
 				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: lastSetLabel(page.Stats.LastSet)})
 				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", page.Stats.MaxWeight)})
+				{{ chartProps := chartDataForExercise(chartEntries, exercise.Name) }}
+				if len(chartProps.Labels) >= 2 {
+					<div class="col-span-2 card p-2">
+						<div class="h-28 sm:h-32 md:h-48">
+							@components.Chart(chartProps)
+						</div>
+					</div>
+				}
 			</div>
 			<h3 class="flex items-center gap-2 mb-4">
 				@components.Icon(components.IconProps{Name: "dumbbell", Size: 20})
@@ -190,4 +204,58 @@ func lastSetLabel(entry models.ExerciseEntry) string {
 		return "No entries"
 	}
 	return fmt.Sprintf("%.1f kg × %d", entry.Weight, entry.Reps)
+}
+
+// chartDay holds the max weight recorded for a single calendar day, used by
+// chartDataForExercise to collapse multiple sets into a single line point.
+type chartDay struct {
+	date   time.Time
+	weight float64
+}
+
+// chartDataForExercise converts a slice of recent entries into the generic
+// Chart props expected by components.Chart. Entries are grouped by calendar
+// day and reduced to the heaviest weight of that day so the line reads as a
+// PR-over-time view (rather than a noisy per-set series). Days are sorted
+// ascending so the line runs left-to-right.
+//
+// The chart's title reports how many raw entries fed it (e.g. "Last 30 Sets")
+// so the user can tell at a glance how much history the line represents. The
+// chart component itself renders nothing when there are fewer than 2 labels.
+func chartDataForExercise(entries []models.ExerciseEntry, exerciseName string) components.ChartProps {
+	byDay := make(map[string]chartDay)
+	for _, e := range entries {
+		key := e.CreatedAt.Format("2006-01-02")
+		existing, ok := byDay[key]
+		if !ok || e.Weight > existing.weight {
+			byDay[key] = chartDay{date: e.CreatedAt, weight: e.Weight}
+		}
+	}
+	days := make([]chartDay, 0, len(byDay))
+	for _, d := range byDay {
+		days = append(days, d)
+	}
+	sort.Slice(days, func(i, j int) bool {
+		return days[i].date.Before(days[j].date)
+	})
+	labels := make([]string, len(days))
+	values := make([]float64, len(days))
+	for i, d := range days {
+		labels[i] = d.date.Format("02 Jan")
+		values[i] = d.weight
+	}
+	return components.ChartProps{
+		ID:     "exercise-history-chart",
+		Title:  fmt.Sprintf("Last %d Sets", len(entries)),
+		Labels: labels,
+		Datasets: []components.ChartDataset{
+			{Label: exerciseName + " (kg)", Values: values},
+		},
+		// Hide the tick labels: the dates on x and the kg values on y would
+		// overflow at this size. The y axis line and gridlines stay so the
+		// line still has scale context, and tooltips still show exact values
+		// on hover. The chart's own wrapper fills its parent; the view places
+		// the chart in a sized inner wrapper inside the card.
+		HideAxes: true,
+	}
 }

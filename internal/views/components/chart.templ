@@ -7,12 +7,21 @@ const chartDefaultColor = "#f54900"
 // so the line is not flush with the top/bottom of the chart.
 const chartYAxisPadding = 0.10
 
-// ChartProps configures a generic time-series line/area chart.
+// ChartProps configures a generic time-series line/area chart. The chart
+// wrapper fills its parent (w-full h-full); callers are responsible for
+// sizing the parent so the chart has a defined box to render into.
 type ChartProps struct {
 	ID       string         // unique canvas id (required)
 	Title    string         // optional heading rendered above the canvas
 	Labels   []string       // x-axis labels
 	Datasets []ChartDataset // one or more series
+	// HideAxes, when true, hides the tick text on both axes (the x date
+	// labels and y value labels). Axis lines and gridlines are kept so the
+	// y axis still gives a scale reference. Useful when the chart is sized
+	// down to fit a narrow card and the tick text would overflow. Tooltips
+	// remain enabled so exact values are still visible on hover. Defaults
+	// to false.
+	HideAxes bool
 }
 
 // ChartDataset is a single line/area series on the chart.
@@ -52,19 +61,23 @@ templ Chart(props ChartProps) {
 		payload := struct {
 			Labels   []string      `json:"labels"`
 			Datasets []chartSeries `json:"datasets"`
+			HideAxes bool          `json:"hideAxes"`
 		}{
 			Labels:   props.Labels,
 			Datasets: series,
+			HideAxes: props.HideAxes,
 		}
 		canvasID := props.ID
 		dataID := props.ID + "-data"
 	}}
 	if len(props.Labels) >= 2 && len(props.Datasets) > 0 {
-		if props.Title != "" {
-			<h3 class="text-sm font-semibold mb-2">{ props.Title }</h3>
-		}
-		<div class="w-full h-44 sm:h-52 md:h-60">
-			<canvas id={ canvasID }></canvas>
+		<div class="w-full h-full max-w-full max-h-full grid grid-rows-[auto_1fr]">
+			if props.Title != "" {
+				<h3 class="text-sm font-semibold mb-2">{ props.Title }</h3>
+			}
+			<div class="min-h-0 min-w-0">
+				<canvas id={ canvasID }></canvas>
+			</div>
 		</div>
 		@templ.JSONScript(dataID, payload)
 		<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -131,10 +144,12 @@ templ Chart(props ChartProps) {
 							}
 						},
 						scales: {
+							x: data.hideAxes ? { ticks: { display: false } } : {},
 							y: {
 								beginAtZero: false,
 								suggestedMin: yMin,
-								suggestedMax: yMax
+								suggestedMax: yMax,
+								ticks: data.hideAxes ? { display: false } : undefined
 							}
 						}
 					}

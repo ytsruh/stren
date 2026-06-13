@@ -117,6 +117,13 @@ func (ec *EntryController) List() ([]models.Exercise, error) {
 // exercise history view. Exposed as a constant so views and tests can rely on it.
 const ExerciseHistoryPageSize = 25
 
+// ExerciseHistoryChartSize is the number of most-recent entries fetched to
+// drive the line chart on the exercise history page. Kept relatively small
+// because the chart sits in a narrow two-column grid cell on desktop, and
+// only one point is plotted per calendar day (max weight) so beyond this
+// size the additional points are usually redundant.
+const ExerciseHistoryChartSize = 30
+
 // GetEntriesByExercise returns a paginated page of entries for a specific exercise
 // ID along with the user's lifetime stats for that exercise. Pages are 1-indexed;
 // invalid pages are clamped to 1. Scopes to the given user ID.
@@ -171,4 +178,12 @@ func (ec *EntryController) loadHistoryStats(exerciseID string, userID string) (m
 // GetExerciseByID returns an exercise by its UUID.
 func (ec *EntryController) GetExerciseByID(id, userID string) (*models.Exercise, error) {
 	return ec.repo.GetExerciseByID(id, userID)
+}
+
+// GetRecentEntriesForChart returns the most recent ExerciseHistoryChartSize
+// entries for the given exercise, scoped to the user. It feeds the line
+// chart rendered on the exercise history page; the view groups the returned
+// entries by day and plots the heaviest set of each day.
+func (ec *EntryController) GetRecentEntriesForChart(exerciseID, userID string) ([]models.ExerciseEntry, error) {
+	return ec.repo.GetEntriesByExercisePaginated(exerciseID, userID, ExerciseHistoryChartSize, 0)
 }

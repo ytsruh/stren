@@ -662,3 +662,54 @@ func TestEntryController_GetEntriesByExercise_EmptyStats(t *testing.T) {
 		t.Error("empty history should have no pagination state")
 	}
 }
+
+func TestEntryController_GetRecentEntriesForChart(t *testing.T) {
+	ec, mock := setupEntryController(t)
+	now := time.Now()
+	var entries []models.ExerciseEntry
+	// 50 entries across two users / two exercises; the chart should only
+	// receive the matching (exercise, user) pair, capped at chart size.
+	for i := 0; i < 50; i++ {
+		exerciseID := "ex-1"
+		userID := "user-1"
+		if i%2 == 0 {
+			exerciseID = "ex-other"
+		}
+		if i%3 == 0 {
+			userID = "user-other"
+		}
+		entries = append(entries, models.ExerciseEntry{
+			ID:         "entry-" + string(rune('a'+i%26)) + string(rune('A'+i/26)),
+			UserID:     userID,
+			ExerciseID: exerciseID,
+			Reps:       5,
+			Weight:     float64(100 + i),
+			CreatedAt:  now.Add(time.Duration(i) * time.Minute),
+		})
+	}
+	mock.entries = entries
+
+	got, err := ec.GetRecentEntriesForChart("ex-1", "user-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) > ExerciseHistoryChartSize {
+		t.Errorf("expected at most %d entries, got %d", ExerciseHistoryChartSize, len(got))
+	}
+	for _, e := range got {
+		if e.ExerciseID != "ex-1" || e.UserID != "user-1" {
+			t.Errorf("entry from other scope leaked into chart: %+v", e)
+		}
+	}
+}
+
+func TestEntryController_GetRecentEntriesForChart_Empty(t *testing.T) {
+	ec, _ := setupEntryController(t)
+	got, err := ec.GetRecentEntriesForChart("ex-1", "user-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty chart entries, got %d", len(got))
+	}
+}

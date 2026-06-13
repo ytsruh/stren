@@ -17,7 +17,9 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 				Log Weight
 			</a>
 		</div>
-		@components.Chart(chartDataForWeight(entries))
+		<div class="h-44 sm:h-52 md:h-60">
+			@components.Chart(chartDataForWeight(entries))
+		</div>
 		if len(entries) == 0 {
 			@WeightEmptyState()
 		} else {

@@ -71,6 +71,59 @@ func TestLastSetLabel(t *testing.T) {
 	}
 }
 
+func TestChartDataForExercise(t *testing.T) {
+	// Two sets on the same day, plus one set a few days later. The chart
+	// should collapse to 2 points, take the max weight of the multi-set day,
+	// and sort ascending by date.
+	day1Morning := time.Date(2024, 6, 10, 8, 0, 0, 0, time.UTC)
+	day1Evening := time.Date(2024, 6, 10, 18, 0, 0, 0, time.UTC)
+	day3 := time.Date(2024, 6, 12, 9, 0, 0, 0, time.UTC)
+	entries := []models.ExerciseEntry{
+		{Weight: 80, CreatedAt: day1Morning},
+		{Weight: 85, CreatedAt: day1Evening},
+		{Weight: 90, CreatedAt: day3},
+	}
+	props := chartDataForExercise(entries, "Squat")
+	if props.ID != "exercise-history-chart" {
+		t.Errorf("ID = %q, want %q", props.ID, "exercise-history-chart")
+	}
+	if props.Title != "Last 3 Sets" {
+		t.Errorf("Title = %q, want %q", props.Title, "Last 3 Sets")
+	}
+	if len(props.Labels) != 2 {
+		t.Fatalf("expected 2 labels (one per unique day), got %d (%v)", len(props.Labels), props.Labels)
+	}
+	if props.Labels[0] != "10 Jun" || props.Labels[1] != "12 Jun" {
+		t.Errorf("labels = %v, want [10 Jun 12 Jun]", props.Labels)
+	}
+	if len(props.Datasets) != 1 {
+		t.Fatalf("expected 1 dataset, got %d", len(props.Datasets))
+	}
+	values := props.Datasets[0].Values
+	if len(values) != 2 {
+		t.Fatalf("expected 2 values, got %d", len(values))
+	}
+	if values[0] != 85 {
+		t.Errorf("day-1 value = %v, want 85 (max of 80, 85)", values[0])
+	}
+	if values[1] != 90 {
+		t.Errorf("day-3 value = %v, want 90", values[1])
+	}
+	if props.Datasets[0].Label != "Squat (kg)" {
+		t.Errorf("dataset label = %q, want %q", props.Datasets[0].Label, "Squat (kg)")
+	}
+}
+
+func TestChartDataForExercise_Empty(t *testing.T) {
+	props := chartDataForExercise(nil, "Squat")
+	if len(props.Labels) != 0 {
+		t.Errorf("expected no labels for empty input, got %v", props.Labels)
+	}
+	if props.Title != "Last 0 Sets" {
+		t.Errorf("Title = %q, want %q", props.Title, "Last 0 Sets")
+	}
+}
+
 // === Component rendering tests ===
 
 func TestToast_Error(t *testing.T) {
@@ -375,7 +428,7 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 		},
 		Page: 1,
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected exercise name heading")
 	}
@@ -390,9 +443,66 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 func TestExerciseHistory_Empty(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{Page: 1}
-	html := renderToString(t, ExerciseHistory(exercise, page, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false))
 	if !strings.Contains(html, "No entries yet") {
 		t.Error("expected empty state")
+	}
+}
+
+func TestExerciseHistory_RendersChart(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
+	page := &models.ExerciseHistoryPage{
+		Entries: []models.ExerciseEntry{
+			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		},
+		Stats: models.HistoryStats{MaxWeight: 100},
+		Page:  1,
+	}
+	chartEntries := []models.ExerciseEntry{
+		{Weight: 80, CreatedAt: time.Date(2024, 6, 10, 9, 0, 0, 0, time.UTC)},
+		{Weight: 85, CreatedAt: time.Date(2024, 6, 12, 9, 0, 0, 0, time.UTC)},
+		{Weight: 90, CreatedAt: time.Date(2024, 6, 15, 9, 0, 0, 0, time.UTC)},
+	}
+	html := renderToString(t, ExerciseHistory(exercise, page, chartEntries, "Test User", true, false))
+	if !strings.Contains(html, `id="exercise-history-chart"`) {
+		t.Error("expected chart canvas with id exercise-history-chart")
+	}
+	if !strings.Contains(html, "Last 3 Sets") {
+		t.Error("expected chart title to report the entry count")
+	}
+	// The exercise history chart is rendered in a narrow grid cell, so the
+	// view should request the axis-tick-hiding option. Lock the wiring in
+	// so a future refactor of chartDataForExercise can't silently regress it.
+	if !strings.Contains(html, `"hideAxes":true`) {
+		t.Error("expected chart payload to carry hideAxes=true (ticks hidden in small grid cell)")
+	}
+	// The chart now fills its parent; the view is responsible for sizing the
+	// inner wrapper inside the card. Lock in the responsive height class so
+	// a future refactor of the view can't silently drop sizing.
+	if !strings.Contains(html, `h-28 sm:h-32 md:h-48`) {
+		t.Error("expected inner chart wrapper to carry the responsive height class")
+	}
+}
+
+func TestExerciseHistory_OmitsChartWhenSingleDay(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
+	page := &models.ExerciseHistoryPage{
+		Entries: []models.ExerciseEntry{
+			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		},
+		Stats: models.HistoryStats{MaxWeight: 100},
+		Page:  1,
+	}
+	// Two entries on the same day should collapse to a single chart point,
+	// so the chart (which needs >= 2 labels) should not render.
+	sameDay := time.Date(2024, 6, 10, 9, 0, 0, 0, time.UTC)
+	chartEntries := []models.ExerciseEntry{
+		{Weight: 80, CreatedAt: sameDay},
+		{Weight: 85, CreatedAt: sameDay.Add(time.Hour)},
+	}
+	html := renderToString(t, ExerciseHistory(exercise, page, chartEntries, "Test User", true, false))
+	if strings.Contains(html, `id="exercise-history-chart"`) {
+		t.Error("expected chart to be omitted when only one unique day is present")
 	}
 }
 

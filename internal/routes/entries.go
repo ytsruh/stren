@@ -214,7 +214,11 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 		c.Response().Header().Set("Vary", "HX-Request")
 		return render(c, views.HistoryTable(exercise.ID, history))
 	}
-	return render(c, views.ExerciseHistory(exercise, history, claims.Name, true, claims.IsAdmin))
+	chartEntries, err := h.entryCtrl.GetRecentEntriesForChart(exercise.ID, claims.UserID)
+	if err != nil {
+		return err
+	}
+	return render(c, views.ExerciseHistory(exercise, history, chartEntries, claims.Name, true, claims.IsAdmin))
 }
 
 // parsePage reads the ?page=N query param and returns a clamped 1-indexed page
