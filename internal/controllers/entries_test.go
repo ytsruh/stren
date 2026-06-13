@@ -713,3 +713,68 @@ func TestEntryController_GetRecentEntriesForChart_Empty(t *testing.T) {
 		t.Errorf("expected empty chart entries, got %d", len(got))
 	}
 }
+
+// TestEntryController_GetAllEntriesForChart verifies the dedicated
+// /chart-view controller method returns every entry the user has logged
+// for the given exercise — not the 30-entry cap used by the small chart
+// on the history page.
+func TestEntryController_GetAllEntriesForChart(t *testing.T) {
+	ec, mock := setupEntryController(t)
+	now := time.Now()
+	var entries []models.ExerciseEntry
+	// 100 entries for the target (exercise, user) pair — well over the
+	// 30-entry cap used by GetRecentEntriesForChart. We also seed rows
+	// for other exercises and other users to confirm the underlying
+	// paginated repo call scopes correctly.
+	for i := 0; i < 100; i++ {
+		exerciseID := "ex-1"
+		userID := "user-1"
+		if i%5 == 0 {
+			exerciseID = "ex-other"
+		}
+		if i%7 == 0 {
+			userID = "user-other"
+		}
+		entries = append(entries, models.ExerciseEntry{
+			ID:         "entry-" + string(rune('a'+i%26)) + string(rune('A'+i/26)),
+			UserID:     userID,
+			ExerciseID: exerciseID,
+			Reps:       5,
+			Weight:     float64(100 + i),
+			CreatedAt:  now.Add(time.Duration(i) * time.Minute),
+		})
+	}
+	mock.entries = entries
+
+	got, err := ec.GetAllEntriesForChart("ex-1", "user-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) == 0 {
+		t.Fatal("expected entries to be returned, got 0")
+	}
+	// The 30-entry cap from GetRecentEntriesForChart must NOT apply here.
+	if len(got) <= ExerciseHistoryChartSize {
+		t.Errorf("expected more than %d entries (uncapped), got %d", ExerciseHistoryChartSize, len(got))
+	}
+	// Every returned entry must be scoped to the requested (exercise, user).
+	for _, e := range got {
+		if e.ExerciseID != "ex-1" || e.UserID != "user-1" {
+			t.Errorf("entry from other scope leaked into chart: %+v", e)
+		}
+	}
+}
+
+// TestEntryController_GetAllEntriesForChart_Empty asserts the method
+// returns a (possibly nil) empty slice with no error when the user has
+// no entries for the exercise.
+func TestEntryController_GetAllEntriesForChart_Empty(t *testing.T) {
+	ec, _ := setupEntryController(t)
+	got, err := ec.GetAllEntriesForChart("ex-1", "user-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty chart entries, got %d", len(got))
+	}
+}

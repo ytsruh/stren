@@ -17,7 +17,7 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 				Log Weight
 			</a>
 		</div>
-		<div class="h-44 sm:h-52 md:h-60">
+		<div class="card p-2 h-32 md:h-40">
 			@components.Chart(chartDataForWeight(entries))
 		</div>
 		if len(entries) == 0 {
@@ -46,7 +46,7 @@ func chartDataForWeight(entries []models.WeightEntry) components.ChartProps {
 	}
 	return components.ChartProps{
 		ID:     "weight-chart",
-		Title:  "Weight Over Time",
+		Title:  "",
 		Labels: labels,
 		Datasets: []components.ChartDataset{
 			{Label: "Weight (kg)", Values: values},

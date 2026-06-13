@@ -221,6 +221,54 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 	return render(c, views.ExerciseHistory(exercise, history, chartEntries, claims.Name, true, claims.IsAdmin))
 }
 
+// ExerciseChart renders the dedicated chart view for a specific exercise:
+// a full-width line chart of the user's full workout history for that
+// exercise, with the shared ExerciseNav button group at the top so the
+// user can switch to the History or Advanced sub-views.
+//
+// All of the user's entries for the exercise are fetched (uncapped) and
+// handed to the view, which aggregates to "heaviest weight per calendar
+// day" before plotting. With fewer than 2 unique days the view shows a
+// short empty-state message instead of a chart.
+func (h *Handler) ExerciseChart(c echo.Context) error {
+	id := c.Param("id")
+
+	claims := GetClaims(c)
+	exercise, err := h.entryCtrl.GetExerciseByID(id, claims.UserID)
+	if err != nil {
+		return err
+	}
+	if exercise == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "Exercise not found")
+	}
+
+	chartEntries, err := h.entryCtrl.GetAllEntriesForChart(exercise.ID, claims.UserID)
+	if err != nil {
+		return err
+	}
+
+	return render(c, views.ExerciseChart(exercise, chartEntries, claims.Name, true, claims.IsAdmin))
+}
+
+// ExerciseChartAdvanced renders the placeholder advanced chart view for a
+// specific exercise. The actual advanced chart is not yet implemented; the
+// view shows a centered button group for switching to the History or Chart
+// sub-views and a short message describing what will appear in the future.
+func (h *Handler) ExerciseChartAdvanced(c echo.Context) error {
+	id := c.Param("id")
+
+	claims := GetClaims(c)
+	exercise, err := h.entryCtrl.GetExerciseByID(id, claims.UserID)
+	if err != nil {
+		return err
+	}
+	if exercise == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "Exercise not found")
+	}
+
+	return render(c, views.ExerciseChartAdvanced(exercise, claims.Name, true, claims.IsAdmin))
+}
+
 // parsePage reads the ?page=N query param and returns a clamped 1-indexed page
 // number. Defaults to 1 for empty or non-numeric values; values below 1 are
 // clamped to 1.

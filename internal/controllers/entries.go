@@ -2,6 +2,7 @@
 package controllers
 
 import (
+	"math"
 	"time"
 
 	"stren/internal/models"
@@ -186,4 +187,15 @@ func (ec *EntryController) GetExerciseByID(id, userID string) (*models.Exercise,
 // entries by day and plots the heaviest set of each day.
 func (ec *EntryController) GetRecentEntriesForChart(exerciseID, userID string) ([]models.ExerciseEntry, error) {
 	return ec.repo.GetEntriesByExercisePaginated(exerciseID, userID, ExerciseHistoryChartSize, 0)
+}
+
+// GetAllEntriesForChart returns every entry the user has logged for the
+// given exercise, scoped to the user. It feeds the dedicated /chart view,
+// which renders a full-width line chart of the user's full workout history
+// for that exercise. The view is responsible for aggregating to a daily
+// series (heaviest weight per calendar day) before plotting. math.MaxInt32
+// is used as a sentinel for "no limit" — the underlying paginated repo
+// method is reused to avoid introducing a new SQL query.
+func (ec *EntryController) GetAllEntriesForChart(exerciseID, userID string) ([]models.ExerciseEntry, error) {
+	return ec.repo.GetEntriesByExercisePaginated(exerciseID, userID, math.MaxInt32, 0)
 }

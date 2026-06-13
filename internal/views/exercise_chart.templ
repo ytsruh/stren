@@ -1,0 +1,172 @@
+package views
+
+import (
+	"fmt"
+	"sort"
+
+	"stren/internal/models"
+	"stren/internal/views/components"
+)
+
+// exerciseNavActiveHistory is the active value for ExerciseNav that
+// highlights the History (entries) tab.
+const exerciseNavActiveHistory = "history"
+
+// exerciseNavActiveChart is the active value for ExerciseNav that
+// highlights the Chart tab.
+const exerciseNavActiveChart = "chart"
+
+// exerciseNavActiveAdvanced is the active value for ExerciseNav that
+// highlights the Advanced chart tab.
+const exerciseNavActiveAdvanced = "advanced"
+
+// ExerciseNav renders a centered button group that lets the user switch
+// between the History, Chart, and Advanced views for a single exercise.
+//
+// The active button is rendered with the primary btn class plus
+// aria-current="page" (mirroring the convention used by Layout's sidebar
+// nav and HistoryTable's page indicator) so screen readers and styling
+// hooks have a consistent way to identify the current sub-view.
+templ ExerciseNav(exerciseID string, active string) {
+	<div class="flex justify-center mb-6">
+		<div role="group" class="button-group" aria-label="Exercise views">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", exerciseID)) }
+				if active == exerciseNavActiveHistory {
+					class="btn"
+					aria-current="page"
+				} else {
+					class="btn-outline"
+				}
+			>
+				@components.Icon(components.IconProps{Name: "chevron-left", Size: 18})
+				Back
+			</a>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/chart", exerciseID)) }
+				if active == exerciseNavActiveChart {
+					class="btn"
+					aria-current="page"
+				} else {
+					class="btn-outline"
+				}
+			>
+				Chart
+			</a>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/chart/advanced", exerciseID)) }
+				if active == exerciseNavActiveAdvanced {
+					class="btn"
+					aria-current="page"
+				} else {
+					class="btn-outline"
+				}
+			>
+				Advanced
+			</a>
+		</div>
+	</div>
+}
+
+// ExerciseChart renders the dedicated chart view for a single exercise:
+// a full-width line chart of the user's full workout history for that
+// exercise. The view uses the shared Layout and the centered ExerciseNav
+// so the user can switch to the History or Advanced sub-views.
+//
+// chartEntries is the user's full set of entries for the exercise, fed
+// by EntryController.GetAllEntriesForChart. The view aggregates to
+// "heaviest weight per calendar day" and plots it as a single line.
+// When there are fewer than 2 unique days, a friendly empty-state
+// message is rendered in place of the chart.
+templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		@ExerciseNav(exercise.ID, exerciseNavActiveChart)
+		<header class="mb-4">
+			<h1 class="text-xl font-semibold">{ exercise.Name } Progression</h1>
+		</header>
+		<div class="card p-4">
+			if chartHasEnoughData(chartEntries) {
+				<div class="h-[60vh] min-h-96">
+					@components.Chart(chartDataForExerciseFull(chartEntries, exercise.Name, "Max weight per training day"))
+				</div>
+			} else {
+				<p class="text-muted-foreground text-center py-12">
+					Log at least 2 sessions to see your progression.
+				</p>
+			}
+		</div>
+	}
+}
+
+// ExerciseChartAdvanced renders the placeholder advanced chart view for a
+// single exercise. The actual advanced chart content is not yet
+// implemented; the body text describes what will appear here in the
+// future. The view uses the shared Layout and the centered ExerciseNav
+// so the user can switch to the History or Chart views.
+templ ExerciseChartAdvanced(exercise *models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		@ExerciseNav(exercise.ID, exerciseNavActiveAdvanced)
+		<p class="text-muted-foreground text-center">
+			Volume, estimated 1RM, and set-by-set breakdowns will appear here.
+		</p>
+	}
+}
+
+// chartHasEnoughData reports whether the given entry slice has at least
+// 2 unique calendar days of data — the threshold Chart.js needs to draw
+// a meaningful line. Multiple sets on the same day collapse to one point.
+func chartHasEnoughData(entries []models.ExerciseEntry) bool {
+	seen := make(map[string]struct{})
+	for _, e := range entries {
+		key := e.CreatedAt.Format("2006-01-02")
+		seen[key] = struct{}{}
+	}
+	return len(seen) >= 2
+}
+
+// chartDataForExerciseFull aggregates a user's full entry set for a
+// single exercise into the Chart.js line/area series used by the
+// dedicated /chart view. Entries are grouped by calendar day and reduced
+// to the heaviest weight of that day, so the line reads as a
+// PR-over-time view rather than a noisy per-set series. Days are sorted
+// ascending so the line runs left-to-right.
+//
+// Unlike the small chart on the History view (see chartDataForExercise
+// in exercise_history.templ), this helper:
+//   - is fed the full entry set, not a 30-entry slice
+//   - uses a distinct canvas id (`exercise-chart`) so the History view's
+//     smaller chart and the full-width chart can never collide if both
+//     are ever loaded on the same page
+//   - does NOT hide the axis tick labels — the full-width layout has
+//     room to render them legibly
+func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName string, chartTitle string) components.ChartProps {
+	byDay := make(map[string]chartDay)
+	for _, e := range entries {
+		key := e.CreatedAt.Format("2006-01-02")
+		existing, ok := byDay[key]
+		if !ok || e.Weight > existing.weight {
+			byDay[key] = chartDay{date: e.CreatedAt, weight: e.Weight}
+		}
+	}
+	days := make([]chartDay, 0, len(byDay))
+	for _, d := range byDay {
+		days = append(days, d)
+	}
+	sort.Slice(days, func(i, j int) bool {
+		return days[i].date.Before(days[j].date)
+	})
+	labels := make([]string, len(days))
+	values := make([]float64, len(days))
+	for i, d := range days {
+		labels[i] = d.date.Format("02 Jan")
+		values[i] = d.weight
+	}
+	return components.ChartProps{
+		ID:     "exercise-chart",
+		Title:  chartTitle,
+		Labels: labels,
+		Datasets: []components.ChartDataset{
+			{Label: exerciseName + " (kg)", Values: values},
+		},
+	}
+}

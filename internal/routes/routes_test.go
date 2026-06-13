@@ -1420,6 +1420,257 @@ func TestExerciseHistory_HtmxFragment(t *testing.T) {
 	}
 }
 
+// TestExerciseChart verifies the chart placeholder route returns a 200
+// with the expected sub-view links and the chart sub-view marked as
+// active. Mirrors the TestExerciseHistory happy-path pattern.
+func TestExerciseChart(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChart(c); err != nil {
+		t.Fatalf("ExerciseChart failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart"`) {
+		t.Error("expected Chart link in button group")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart" class="btn" aria-current="page"`) {
+		t.Error("expected Chart link to be the active sub-view")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart/advanced"`) {
+		t.Error("expected Advanced link in button group")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1"`) {
+		t.Error("expected History (back) link in button group")
+	}
+}
+
+// TestExerciseChart_NotFound asserts the chart route returns a 404 when
+// the exercise ID does not match a row the user can see. We surface this
+// explicitly (rather than letting an unhandled nil panic) so a bad URL
+// fails cleanly in the browser.
+func TestExerciseChart_NotFound(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/missing/chart", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("missing")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	err := h.ExerciseChart(c)
+	if err == nil {
+		t.Fatal("expected error for missing exercise")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusNotFound {
+		t.Fatalf("expected not found error, got %v", err)
+	}
+}
+
+// TestExerciseChart_Populated asserts the dedicated chart route renders
+// the full-width chart card and the dedicated exercise-chart canvas
+// when the user has at least 2 unique days of data. Multiple sets on
+// the same day are aggregated to a single point on the line.
+func TestExerciseChart_Populated(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: day1},
+		{ID: "e2", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 3, Weight: 105, CreatedAt: day1.Add(8 * time.Hour)},
+		{ID: "e3", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 110, CreatedAt: day2},
+		{ID: "e4", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 3, Weight: 108, CreatedAt: day2.Add(8 * time.Hour)},
+		// Other-exercise entries must be ignored.
+		{ID: "e5", ExerciseID: "uuid-exercise-other", UserID: "user-1", Reps: 5, Weight: 200, CreatedAt: day1},
+		// Other-user entries must be ignored.
+		{ID: "e6", ExerciseID: "uuid-exercise-1", UserID: "user-other", Reps: 5, Weight: 999, CreatedAt: day1},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChart(c); err != nil {
+		t.Fatalf("ExerciseChart failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Page header copy.
+	if !strings.Contains(body, "Squat Progression") {
+		t.Error("expected page header with exercise name + Progression")
+	}
+	if !strings.Contains(body, "Max weight per training day") {
+		t.Error("expected subtitle describing the chart aggregation")
+	}
+	// Full-width chart card chrome.
+	if !strings.Contains(body, `<div class="card p-4">`) {
+		t.Error("expected full-width card container")
+	}
+	if !strings.Contains(body, `class="h-[60vh] min-h-[24rem]"`) {
+		t.Error("expected tall fixed-height chart wrapper")
+	}
+	// Distinct canvas id and JSON data block.
+	if !strings.Contains(body, `<canvas id="exercise-chart">`) {
+		t.Error("expected canvas with id exercise-chart")
+	}
+	if !strings.Contains(body, `id="exercise-chart-data"`) {
+		t.Error("expected exercise-chart-data JSON payload")
+	}
+	// Dataset label reflects the exercise name.
+	if !strings.Contains(body, "Squat (kg)") {
+		t.Error("expected dataset label to include the exercise name + (kg)")
+	}
+	// Aggregation: only 2 unique days -> 2 chart points. Heaviest per
+	// day wins, so day1 = 105 and day2 = 110.
+	re := regexp.MustCompile(`<script id="exercise-chart-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(body)
+	if len(m) < 2 {
+		t.Fatal("could not find exercise-chart-data script block")
+	}
+	var parsed struct {
+		Labels   []string `json:"labels"`
+		Datasets []struct {
+			Values []float64 `json:"values"`
+		} `json:"datasets"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v\ncontent: %s", err, m[1])
+	}
+	if len(parsed.Labels) != 2 {
+		t.Errorf("expected 2 day-bucketed labels, got %d (%v)", len(parsed.Labels), parsed.Labels)
+	}
+	if len(parsed.Datasets) != 1 {
+		t.Fatalf("expected 1 dataset, got %d", len(parsed.Datasets))
+	}
+	if len(parsed.Datasets[0].Values) != 2 || parsed.Datasets[0].Values[0] != 105 || parsed.Datasets[0].Values[1] != 110 {
+		t.Errorf("expected max-weight-per-day values [105, 110], got %v", parsed.Datasets[0].Values)
+	}
+	// Empty state must NOT be rendered in the populated case.
+	if strings.Contains(body, "Log at least 2 sessions") {
+		t.Error("did not expect empty-state message in populated chart view")
+	}
+}
+
+// TestExerciseChart_EmptyState asserts the empty-state message is
+// rendered (and the chart canvas is not) when the user has fewer than
+// 2 unique days of data for the exercise.
+func TestExerciseChart_EmptyState(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	// Single entry, single day — below the 2-day threshold.
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChart(c); err != nil {
+		t.Fatalf("ExerciseChart failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "Log at least 2 sessions to see your progression.") {
+		t.Error("expected friendly empty-state message in the empty-state route test")
+	}
+	if strings.Contains(body, `<canvas id="exercise-chart">`) {
+		t.Error("did not expect chart canvas in empty-state route response")
+	}
+	// The page header copy should still be rendered so the user
+	// understands which exercise the empty state applies to.
+	if !strings.Contains(body, "Squat Progression") {
+		t.Error("expected page header copy even in the empty state")
+	}
+}
+
+// TestExerciseChartAdvanced mirrors TestExerciseChart for the advanced
+// sub-view: 200 OK on a valid exercise, advanced link marked active,
+// placeholder text in the body.
+func TestExerciseChartAdvanced(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart/advanced", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChartAdvanced(c); err != nil {
+		t.Fatalf("ExerciseChartAdvanced failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart/advanced" class="btn" aria-current="page"`) {
+		t.Error("expected Advanced link to be the active sub-view")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart"`) {
+		t.Error("expected Chart link in button group")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1"`) {
+		t.Error("expected History (back) link in button group")
+	}
+}
+
+// TestExerciseChartAdvanced_NotFound asserts the advanced route also
+// returns 404 for unknown exercise IDs.
+func TestExerciseChartAdvanced_NotFound(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/missing/chart/advanced", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("missing")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	err := h.ExerciseChartAdvanced(c)
+	if err == nil {
+		t.Fatal("expected error for missing exercise")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusNotFound {
+		t.Fatalf("expected not found error, got %v", err)
+	}
+}
+
 func TestParsePage(t *testing.T) {
 	tests := []struct {
 		raw      string
