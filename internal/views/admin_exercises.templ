@@ -269,3 +269,8 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 templ AdminExerciseFormError(message string) {
 	@Toast("error", "Error", message)
 }
+
+// AdminExerciseSuccessToast returns only the toast (for HTMX responses)
+templ AdminExerciseSuccessToast(message string) {
+	@Toast("success", "Success", message)
+}

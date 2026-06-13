@@ -68,9 +68,8 @@ func (h *Handler) AdminCreateExercise(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/admin/exercises")
-		c.Response().WriteHeader(http.StatusSeeOther)
-		return nil
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/admin/exercises"}`)
+		return render(c, views.AdminExerciseSuccessToast("Exercise created!"))
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/exercises")
 }
@@ -121,9 +120,8 @@ func (h *Handler) AdminUpdateExercise(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/admin/exercises")
-		c.Response().WriteHeader(http.StatusSeeOther)
-		return nil
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/admin/exercises"}`)
+		return render(c, views.AdminExerciseSuccessToast("Exercise updated!"))
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/exercises")
 }

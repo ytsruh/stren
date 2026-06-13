@@ -200,10 +200,20 @@ templ Layout(data PageData) {
 										</a>
 									</li>
 									<li>
-										<form method="POST" action="/logout">
+										<form
+											hx-post="/logout"
+											hx-target="#toaster"
+											hx-swap="beforeend"
+											hx-indicator="#logout-spinner"
+										>
 											<button type="submit" class="hover:cursor-pointer flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:bg-sidebar-accent active:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0">
-												@components.Icon(components.IconProps{Name: "log-out", Size: 18})
-												<span class="truncate">Logout</span>
+												<span class="btn-text flex items-center gap-2">
+													@components.Icon(components.IconProps{Name: "log-out", Size: 18})
+													<span class="truncate">Logout</span>
+												</span>
+												<span id="logout-spinner" class="htmx-indicator flex items-center justify-center animate-spin">
+													@components.Icon(components.IconProps{Name: "loader", Size: 18})
+												</span>
 											</button>
 										</form>
 									</li>
