@@ -60,9 +60,17 @@ func (h *Handler) AdminCreateExercise(c echo.Context) error {
 
 	_, err := h.adminCtrl.Create(params)
 	if err != nil {
-		return render(c, views.AdminExerciseFormError(err.Error()))
+		if errors.Is(err, controllers.ErrExerciseNameExists) {
+			return render(c, views.AdminExerciseFormError("An exercise with this name already exists"))
+		}
+		c.Logger().Errorf("admin create exercise failed: %v", err)
+		return render(c, views.AdminExerciseFormError("Failed to save exercise. Please try again."))
 	}
 
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/admin/exercises"}`)
+		return render(c, views.AdminExerciseSuccessToast("Exercise created!"))
+	}
 	return c.Redirect(http.StatusSeeOther, "/admin/exercises")
 }
 
@@ -104,8 +112,16 @@ func (h *Handler) AdminUpdateExercise(c echo.Context) error {
 		if errors.Is(err, controllers.ErrNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "Exercise not found")
 		}
-		return render(c, views.AdminExerciseFormError(err.Error()))
+		if errors.Is(err, controllers.ErrExerciseNameExists) {
+			return render(c, views.AdminExerciseFormError("An exercise with this name already exists"))
+		}
+		c.Logger().Errorf("admin update exercise failed: %v", err)
+		return render(c, views.AdminExerciseFormError("Failed to save exercise. Please try again."))
 	}
 
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/admin/exercises"}`)
+		return render(c, views.AdminExerciseSuccessToast("Exercise updated!"))
+	}
 	return c.Redirect(http.StatusSeeOther, "/admin/exercises")
 }

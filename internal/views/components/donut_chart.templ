@@ -1,0 +1,166 @@
+package components
+
+// donutDefaultPalette is the per-slice color cycle used when DonutChart
+// is called without an explicit Colors slice (or with one that contains
+// empty-string entries — see DonutChartProps.Colors for the contract).
+// All six entries are monochromatic tints of the brand orange
+// (#f54900), ordered dark → light with the brand color at the darkest
+// end of the ramp so it carries the most visual weight. Derived by
+// mixing the brand color with white at 0/10/20/30/40/50 percent.
+var donutDefaultPalette = []string{
+	"#f54900", // brand (darkest)
+	"#f65b1a", // 10% white
+	"#f76d33", // 20% white
+	"#f87f4c", // 30% white
+	"#f99166", // 40% white
+	"#faa47f", // 50% white (lightest)
+}
+
+// DonutChartProps configures a generic Chart.js doughnut chart. The
+// chart wrapper fills its parent (w-full h-full); callers are
+// responsible for sizing the parent so the chart has a defined box to
+// render into.
+type DonutChartProps struct {
+	ID     string    // unique canvas id (required)
+	Title  string    // optional heading rendered above the canvas
+	Labels []string  // slice labels (one per slice)
+	Values []float64 // slice values (in label order)
+	// Colors optionally specifies a per-slice CSS hex color. The
+	// resolution rules are:
+	//   - nil or empty slice → every slice gets donutDefaultPalette,
+	//     cycled from index 0.
+	//   - length < len(Labels) → missing entries are filled from
+	//     donutDefaultPalette, cycled from index 0.
+	//   - length >= len(Labels) → used as-is, except that any
+	//     empty-string entry within the first len(Labels) is filled
+	//     from donutDefaultPalette. This last rule lets a caller
+	//     override a single slice (e.g. an "Other" bucket) without
+	//     having to duplicate the full brand palette in their props.
+	Colors []string
+	// HideLegend suppresses the chart legend when true. Resolved into
+	// a server-side ShowLegend bool on the JSON payload so the inline
+	// script does not have to reason about label counts.
+	HideLegend bool
+}
+
+// donutPayload is the JSON-serialised shape embedded in the
+// <script type="application/json"> data block. ShowLegend is the
+// resolved version of HideLegend combined with the slice count —
+// legends look silly for a single-slice donut.
+type donutPayload struct {
+	Labels     []string  `json:"labels"`
+	Values     []float64 `json:"values"`
+	Colors     []string  `json:"colors"`
+	ShowLegend bool      `json:"showLegend"`
+}
+
+// DonutChart renders a Chart.js doughnut chart. The data is embedded
+// in a <script type="application/json"> block so the inline
+// <script> can read it without an extra fetch. The component renders
+// nothing when there are no values, since a doughnut with zero slices
+// is meaningless. Unlike the line chart, a single slice is still
+// valid (a solid disc).
+templ DonutChart(props DonutChartProps) {
+	{{
+		colors := props.Colors
+		if len(colors) < len(props.Labels) {
+			expanded := make([]string, len(props.Labels))
+			copy(expanded, colors)
+			// Fill the gap with the default palette starting from
+			// index 0 — the caller's explicit colors "come first" and
+			// the defaults pick up from the top of the cycle rather
+			// than continuing from where the caller left off, which
+			// would produce visually-similar adjacent slices when the
+			// caller only overrides a couple of entries.
+			defaultIdx := 0
+			for i := len(colors); i < len(props.Labels); i++ {
+				expanded[i] = donutDefaultPalette[defaultIdx%len(donutDefaultPalette)]
+				defaultIdx++
+			}
+			colors = expanded
+		}
+		// Empty-string entries delegate to the default palette so a
+		// caller can pass `Colors: ["", "", "", "", "", gray]` to
+		// override just the last slice (typically an "Other" bucket)
+		// without duplicating the full brand palette.
+		defaultIdx := 0
+		for i, c := range colors {
+			if i >= len(props.Labels) {
+				break
+			}
+			if c == "" {
+				colors[i] = donutDefaultPalette[defaultIdx%len(donutDefaultPalette)]
+				defaultIdx++
+			}
+		}
+		showLegend := !props.HideLegend && len(props.Labels) >= 2
+		payload := donutPayload{
+			Labels:     props.Labels,
+			Values:     props.Values,
+			Colors:     colors,
+			ShowLegend: showLegend,
+		}
+		canvasID := props.ID
+		dataID := props.ID + "-data"
+	}}
+	if len(props.Values) > 0 {
+		<div class="w-full h-full max-w-full max-h-full grid grid-rows-[auto_1fr]">
+			if props.Title != "" {
+				<h3 class="text-sm font-semibold mb-2">{ props.Title }</h3>
+			}
+			<div class="min-h-0 min-w-0">
+				<canvas id={ canvasID }></canvas>
+			</div>
+		</div>
+		@templ.JSONScript(dataID, payload)
+		<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+		<script>
+			(function() {
+				var canvas = document.getElementById("{{ canvasID }}");
+				if (!canvas || typeof Chart === 'undefined') return;
+				var dataEl = document.getElementById("{{ dataID }}");
+				if (!dataEl) return;
+				var data;
+				try { data = JSON.parse(dataEl.textContent); } catch (e) { return; }
+				if (!data || !data.labels || !data.values) return;
+				var palette = ['#f54900', '#f65b1a', '#f76d33', '#f87f4c', '#f99166', '#faa47f'];
+				var colors;
+				if (data.colors && data.colors.length === data.labels.length) {
+					colors = data.colors;
+				} else {
+					colors = data.labels.map(function(_, i) { return palette[i % palette.length]; });
+				}
+				new Chart(canvas.getContext('2d'), {
+					type: 'doughnut',
+					data: {
+						labels: data.labels,
+						datasets: [{
+							data: data.values,
+							backgroundColor: colors,
+							borderColor: '#ffffff',
+							borderWidth: 2
+						}]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						cutout: '60%',
+						plugins: {
+							legend: { display: data.showLegend, position: 'bottom' },
+							tooltip: {
+								callbacks: {
+									label: function(context) {
+										var total = context.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+										var v = context.parsed;
+										var pct = total > 0 ? ((v / total) * 100).toFixed(0) : 0;
+										return context.label + ': ' + v + ' (' + pct + '%)';
+									}
+								}
+							}
+						}
+					}
+				});
+			})();
+		</script>
+	}
+}

@@ -2,43 +2,116 @@ package views
 
 import (
 	"fmt"
+	"sort"
 	"stren/internal/models"
 	"stren/internal/utils"
 	"stren/internal/views/components"
+	"time"
 )
 
-// ExerciseHistory shows all entries for a specific exercise.
-templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+// historyTableWrapID is the id of the swappable region around the history
+// table. The htmx-driven pagination controls swap this region's outerHTML
+// on each page change.
+const historyTableWrapID = "history-table-wrap"
+
+// historySpinnerID is the id of the htmx indicator shown while a page loads.
+const historySpinnerID = "history-spinner"
+
+// ExerciseHistory renders the full exercise history page, including the
+// header, lifetime stats, the weight-progression chart, and the paginated
+// table. The pagination controls swap only the table region via htmx.
+//
+// chartEntries is the most recent slice of entries used to drive the line
+// chart shown next to the stat cards. May be nil or short; the chart
+// renders nothing when fewer than 2 unique calendar days are present.
+templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPage, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		<div class="mb-6">
-			<div class="flex items-center justify-between mb-4">
-				@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: exercise.Name})
-				<span class="badge capitalize">{ string(exercise.Type) }</span>
-			</div>
-			<div class="mb-4 flex items-start gap-4">
-				<div class="flex-1">
-					if exercise.ImgURL != "" {
-						<img src={ utils.PublicURLFor(exercise.ImgURL) } alt={ exercise.Name } class="w-full h-48 object-cover rounded-lg"/>
-					} else {
-						<div class="w-full h-48 bg-muted rounded-lg flex items-center justify-center">
-							@components.Icon(components.IconProps{Name: "dumbbell", Size: 48})
-						</div>
-					}
+		<div class="">
+			<div class="flex items-center justify-between mb-2 gap-4">
+				<div class="flex items-center gap-2">
+					@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: exercise.Name})
+					<span class="badge capitalize hidden sm:flex">{ string(exercise.Type) }</span>
 				</div>
+				<div class="flex items-center gap-2">
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/chart", exercise.ID)) }
+						class="btn-outline"
+					>
+						@components.Icon(components.IconProps{Name: "trending-up", Size: 18})
+					</a>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/new", exercise.ID)) }
+						class="btn"
+					>
+						@components.Icon(components.IconProps{Name: "plus", Size: 18})
+						Add
+					</a>
+				</div>
+			</div>
+			<div class="hidden md:flex mb-4 flex-col items-start gap-4">
+				if exercise.ImgURL != "" {
+					<img src={ utils.PublicURLFor(exercise.ImgURL) } alt={ exercise.Name } class="w-full h-48 object-cover rounded-lg hover:cursor-pointer" type="button" onclick="document.getElementById('dialog-show-image').showModal()"/>
+					<dialog id="dialog-show-image" class="dialog w-full sm:max-w-[425px] max-h-[612px]" aria-labelledby="demo-dialog-edit-profile-title" aria-describedby="demo-dialog-edit-profile-description" onclick="if (event.target === this) this.close()">
+						<div class="max-h-full max-w-full" onclick="this.closest('dialog').close()">
+							<button class="btn btn-secondary" onclick="this.closest('dialog').close()">X</button>
+							<img src={ utils.PublicURLFor(exercise.ImgURL) } alt={ exercise.Name } class="w-full"/>
+						</div>
+					</dialog>
+				} else {
+					<div class="w-full h-48 bg-muted rounded-lg flex items-center justify-center">
+						@components.Icon(components.IconProps{Name: "dumbbell", Size: 48})
+					</div>
+				}
 				if exercise.VideoURL != "" {
 					<a href={ templ.SafeURL(exercise.VideoURL) } target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
 						@components.Icon(components.IconProps{Name: "play", Size: 18})
 						Watch Video
 					</a>
 				}
+				if exercise.Description != "" {
+					<p class="text-muted-foreground">{ exercise.Description }</p>
+				} else {
+					<p class="text-muted-foreground text-sm">No description available</p>
+				}
 			</div>
-			if exercise.Description != "" {
-				<p class="text-muted-foreground">{ exercise.Description }</p>
-			} else {
-				<p class="text-muted-foreground text-sm">No description available</p>
-			}
+			<details class="flex md:hidden flex-col">
+				<summary class="w-full focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] transition-all outline-none rounded-md">
+					<h2 class="flex flex-1 items-start gap-4 py-2 text-left text-sm">
+						More info
+						<span class="text-muted-foreground pointer-events-none size-4 shrink-0 translate-y-0.5 transition-transform duration-200 group-open:rotate-180">
+							@components.Icon(components.IconProps{Name: "arrow-down", Size: 18})
+						</span>
+					</h2>
+				</summary>
+				<section class="flex flex-col items-start gap-4 mb-2">
+					if exercise.ImgURL != "" {
+						<img src={ utils.PublicURLFor(exercise.ImgURL) } alt={ exercise.Name } class="w-full h-48 object-cover rounded-lg hover:cursor-pointer" type="button" onclick="document.getElementById('dialog-show-image').showModal()"/>
+						<dialog id="dialog-show-image" class="dialog w-full sm:max-w-[425px] max-h-[612px]" aria-labelledby="demo-dialog-edit-profile-title" aria-describedby="demo-dialog-edit-profile-description" onclick="if (event.target === this) this.close()">
+							<div class="max-h-full max-w-full" onclick="this.closest('dialog').close()">
+								<button class="btn btn-secondary" onclick="this.closest('dialog').close()">X</button>
+								<img src={ utils.PublicURLFor(exercise.ImgURL) } alt={ exercise.Name } class="w-full"/>
+							</div>
+						</dialog>
+					} else {
+						<div class="w-full h-48 bg-muted rounded-lg flex items-center justify-center">
+							@components.Icon(components.IconProps{Name: "dumbbell", Size: 48})
+						</div>
+					}
+					if exercise.VideoURL != "" {
+						<a href={ templ.SafeURL(exercise.VideoURL) } target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+							@components.Icon(components.IconProps{Name: "play", Size: 18})
+							Watch Video
+						</a>
+					}
+					if exercise.Description != "" {
+						<p class="text-muted-foreground">{ exercise.Description }</p>
+					} else {
+						<p class="text-muted-foreground text-sm">No description available</p>
+					}
+				</section>
+			</details>
 		</div>
-		if len(entries) == 0 {
+		if len(page.Entries) == 0 {
 			<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
 				<header class="flex max-w-sm flex-col items-center gap-3 text-center">
 					<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
@@ -48,75 +121,138 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 					<p class="text-muted-foreground text-sm">You haven't logged any sets for { exercise.Name } yet.</p>
 				</header>
 				<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
-					<a href="/entries/new" class="btn">
+					<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/new", exercise.ID)) } class="btn">
 						@components.Icon(components.IconProps{Name: "plus", Size: 18})
 						Log First Set
 					</a>
 				</section>
 			</div>
 		} else {
-			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6 mb-6">
-				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: getLastSet(entries)})
-				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
+			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: fmt.Sprintf("%.1f kg", page.Stats.LastSet.Weight)})
+				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", page.Stats.MaxWeight)})
+				{{ chartProps := chartDataForExercise(chartEntries, exercise.Name) }}
+				if len(chartProps.Labels) >= 2 {
+					<div class="col-span-2 card p-2">
+						<div class="h-28 sm:h-32 md:h-48">
+							@components.Chart(chartProps)
+						</div>
+					</div>
+				}
 			</div>
 			<h3 class="flex items-center gap-2 mb-4">
 				@components.Icon(components.IconProps{Name: "dumbbell", Size: 20})
 				History
 			</h3>
-			<div class="overflow-x-auto">
-				<table class="table">
-					<thead>
-						<tr>
-							<th>Date</th>
-							<th>Reps</th>
-							<th>Weight</th>
-							<th>Notes</th>
-							<th>Actions</th>
+			@HistoryTable(exercise.ID, page)
+		}
+	}
+}
+
+// HistoryTable renders the paginated table of entries plus the previous / next
+// controls. It is also the swap target for htmx-driven page changes: the
+// outer wrapper carries an id so the response replaces it via outerHTML.
+templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage) {
+	<div id={ historyTableWrapID } class="mb-4">
+		<div class="overflow-x-auto">
+			<table class="table">
+				<thead>
+					<tr>
+						<th>Date</th>
+						<th>Reps</th>
+						<th>Weight</th>
+						<th>Notes</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, entry := range page.Entries {
+						<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
+							<td>{ entry.FormattedDate() }</td>
+							<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
+							<td>{ entry.FormattedWeight() }</td>
+							<td>{ entry.Notes }</td>
+							<td>
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
+									class="btn-outline p-2"
+									title="Edit"
+								>
+									@components.Icon(components.IconProps{Name: "edit", Size: 16})
+								</a>
+							</td>
 						</tr>
-					</thead>
-					<tbody>
-						for _, entry := range entries {
-							<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
-								<td>{ entry.FormattedDate() }</td>
-								<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
-								<td>{ entry.FormattedWeight() }</td>
-								<td>{ entry.Notes }</td>
-								<td>
-									<a
-										href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
-										class="btn-outline p-2"
-										title="Edit"
-									>
-										@components.Icon(components.IconProps{Name: "edit", Size: 16})
-									</a>
-								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
+					}
+				</tbody>
+			</table>
+		</div>
+		<span id={ historySpinnerID } class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground mt-2">
+			@components.Icon(components.IconProps{Name: "loader", Size: 16})
+			Loading...
+		</span>
+		if page.HasPrev || page.HasNext {
+			@components.Pagination(components.PaginationProps{
+				HxGetBase: fmt.Sprintf("/exercises/%s", exerciseID),
+				Target:    historyTableWrapID,
+				Indicator: historySpinnerID,
+				Page:      page.Page,
+				HasPrev:   page.HasPrev,
+				HasNext:   page.HasNext,
+			})
 		}
-	}
+	</div>
 }
 
-// Helper functions
-func maxWeight(entries []models.ExerciseEntry) float64 {
-	if len(entries) == 0 {
-		return 0
-	}
-	max := entries[0].Weight
-	for _, e := range entries[1:] {
-		if e.Weight > max {
-			max = e.Weight
-		}
-	}
-	return max
+// chartDay holds the max weight recorded for a single calendar day, used by
+// chartDataForExercise to collapse multiple sets into a single line point.
+type chartDay struct {
+	date   time.Time
+	weight float64
 }
 
-func getLastSet(entries []models.ExerciseEntry) string {
-	if len(entries) == 0 {
-		return "No entries"
+// chartDataForExercise converts a slice of recent entries into the generic
+// Chart props expected by components.Chart. Entries are grouped by calendar
+// day and reduced to the heaviest weight of that day so the line reads as a
+// PR-over-time view (rather than a noisy per-set series). Days are sorted
+// ascending so the line runs left-to-right.
+//
+// The chart's title reports how many raw entries fed it (e.g. "Last 30 Sets")
+// so the user can tell at a glance how much history the line represents. The
+// chart component itself renders nothing when there are fewer than 2 labels.
+func chartDataForExercise(entries []models.ExerciseEntry, exerciseName string) components.ChartProps {
+	byDay := make(map[string]chartDay)
+	for _, e := range entries {
+		key := e.CreatedAt.Format("2006-01-02")
+		existing, ok := byDay[key]
+		if !ok || e.Weight > existing.weight {
+			byDay[key] = chartDay{date: e.CreatedAt, weight: e.Weight}
+		}
 	}
-	last := entries[0]
-	return fmt.Sprintf("%.1f kg × %d", last.Weight, last.Reps)
+	days := make([]chartDay, 0, len(byDay))
+	for _, d := range byDay {
+		days = append(days, d)
+	}
+	sort.Slice(days, func(i, j int) bool {
+		return days[i].date.Before(days[j].date)
+	})
+	labels := make([]string, len(days))
+	values := make([]float64, len(days))
+	for i, d := range days {
+		labels[i] = d.date.Format("02 Jan")
+		values[i] = d.weight
+	}
+	return components.ChartProps{
+		ID:     "exercise-history-chart",
+		Title:  fmt.Sprintf("Last %d Sets", len(entries)),
+		Labels: labels,
+		Datasets: []components.ChartDataset{
+			{Label: exerciseName + " (kg)", Values: values},
+		},
+		// Hide the tick labels: the dates on x and the kg values on y would
+		// overflow at this size. The y axis line and gridlines stay so the
+		// line still has scale context, and tooltips still show exact values
+		// on hover. The chart's own wrapper fills its parent; the view places
+		// the chart in a sized inner wrapper inside the card.
+		HideAxes: true,
+	}
 }

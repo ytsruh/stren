@@ -13,6 +13,7 @@ type mockAdminRepository struct {
 	exercises []models.Exercise
 
 	errGetByID    error
+	errGetByName  error
 	errUpdate     error
 	errCreateNoTx error
 	errList       error
@@ -30,6 +31,21 @@ func (m *mockAdminRepository) GetByID(id string) (*models.Exercise, error) {
 	defer m.mu.Unlock()
 	for _, e := range m.exercises {
 		if e.ID == id {
+			cp := e
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockAdminRepository) GetByName(name string) (*models.Exercise, error) {
+	if m.errGetByName != nil {
+		return nil, m.errGetByName
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, e := range m.exercises {
+		if e.Name == name {
 			cp := e
 			return &cp, nil
 		}
@@ -180,6 +196,38 @@ func TestAdminController_Create(t *testing.T) {
 	})
 }
 
+func TestAdminController_Create_DuplicateName(t *testing.T) {
+	mock := newMockAdminRepository()
+	mock.exercises = []models.Exercise{
+		{ID: "ex-1", Name: "Bench Press"},
+	}
+	ctrl := NewAdminController(mock)
+
+	_, err := ctrl.Create(models.CreateExerciseParams{Name: "Bench Press"})
+	if !errors.Is(err, ErrExerciseNameExists) {
+		t.Fatalf("expected ErrExerciseNameExists, got %v", err)
+	}
+
+	_, err = ctrl.Create(models.CreateExerciseParams{Name: "  Bench Press  "})
+	if !errors.Is(err, ErrExerciseNameExists) {
+		t.Fatalf("expected ErrExerciseNameExists for whitespace-padded duplicate, got %v", err)
+	}
+}
+
+func TestAdminController_Create_GetByNameError(t *testing.T) {
+	mock := newMockAdminRepository()
+	mock.errGetByName = errors.New("database error")
+	ctrl := NewAdminController(mock)
+
+	_, err := ctrl.Create(models.CreateExerciseParams{Name: "New Exercise"})
+	if err == nil {
+		t.Fatal("expected error when GetByName fails, got nil")
+	}
+	if errors.Is(err, ErrExerciseNameExists) {
+		t.Errorf("GetByName error should not be reported as ErrExerciseNameExists, got %v", err)
+	}
+}
+
 func TestAdminController_Update(t *testing.T) {
 	mock := newMockAdminRepository()
 	mock.exercises = []models.Exercise{
@@ -212,6 +260,36 @@ func TestAdminController_Update(t *testing.T) {
 			t.Fatal("expected error, got nil")
 		}
 		mock.errUpdate = nil
+	})
+}
+
+func TestAdminController_Update_DuplicateName(t *testing.T) {
+	mock := newMockAdminRepository()
+	mock.exercises = []models.Exercise{
+		{ID: "ex-1", Name: "Squat"},
+		{ID: "ex-2", Name: "Bench Press"},
+	}
+	ctrl := NewAdminController(mock)
+
+	t.Run("renaming to another exercise's name fails", func(t *testing.T) {
+		_, err := ctrl.Update("ex-1", models.UpdateExerciseParams{Name: "Bench Press"})
+		if !errors.Is(err, ErrExerciseNameExists) {
+			t.Fatalf("expected ErrExerciseNameExists, got %v", err)
+		}
+	})
+
+	t.Run("renaming to its own current name succeeds", func(t *testing.T) {
+		_, err := ctrl.Update("ex-1", models.UpdateExerciseParams{Name: "Squat", Type: models.ExerciseTypeStrength})
+		if err != nil {
+			t.Fatalf("unexpected error renaming to own name: %v", err)
+		}
+	})
+
+	t.Run("renaming to its own current name with whitespace succeeds", func(t *testing.T) {
+		_, err := ctrl.Update("ex-1", models.UpdateExerciseParams{Name: "  Squat  "})
+		if err != nil {
+			t.Fatalf("unexpected error renaming to own name with whitespace: %v", err)
+		}
 	})
 }
 

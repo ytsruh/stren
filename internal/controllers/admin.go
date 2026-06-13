@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"stren/internal/models"
@@ -38,6 +39,7 @@ func (ac *AdminController) Get(id string) (*models.Exercise, error) {
 }
 
 // Create creates a new exercise. Returns the created exercise.
+// Returns ErrExerciseNameExists if an exercise with the same name already exists.
 func (ac *AdminController) Create(params models.CreateExerciseParams) (*models.Exercise, error) {
 	params.Name = strings.TrimSpace(params.Name)
 	if params.Name == "" {
@@ -50,6 +52,14 @@ func (ac *AdminController) Create(params models.CreateExerciseParams) (*models.E
 
 	if !models.ValidateURL(params.VideoURL) {
 		return nil, errors.New("video URL must be a valid URL")
+	}
+
+	existing, err := ac.repo.GetByName(params.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check for duplicate exercise: %w", err)
+	}
+	if existing != nil {
+		return nil, ErrExerciseNameExists
 	}
 
 	id, err := ac.repo.CreateNoTx(params)
@@ -68,6 +78,8 @@ func (ac *AdminController) Create(params models.CreateExerciseParams) (*models.E
 }
 
 // Update updates an existing exercise's metadata.
+// Returns ErrNotFound if the exercise doesn't exist, or ErrExerciseNameExists
+// if the new name is already used by a different exercise.
 func (ac *AdminController) Update(id string, params models.UpdateExerciseParams) (*models.Exercise, error) {
 	params.Name = strings.TrimSpace(params.Name)
 	if params.Name == "" {
@@ -80,6 +92,14 @@ func (ac *AdminController) Update(id string, params models.UpdateExerciseParams)
 
 	if !models.ValidateURL(params.VideoURL) {
 		return nil, errors.New("video URL must be a valid URL")
+	}
+
+	existing, err := ac.repo.GetByName(params.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check for duplicate exercise: %w", err)
+	}
+	if existing != nil && existing.ID != id {
+		return nil, ErrExerciseNameExists
 	}
 
 	exercise, err := ac.repo.Update(id, params)

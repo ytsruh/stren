@@ -26,8 +26,23 @@ func TestChartRenders(t *testing.T) {
 	if !bytes.Contains([]byte(out), []byte(`<canvas id="weight-chart">`)) {
 		t.Error("expected canvas with id weight-chart")
 	}
-	if !bytes.Contains([]byte(out), []byte(`h-44 sm:h-52 md:h-60`)) {
-		t.Error("expected responsive height classes")
+	if !bytes.Contains([]byte(out), []byte(`w-full h-full`)) {
+		t.Error("expected chart wrapper to fill its parent (w-full h-full)")
+	}
+	// The wrapper must be a CSS grid with two rows (title + canvas) so the
+	// canvas fills the *remaining* space after the title rather than the
+	// full wrapper height. Without this, height:100% on the canvas causes
+	// it to overflow the wrapper (and the card) by the title's height.
+	if !bytes.Contains([]byte(out), []byte(`grid grid-rows-[auto_1fr]`)) {
+		t.Error("expected chart wrapper to be a grid with auto/1fr rows so the canvas fills remaining space")
+	}
+	// Grid items default to min-height:auto (canvas intrinsic 150px) AND
+	// min-width:auto (canvas intrinsic 300px). The min-h-0/min-w-0 wrapper
+	// around the canvas opts out of both so the 1fr row can shrink to
+	// small layouts and the canvas tracks the real container width on
+	// resize (which also unblocks Chart.js's ResizeObserver).
+	if !bytes.Contains([]byte(out), []byte(`<div class="min-h-0 min-w-0"><canvas id="weight-chart">`)) {
+		t.Error("expected canvas to be wrapped in a min-h-0 min-w-0 div so the 1fr row can shrink and the canvas can resize")
 	}
 	if !bytes.Contains([]byte(out), []byte(`getElementById("weight-chart")`)) {
 		t.Error("expected getElementById to use string literal with quotes")
@@ -49,6 +64,7 @@ func TestChartRenders(t *testing.T) {
 			Values []float64 `json:"values"`
 			Color  string    `json:"color"`
 		} `json:"datasets"`
+		HideAxes bool `json:"hideAxes"`
 	}
 	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
 		t.Fatalf("data block is not valid JSON: %v\ncontent: %s", err, m[1])
@@ -64,6 +80,9 @@ func TestChartRenders(t *testing.T) {
 	}
 	if parsed.Datasets[0].Color != chartDefaultColor {
 		t.Errorf("expected default color %s, got %s", chartDefaultColor, parsed.Datasets[0].Color)
+	}
+	if parsed.HideAxes {
+		t.Error("expected default HideAxes=false in payload")
 	}
 	if !bytes.Contains([]byte(out), []byte("labelColor")) {
 		t.Error("expected tooltip labelColor callback to set box color")
@@ -87,5 +106,67 @@ func TestChartHiddenBelowTwoLabels(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Errorf("expected empty output with 1 label, got %d bytes", buf.Len())
+	}
+}
+
+func TestChartFillsParent(t *testing.T) {
+	// ContainerClass is intentionally absent from ChartProps now: the chart
+	// fills its parent and the caller owns sizing. This test locks the
+	// wrapper contract in so a future refactor can't accidentally reintroduce
+	// a hardcoded chart height.
+	props := ChartProps{
+		ID:       "history-chart",
+		Labels:   []string{"10 Jun", "11 Jun"},
+		Datasets: []ChartDataset{{Label: "Squat (kg)", Values: []float64{80, 85}}},
+	}
+	var buf bytes.Buffer
+	if err := Chart(props).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	out := buf.String()
+	if !bytes.Contains([]byte(out), []byte(`w-full h-full`)) {
+		t.Errorf("expected wrapper to fill parent (w-full h-full), got: %s", out)
+	}
+	if bytes.Contains([]byte(out), []byte(`h-44 sm:h-52 md:h-60`)) {
+		t.Errorf("chart wrapper must not impose a default height; caller owns sizing")
+	}
+}
+
+func TestChartHideAxes(t *testing.T) {
+	props := ChartProps{
+		ID:       "history-chart",
+		Labels:   []string{"10 Jun", "11 Jun"},
+		Datasets: []ChartDataset{{Label: "Squat (kg)", Values: []float64{80, 85}}},
+		HideAxes: true,
+	}
+	var buf bytes.Buffer
+	if err := Chart(props).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	out := buf.String()
+
+	// Payload flag must round-trip into the JSON data block so the inline
+	// script can read it.
+	re := regexp.MustCompile(`<script id="history-chart-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(out)
+	if len(m) < 2 {
+		t.Fatal("could not find data script block")
+	}
+	var parsed struct {
+		HideAxes bool `json:"hideAxes"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v\ncontent: %s", err, m[1])
+	}
+	if !parsed.HideAxes {
+		t.Error("expected hideAxes=true in payload when HideAxes is set")
+	}
+
+	// Inline script must reference data.hideAxes in both the x scale ternary
+	// and the y scale ticks config. (We can't substring-match the final
+	// `ticks: { display: false }` value on the y axis because the y branch
+	// is written as a ternary whose result is only known at JS runtime.)
+	if got := bytes.Count([]byte(out), []byte("data.hideAxes")); got != 2 {
+		t.Errorf("expected data.hideAxes to be referenced on both axes, got %d occurrences", got)
 	}
 }

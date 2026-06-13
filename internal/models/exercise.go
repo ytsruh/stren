@@ -288,18 +288,51 @@ func (r *ExerciseRepository) ListEntries(userID string, limit int) ([]ExerciseEn
 	return mapListEntriesRows(rows), nil
 }
 
-// GetEntriesByExercise returns all entries for a specific exercise ID.
-// Scopes to the given user ID.
-func (r *ExerciseRepository) GetEntriesByExercise(exerciseID string, userID string) ([]ExerciseEntry, error) {
+// GetEntriesByExercisePaginated returns a page of entries for a specific exercise ID,
+// ordered by created_at descending. Scopes to the given user ID.
+func (r *ExerciseRepository) GetEntriesByExercisePaginated(exerciseID string, userID string, limit, offset int) ([]ExerciseEntry, error) {
 	ctx := context.Background()
-	rows, err := r.queries.GetEntriesByExercise(ctx, db.GetEntriesByExerciseParams{
+	rows, err := r.queries.GetEntriesByExercisePaginated(ctx, db.GetEntriesByExercisePaginatedParams{
 		ExerciseID: exerciseID,
-		UserID:    sql.NullString{String: userID, Valid: true},
+		UserID:     sql.NullString{String: userID, Valid: true},
+		Limit:      int64(limit),
+		Offset:     int64(offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get entries by exercise: %w", err)
 	}
-	return mapGetEntriesByExerciseRows(rows), nil
+	return mapGetEntriesByExercisePaginatedRows(rows), nil
+}
+
+// GetMaxWeightByExercise returns the heaviest weight logged for the given exercise by
+// the given user, or 0 when no entries exist. Scopes to the given user ID.
+func (r *ExerciseRepository) GetMaxWeightByExercise(exerciseID string, userID string) (float64, error) {
+	ctx := context.Background()
+	max, err := r.queries.GetMaxWeightByExercise(ctx, db.GetMaxWeightByExerciseParams{
+		ExerciseID: exerciseID,
+		UserID:     sql.NullString{String: userID, Valid: true},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max weight by exercise: %w", err)
+	}
+	return max, nil
+}
+
+// GetLastSetByExercise returns the most recent entry for the given exercise by the
+// given user. Returns (nil, nil) when no entries exist. Scopes to the given user ID.
+func (r *ExerciseRepository) GetLastSetByExercise(exerciseID string, userID string) (*ExerciseEntry, error) {
+	ctx := context.Background()
+	row, err := r.queries.GetLastSetByExercise(ctx, db.GetLastSetByExerciseParams{
+		ExerciseID: exerciseID,
+		UserID:     sql.NullString{String: userID, Valid: true},
+	})
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last set by exercise: %w", err)
+	}
+	return mapGetLastSetByExerciseRow(row), nil
 }
 
 // GetEntriesByDateRange returns entries within an inclusive date range.
@@ -317,15 +350,15 @@ func (r *ExerciseRepository) GetEntriesByDateRange(start, end time.Time, userID 
 	return mapGetEntriesByDateRangeRows(rows), nil
 }
 
-// ListEntriesLast30Days returns entries from the last 30 days ordered by created_at descending.
+// ListEntriesLast7Days returns entries from the last 7 days ordered by created_at descending.
 // Scopes to the given user ID.
-func (r *ExerciseRepository) ListEntriesLast30Days(userID string) ([]ExerciseEntry, error) {
+func (r *ExerciseRepository) ListEntriesLast7Days(userID string) ([]ExerciseEntry, error) {
 	ctx := context.Background()
-	rows, err := r.queries.ListEntriesLast30Days(ctx, sql.NullString{String: userID, Valid: true})
+	rows, err := r.queries.ListEntriesLast7Days(ctx, sql.NullString{String: userID, Valid: true})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list entries last 30 days: %w", err)
+		return nil, fmt.Errorf("failed to list entries last 7 days: %w", err)
 	}
-	return mapListEntriesLast30DaysRows(rows), nil
+	return mapListEntriesLast7DaysRows(rows), nil
 }
 
 // --- Mapping helpers ---
@@ -380,7 +413,7 @@ func mapListEntriesWithLimitRows(rows []db.ListEntriesWithLimitRow) []ExerciseEn
 	return entries
 }
 
-func mapGetEntriesByExerciseRows(rows []db.GetEntriesByExerciseRow) []ExerciseEntry {
+func mapGetEntriesByExercisePaginatedRows(rows []db.GetEntriesByExercisePaginatedRow) []ExerciseEntry {
 	entries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
 		entries[i] = ExerciseEntry{
@@ -396,6 +429,20 @@ func mapGetEntriesByExerciseRows(rows []db.GetEntriesByExerciseRow) []ExerciseEn
 		}
 	}
 	return entries
+}
+
+func mapGetLastSetByExerciseRow(row db.GetLastSetByExerciseRow) *ExerciseEntry {
+	return &ExerciseEntry{
+		ID:           row.ID,
+		ExerciseID:   row.ExerciseID,
+		UserID:       nullStringToString(row.UserID),
+		ExerciseName: row.ExerciseName,
+		Reps:         int(row.Reps),
+		Weight:       row.Weight,
+		Notes:        nullStringToString(row.Notes),
+		RestTime:     int(row.RestTime),
+		CreatedAt:    nullTimeToTime(row.CreatedAt),
+	}
 }
 
 func mapGetEntriesByDateRangeRows(rows []db.GetEntriesByDateRangeRow) []ExerciseEntry {
@@ -416,7 +463,7 @@ func mapGetEntriesByDateRangeRows(rows []db.GetEntriesByDateRangeRow) []Exercise
 	return entries
 }
 
-func mapListEntriesLast30DaysRows(rows []db.ListEntriesLast30DaysRow) []ExerciseEntry {
+func mapListEntriesLast7DaysRows(rows []db.ListEntriesLast7DaysRow) []ExerciseEntry {
 	entries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
 		entries[i] = ExerciseEntry{

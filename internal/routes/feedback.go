@@ -37,9 +37,8 @@ func (h *Handler) SubmitFeedback(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/")
-		c.Response().WriteHeader(http.StatusSeeOther)
-		return nil
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
+		return render(c, views.FeedbackFormSuccess("Feedback submitted"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/")

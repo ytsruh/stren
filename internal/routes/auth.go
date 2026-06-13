@@ -46,9 +46,8 @@ func (h *Handler) Login(c echo.Context) error {
 	setAuthCookie(c, token)
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/")
-		c.Response().WriteHeader(http.StatusSeeOther)
-		return nil
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
+		return render(c, views.LoginSuccessToast())
 	}
 	return c.Redirect(http.StatusSeeOther, "/")
 }
@@ -85,9 +84,8 @@ func (h *Handler) Register(c echo.Context) error {
 	setAuthCookie(c, token)
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Redirect", "/")
-		c.Response().WriteHeader(http.StatusSeeOther)
-		return nil
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
+		return render(c, views.RegisterSuccessToast())
 	}
 	return c.Redirect(http.StatusSeeOther, "/")
 }
@@ -95,5 +93,10 @@ func (h *Handler) Register(c echo.Context) error {
 // Logout clears the auth cookie and redirects to login.
 func (h *Handler) Logout(c echo.Context) error {
 	clearAuthCookie(c)
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/login"}`)
+		return render(c, views.LogoutSuccessToast())
+	}
 	return c.Redirect(http.StatusSeeOther, "/login")
 }

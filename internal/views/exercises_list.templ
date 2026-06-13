@@ -27,20 +27,32 @@ templ ExercisesList(exercises []models.Exercise, userName string, isAuthenticate
 				<p>No exercises available.</p>
 			</div>
 		} else {
-			<div id="exercise-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-				for _, exercise := range exercises {
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", exercise.ID)) }
-						data-name={ strings.ToLower(exercise.Name) }
-						class="card exercise-card p-6 hover:shadow-md transition-shadow h-24 lg:h-36 hover:border hover:border-orange-600"
-					>
-						<div class="h-full flex flex-col">
-							<span class="badge capitalize text-xs mb-2">{ string(exercise.Type) }</span>
-							<h3 class="text-lg text-ellipsis">{ exercise.Name }</h3>
-						</div>
-					</a>
-				}
-			</div>
+			<table class="table w-full">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Type</th>
+					</tr>
+				</thead>
+				<tbody id="exercise-grid">
+					for _, exercise := range exercises {
+						<tr
+							class="exercise-row cursor-pointer hover:bg-muted/50"
+							data-name={ strings.ToLower(exercise.Name) }
+							data-href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", exercise.ID)) }
+						>
+							<td>
+								<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", exercise.ID)) } class="block">
+									{ exercise.Name }
+								</a>
+							</td>
+							<td>
+								<span class="badge capitalize">{ string(exercise.Type) }</span>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
 			<div id="no-results" class="hidden text-center py-12 text-muted-foreground">
 				<p>No exercises found.</p>
 			</div>
@@ -48,9 +60,16 @@ templ ExercisesList(exercises []models.Exercise, userName string, isAuthenticate
 		<script>
 			(function() {
 				const searchInput = document.getElementById('exercise-search');
-				const cards = document.querySelectorAll('.exercise-card');
+				const rows = document.querySelectorAll('.exercise-row');
 				const noResults = document.getElementById('no-results');
 				let debounceTimer;
+
+				rows.forEach(function(row) {
+					row.addEventListener('click', function(e) {
+						if (e.target.closest('a')) return;
+						window.location.href = this.dataset.href;
+					});
+				});
 
 				searchInput.addEventListener('input', function() {
 					clearTimeout(debounceTimer);
@@ -58,13 +77,13 @@ templ ExercisesList(exercises []models.Exercise, userName string, isAuthenticate
 						const query = searchInput.value.toLowerCase().trim();
 						let visibleCount = 0;
 
-						cards.forEach(function(card) {
-							const name = card.getAttribute('data-name');
+						rows.forEach(function(row) {
+							const name = row.getAttribute('data-name');
 							if (name.includes(query)) {
-								card.classList.remove('hidden');
+								row.classList.remove('hidden');
 								visibleCount++;
 							} else {
-								card.classList.add('hidden');
+								row.classList.add('hidden');
 							}
 						});
 

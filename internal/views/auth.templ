@@ -91,3 +91,18 @@ templ RegisterPage(errorMsg string) {
 templ RegisterPageError(message string) {
 	@Toast("error", "Error", message)
 }
+
+// LoginSuccessToast is shown after a successful login (for HTMX responses).
+templ LoginSuccessToast() {
+	@Toast("success", "Logged in", "")
+}
+
+// RegisterSuccessToast is shown after a successful registration (for HTMX responses).
+templ RegisterSuccessToast() {
+	@Toast("success", "Account created", "")
+}
+
+// LogoutSuccessToast is shown after a successful logout (for HTMX responses).
+templ LogoutSuccessToast() {
+	@Toast("success", "Logged out", "")
+}

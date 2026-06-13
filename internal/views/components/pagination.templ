@@ -1,0 +1,88 @@
+package components
+
+// PaginationProps configures a Previous / Next pager driven by htmx.
+// HxGetBase is the URL template the buttons target; PrevPage and NextPage are
+// appended as ?page=N. The HX-Request header is used server-side to return a
+// fragment instead of the full page.
+type PaginationProps struct {
+	// HxGetBase is the URL the buttons hit, e.g. templ.SafeURL("/exercises/{id}").
+	// The page number is appended as ?page=N by this component.
+	HxGetBase string
+	// Target is the id of the element that htmx swaps the response into.
+	Target string
+	// Indicator is the id of the spinner element shown while htmx is in flight.
+	// Pass an empty string to disable the indicator.
+	Indicator string
+	// Page is the current 1-indexed page number.
+	Page int
+	// HasPrev / HasNext control whether the buttons are enabled.
+	HasPrev bool
+	HasNext bool
+}
+
+// Pagination renders Previous / Next controls that swap an outer region via htmx.
+// Falls back to plain anchor navigation when JavaScript is disabled, so the
+// underlying endpoints must render the same content for HX-Request and full loads.
+templ Pagination(props PaginationProps) {
+	<div class="flex items-center justify-center gap-2 my-4">
+		if props.HasPrev {
+			<a
+				href={ templ.SafeURL(props.HxGetBase + "?page=" + intToString(props.Page-1)) }
+				hx-get={ templ.SafeURL(props.HxGetBase + "?page=" + intToString(props.Page-1)) }
+				hx-target={ "#" + props.Target }
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				if props.Indicator != "" {
+					hx-indicator={ "#" + props.Indicator }
+				}
+				class="btn-outline inline-flex items-center gap-1"
+				aria-label="Previous page"
+			>
+				@Icon(IconProps{Name: "chevron-left", Size: 16})
+				Previous
+			</a>
+		}
+		<span class="text-sm text-muted-foreground" aria-current="page">Page { intToString(props.Page) }</span>
+		if props.HasNext {
+			<a
+				href={ templ.SafeURL(props.HxGetBase + "?page=" + intToString(props.Page+1)) }
+				hx-get={ templ.SafeURL(props.HxGetBase + "?page=" + intToString(props.Page+1)) }
+				hx-target={ "#" + props.Target }
+				hx-swap="outerHTML"
+				hx-push-url="true"
+				if props.Indicator != "" {
+					hx-indicator={ "#" + props.Indicator }
+				}
+				class="btn-outline inline-flex items-center gap-1"
+				aria-label="Next page"
+			>
+				Next
+				@Icon(IconProps{Name: "chevron-right", Size: 16})
+			</a>
+		}
+	</div>
+}
+
+// intToString is a tiny helper so Pagination can concatenate the page number
+// into URL strings without pulling in strconv into the component surface.
+func intToString(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}

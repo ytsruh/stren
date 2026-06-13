@@ -1,0 +1,230 @@
+package views
+
+import (
+	"fmt"
+	"sort"
+
+	"stren/internal/models"
+	"stren/internal/views/components"
+)
+
+// exerciseNavActiveHistory is the active value for ExerciseNav that
+// highlights the History (entries) tab.
+const exerciseNavActiveHistory = "history"
+
+// exerciseNavActiveChart is the active value for ExerciseNav that
+// highlights the Chart tab.
+const exerciseNavActiveChart = "chart"
+
+// exerciseNavActiveAdvanced is the active value for ExerciseNav that
+// highlights the Advanced chart tab.
+const exerciseNavActiveAdvanced = "advanced"
+
+// ExerciseNav renders a centered button group that lets the user switch
+// between the History, Chart, and Advanced views for a single exercise.
+//
+// The active button is rendered with the primary btn class plus
+// aria-current="page" (mirroring the convention used by Layout's sidebar
+// nav and HistoryTable's page indicator) so screen readers and styling
+// hooks have a consistent way to identify the current sub-view.
+templ ExerciseNav(exerciseID string, active string) {
+	<div class="flex justify-center mb-6">
+		<div role="group" class="button-group" aria-label="Exercise views">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", exerciseID)) }
+				if active == exerciseNavActiveHistory {
+					class="btn"
+					aria-current="page"
+				} else {
+					class="btn-outline"
+				}
+			>
+				@components.Icon(components.IconProps{Name: "chevron-left", Size: 18})
+				Back
+			</a>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/chart", exerciseID)) }
+				if active == exerciseNavActiveChart {
+					class="btn"
+					aria-current="page"
+				} else {
+					class="btn-outline"
+				}
+			>
+				Chart
+			</a>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/chart/advanced", exerciseID)) }
+				if active == exerciseNavActiveAdvanced {
+					class="btn"
+					aria-current="page"
+				} else {
+					class="btn-outline"
+				}
+			>
+				Advanced
+			</a>
+		</div>
+	</div>
+}
+
+// ExerciseChart renders the dedicated chart view for a single exercise:
+// a full-width line chart of the user's full workout history for that
+// exercise. The view uses the shared Layout and the centered ExerciseNav
+// so the user can switch to the History or Advanced sub-views.
+//
+// chartEntries is the user's full set of entries for the exercise, fed
+// by EntryController.GetAllEntriesForChart. The view aggregates to
+// "heaviest weight per calendar day" and plots it as a single line.
+// When there are fewer than 2 unique days, a friendly empty-state
+// message is rendered in place of the chart.
+templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		@ExerciseNav(exercise.ID, exerciseNavActiveChart)
+		<header class="mb-4">
+			<h1 class="text-xl font-semibold">{ exercise.Name } Progression</h1>
+		</header>
+		<div class="card p-4">
+			if chartHasEnoughData(chartEntries) {
+				<div class="h-[60vh] min-h-96">
+					@components.Chart(chartDataForExerciseFull(chartEntries, exercise.Name, "Max weight per training day"))
+				</div>
+			} else {
+				<p class="text-muted-foreground text-center py-12">
+					Log at least 2 sessions to see your progression.
+				</p>
+			}
+		</div>
+	}
+}
+
+// ExerciseChartAdvanced renders the advanced chart view for a single
+// exercise: a full-width scatter plot of every set the user has logged,
+// with reps on the x axis and weight on the y axis. Each dot is a single
+// set and the hover tooltip surfaces the date. The view uses the shared
+// Layout and the centered ExerciseNav so the user can switch to the
+// History or Chart sub-views.
+//
+// chartEntries is the user's full set of entries for the exercise, fed
+// by EntryController.GetAllEntriesForChart. Unlike the line chart, this
+// view does not aggregate — overlapping (reps, weight) points are
+// rendered as separate translucent dots so no set is hidden. With
+// fewer than 2 entries the view shows a short empty-state message
+// instead of a chart.
+templ ExerciseChartAdvanced(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		@ExerciseNav(exercise.ID, exerciseNavActiveAdvanced)
+		<header class="mb-4">
+			<h1 class="text-xl font-semibold">{ exercise.Name } Volume</h1>
+		</header>
+		<div class="card p-4">
+			if chartScatterHasEnoughData(chartEntries) {
+				<div class="h-[60vh] min-h-96">
+					@components.ScatterChart(chartDataForExerciseScatter(chartEntries, exercise.Name, "Every set plotted by reps and weight"))
+				</div>
+			} else {
+				<p class="text-muted-foreground text-center py-12">
+					Log at least 2 sets to see your volume profile.
+				</p>
+			}
+		</div>
+	}
+}
+
+// chartHasEnoughData reports whether the given entry slice has at least
+// 2 unique calendar days of data — the threshold Chart.js needs to draw
+// a meaningful line. Multiple sets on the same day collapse to one point.
+func chartHasEnoughData(entries []models.ExerciseEntry) bool {
+	seen := make(map[string]struct{})
+	for _, e := range entries {
+		key := e.CreatedAt.Format("2006-01-02")
+		seen[key] = struct{}{}
+	}
+	return len(seen) >= 2
+}
+
+// chartScatterHasEnoughData reports whether the given entry slice has
+// at least 2 sets to plot on the scatter chart. Unlike chartHasEnoughData
+// the scatter view does NOT collapse by day — every set is a dot, so the
+// threshold is just len(entries) >= 2.
+func chartScatterHasEnoughData(entries []models.ExerciseEntry) bool {
+	return len(entries) >= 2
+}
+
+// chartDataForExerciseFull aggregates a user's full entry set for a
+// single exercise into the Chart.js line/area series used by the
+// dedicated /chart view. Entries are grouped by calendar day and reduced
+// to the heaviest weight of that day, so the line reads as a
+// PR-over-time view rather than a noisy per-set series. Days are sorted
+// ascending so the line runs left-to-right.
+//
+// Unlike the small chart on the History view (see chartDataForExercise
+// in exercise_history.templ), this helper:
+//   - is fed the full entry set, not a 30-entry slice
+//   - uses a distinct canvas id (`exercise-chart`) so the History view's
+//     smaller chart and the full-width chart can never collide if both
+//     are ever loaded on the same page
+//   - does NOT hide the axis tick labels — the full-width layout has
+//     room to render them legibly
+func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName string, chartTitle string) components.ChartProps {
+	byDay := make(map[string]chartDay)
+	for _, e := range entries {
+		key := e.CreatedAt.Format("2006-01-02")
+		existing, ok := byDay[key]
+		if !ok || e.Weight > existing.weight {
+			byDay[key] = chartDay{date: e.CreatedAt, weight: e.Weight}
+		}
+	}
+	days := make([]chartDay, 0, len(byDay))
+	for _, d := range byDay {
+		days = append(days, d)
+	}
+	sort.Slice(days, func(i, j int) bool {
+		return days[i].date.Before(days[j].date)
+	})
+	labels := make([]string, len(days))
+	values := make([]float64, len(days))
+	for i, d := range days {
+		labels[i] = d.date.Format("02 Jan")
+		values[i] = d.weight
+	}
+	return components.ChartProps{
+		ID:     "exercise-chart",
+		Title:  chartTitle,
+		Labels: labels,
+		Datasets: []components.ChartDataset{
+			{Label: exerciseName + " (kg)", Values: values},
+		},
+	}
+}
+
+// chartDataForExerciseScatter converts a user's full entry set for a
+// single exercise into the Chart.js scatter series used by the dedicated
+// /chart/advanced view. Unlike chartDataForExerciseFull the scatter view
+// does NOT collapse by day — every set is its own (reps, weight) point
+// so the user can see set-by-set volume patterns. The date is carried
+// alongside each point and surfaced in the hover tooltip.
+//
+// Entries are NOT sorted — the scatter chart does not need them in any
+// particular order, and Chart.js positions points by (x, y) regardless
+// of array order. A distinct canvas id (`exercise-chart-advanced`) keeps
+// it from colliding with the line chart on the /chart view. The chart
+// does not hide axis tick labels — the full-width layout has room for
+// them, and integer rep ticks help the user read set counts at a glance.
+func chartDataForExerciseScatter(entries []models.ExerciseEntry, exerciseName string, chartTitle string) components.ScatterChartProps {
+	points := make([]components.ScatterPoint, 0, len(entries))
+	for _, e := range entries {
+		points = append(points, components.ScatterPoint{
+			X:    float64(e.Reps),
+			Y:    e.Weight,
+			Date: e.CreatedAt.Format("02 Jan"),
+		})
+	}
+	return components.ScatterChartProps{
+		ID:     "exercise-chart-advanced",
+		Title:  chartTitle,
+		XLabel: "Reps",
+		YLabel: exerciseName + " (kg)",
+		Points: points,
+	}
+}

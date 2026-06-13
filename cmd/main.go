@@ -49,17 +49,17 @@ func main() {
 	adminCtrl := controllers.NewAdminController(repo)
 	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
-	timerCtrl := controllers.NewTimerController()
-	emomCtrl := controllers.NewEMOMController()
+	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(weightRepo)
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
-	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, weightCtrl, userRepo, jwtService, validator)
+	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timersCtrl, weightCtrl, userRepo, jwtService, validator)
 
 	// Create Echo instance
 	e := echo.New()
 	e.HideBanner = true
+	e.HidePort = true
 
 	// Custom HTTP error handler - renders error pages instead of JSON
 	e.HTTPErrorHandler = func(err error, c echo.Context) {

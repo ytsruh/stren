@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	"stren/internal/controllers"
 	"stren/internal/models"
 	"stren/internal/utils"
+	"stren/internal/views"
 )
 
 type mockRepository struct {
@@ -28,20 +30,22 @@ type mockRepository struct {
 	exercises []models.Exercise
 	entries   []models.ExerciseEntry
 
-	errCreate              error
-	errGetByName           error
-	errGetByID             error
-	errUpdate              error
-	errList                error
-	errCreateEntry         error
-	errGetEntry            error
-	errUpdateEntry         error
-	errUpdateEntryWithDate error
-	errDeleteEntry         error
-	errListEntries         error
-	errGetEntriesByExercise error
-	errGetEntriesByDateRange error
-	errGetExerciseByID       error
+	errCreate                       error
+	errGetByName                    error
+	errGetByID                      error
+	errUpdate                       error
+	errList                         error
+	errCreateEntry                  error
+	errGetEntry                     error
+	errUpdateEntry                  error
+	errUpdateEntryWithDate          error
+	errDeleteEntry                  error
+	errListEntries                  error
+	errGetEntriesByExercisePaginated error
+	errGetEntriesByDateRange        error
+	errGetExerciseByID              error
+	errGetMaxWeightByExercise       error
+	errGetLastSetByExercise         error
 }
 
 func newMockRepository() *mockRepository {
@@ -258,19 +262,60 @@ func (m *mockRepository) ListEntries(userID string, limit int) ([]models.Exercis
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByExercise(exerciseID string, userID string) ([]models.ExerciseEntry, error) {
-	if m.errGetEntriesByExercise != nil {
-		return nil, m.errGetEntriesByExercise
+func (m *mockRepository) GetEntriesByExercisePaginated(exerciseID string, userID string, limit, offset int) ([]models.ExerciseEntry, error) {
+	if m.errGetEntriesByExercisePaginated != nil {
+		return nil, m.errGetEntriesByExercisePaginated
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var result []models.ExerciseEntry
+	var all []models.ExerciseEntry
 	for _, e := range m.entries {
 		if e.ExerciseID == exerciseID && e.UserID == userID {
-			result = append(result, e)
+			all = append(all, e)
 		}
 	}
-	return result, nil
+	if offset >= len(all) {
+		return []models.ExerciseEntry{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end], nil
+}
+
+func (m *mockRepository) GetMaxWeightByExercise(exerciseID string, userID string) (float64, error) {
+	if m.errGetMaxWeightByExercise != nil {
+		return 0, m.errGetMaxWeightByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var max float64
+	for _, e := range m.entries {
+		if e.ExerciseID == exerciseID && e.UserID == userID && e.Weight > max {
+			max = e.Weight
+		}
+	}
+	return max, nil
+}
+
+func (m *mockRepository) GetLastSetByExercise(exerciseID string, userID string) (*models.ExerciseEntry, error) {
+	if m.errGetLastSetByExercise != nil {
+		return nil, m.errGetLastSetByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var last *models.ExerciseEntry
+	for i, e := range m.entries {
+		if e.ExerciseID != exerciseID || e.UserID != userID {
+			continue
+		}
+		if last == nil || e.CreatedAt.After(last.CreatedAt) {
+			cp := m.entries[i]
+			last = &cp
+		}
+	}
+	return last, nil
 }
 
 func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID string) ([]models.ExerciseEntry, error) {
@@ -288,16 +333,16 @@ func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID stri
 	return result, nil
 }
 
-func (m *mockRepository) ListEntriesLast30Days(userID string) ([]models.ExerciseEntry, error) {
+func (m *mockRepository) ListEntriesLast7Days(userID string) ([]models.ExerciseEntry, error) {
 	if m.errListEntries != nil {
 		return nil, m.errListEntries
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
 	var result []models.ExerciseEntry
 	for _, e := range m.entries {
-		if e.CreatedAt.After(thirtyDaysAgo) && e.UserID == userID {
+		if e.CreatedAt.After(sevenDaysAgo) && e.UserID == userID {
 			result = append(result, e)
 		}
 	}
@@ -559,11 +604,10 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	adminCtrl := controllers.NewAdminController(mock)
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
-	timerCtrl := controllers.NewTimerController()
-	emomCtrl := controllers.NewEMOMController()
+	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(mockWeight)
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timerCtrl, emomCtrl, weightCtrl, mockUser, jwtService, validator)
+	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timersCtrl, weightCtrl, mockUser, jwtService, validator)
 	return h, mock, mockUser, e
 }
 
@@ -649,13 +693,60 @@ func TestNewEntryForm(t *testing.T) {
 	}
 }
 
+func TestNewEntryForm_Preselected(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/ex-1/new", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("ex-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.NewEntryForm(c); err != nil {
+		t.Fatalf("NewEntryForm failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<option value="ex-1" selected>Squat</option>`) {
+		t.Fatalf("expected Squat option to be preselected, got body: %s", body)
+	}
+	if strings.Contains(body, `<option value="ex-2" selected>Bench Press</option>`) {
+		t.Fatalf("expected Bench Press option NOT to be preselected, got body: %s", body)
+	}
+}
+
+func TestNewEntryForm_PreselectedInvalid(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/non-existent/new", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("non-existent")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.NewEntryForm(c); err != nil {
+		t.Fatalf("NewEntryForm failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (graceful fallback), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, `selected>`) {
+		t.Fatalf("expected no preselected option for unknown exercise, got body: %s", body)
+	}
+}
+
 func TestCreateEntry(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "5")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -679,8 +770,8 @@ func TestCreateEntry_HTMX(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "5")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -704,13 +795,44 @@ func TestCreateEntry_HTMX(t *testing.T) {
 	}
 }
 
+func TestCreateEntry_HTMX_MultipleSets(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "100")
+	form.Set("sets[2][reps]", "5")
+	form.Set("sets[2][weight]", "95")
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "3 sets saved") {
+		t.Fatalf("expected toast with '3 sets saved', got body: %s", body)
+	}
+}
+
 func TestCreateEntry_InvalidReps(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "abc")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "abc")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -725,8 +847,8 @@ func TestCreateEntry_InvalidReps(t *testing.T) {
 		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Reps") {
-		t.Fatalf("expected error message containing 'Reps', got %q", body)
+	if !strings.Contains(body, "reps") {
+		t.Fatalf("expected error message containing 'reps', got %q", body)
 	}
 }
 
@@ -735,8 +857,8 @@ func TestCreateEntry_InvalidWeight(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "5")
-	form.Set("weight", "-10")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "-10")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -756,13 +878,67 @@ func TestCreateEntry_InvalidWeight(t *testing.T) {
 	}
 }
 
+func TestCreateEntry_NoSets(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	// sets[0][reps] is intentionally absent — user submitted no valid sets
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "at least one set") {
+		t.Fatalf("expected error message about sets, got %q", body)
+	}
+}
+
+func TestCreateEntry_TooManySets(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	// MaxSetsPerEntry + 1 rows
+	for i := 0; i <= views.MaxSetsPerEntry; i++ {
+		form.Set(fmt.Sprintf("sets[%d][reps]", i), "5")
+		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Maximum") {
+		t.Fatalf("expected error message about max sets, got %q", body)
+	}
+}
+
 func TestCreateEntry_MissingExercise(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_id", "")
-	form.Set("reps", "5")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -788,8 +964,8 @@ func TestCreateEntry_RepositoryError(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "5")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -806,6 +982,119 @@ func TestCreateEntry_RepositoryError(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "Failed to save") {
 		t.Fatalf("expected error message containing 'Failed to save', got %q", body)
+	}
+}
+
+// TestCreateEntry_HTMX_WithCustomDate verifies that a created_at value
+// submitted via the form is parsed (UTC, matching the edit form) and stored
+// on the persisted row. The test fixes a back-dated timestamp that is far
+// from "now" so the assertion can't accidentally pass via the time.Now()
+// fallback.
+func TestCreateEntry_HTMX_WithCustomDate(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	form.Set("created_at", "2024-06-15T14:30")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "95")
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	want := time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC)
+	if len(mock.entries) != 2 {
+		t.Fatalf("expected 2 entries in mock, got %d", len(mock.entries))
+	}
+	for i, got := range mock.entries {
+		if !got.CreatedAt.Equal(want) {
+			t.Errorf("entry %d: expected CreatedAt %v, got %v", i, want, got.CreatedAt)
+		}
+	}
+}
+
+// TestCreateEntry_HTMX_EmptyDateFallsBackToNow verifies that an absent
+// created_at field falls back to time.Now() — this is the "default to now"
+// behaviour when a user submits the form without touching the date input.
+func TestCreateEntry_HTMX_EmptyDateFallsBackToNow(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+
+	before := time.Now()
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	// created_at intentionally omitted
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	after := time.Now()
+	if len(mock.entries) != 1 {
+		t.Fatalf("expected 1 entry in mock, got %d", len(mock.entries))
+	}
+	got := mock.entries[0].CreatedAt
+	// Allow a 5-second window for the fallback to be considered "now".
+	if got.Before(before.Add(-5*time.Second)) || got.After(after.Add(5*time.Second)) {
+		t.Errorf("expected CreatedAt near now (%v..%v), got %v", before, after, got)
+	}
+}
+
+// TestCreateEntry_InvalidDateFormat verifies that a malformed created_at
+// value produces a user-visible error rather than silently being ignored.
+func TestCreateEntry_InvalidDateFormat(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	form.Set("created_at", "not-a-date")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Invalid date format") {
+		t.Errorf("expected error message 'Invalid date format', got %q", body)
+	}
+	if len(mock.entries) != 0 {
+		t.Errorf("expected no entries persisted on parse error, got %d", len(mock.entries))
 	}
 }
 
@@ -1045,6 +1334,526 @@ func TestExerciseHistory(t *testing.T) {
 	}
 }
 
+func TestExerciseHistory_PageQuery(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	now := time.Now()
+	var entries []models.ExerciseEntry
+	for i := 0; i < 30; i++ {
+		entries = append(entries, models.ExerciseEntry{
+			ID:         fmt.Sprintf("entry-%d", i),
+			UserID:     "user-1",
+			ExerciseID: "uuid-exercise-1",
+			Reps:       5,
+			Weight:     float64(100 + i),
+			CreatedAt:  now.Add(time.Duration(i) * time.Minute),
+		})
+	}
+	mock.entries = entries
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1?page=2", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseHistory(c); err != nil {
+		t.Fatalf("ExerciseHistory (?page=2) failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Page 2") {
+		t.Error("expected 'Page 2' indicator in full-page response")
+	}
+}
+
+func TestExerciseHistory_HtmxFragment(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	now := time.Now()
+	var entries []models.ExerciseEntry
+	for i := 0; i < 30; i++ {
+		entries = append(entries, models.ExerciseEntry{
+			ID:         fmt.Sprintf("entry-%d", i),
+			UserID:     "user-1",
+			ExerciseID: "uuid-exercise-1",
+			Reps:       5,
+			Weight:     float64(100 + i),
+			CreatedAt:  now.Add(time.Duration(i) * time.Minute),
+		})
+	}
+	mock.entries = entries
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1?page=2", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseHistory(c); err != nil {
+		t.Fatalf("ExerciseHistory (htmx) failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if vary := rec.Header().Get("Vary"); !strings.Contains(vary, "HX-Request") {
+		t.Errorf("expected Vary: HX-Request header, got %q", vary)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "history-table-wrap") {
+		t.Error("expected fragment to contain swappable wrap id")
+	}
+	// Fragment must NOT include the full page chrome.
+	if strings.Contains(body, "<html") {
+		t.Error("fragment response should not include the full HTML document")
+	}
+	if !strings.Contains(body, "Page 2") {
+		t.Error("expected 'Page 2' indicator inside the fragment")
+	}
+}
+
+// TestExerciseChart verifies the chart placeholder route returns a 200
+// with the expected sub-view links and the chart sub-view marked as
+// active. Mirrors the TestExerciseHistory happy-path pattern.
+func TestExerciseChart(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChart(c); err != nil {
+		t.Fatalf("ExerciseChart failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart"`) {
+		t.Error("expected Chart link in button group")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart" class="btn" aria-current="page"`) {
+		t.Error("expected Chart link to be the active sub-view")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart/advanced"`) {
+		t.Error("expected Advanced link in button group")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1"`) {
+		t.Error("expected History (back) link in button group")
+	}
+}
+
+// TestExerciseChart_NotFound asserts the chart route returns a 404 when
+// the exercise ID does not match a row the user can see. We surface this
+// explicitly (rather than letting an unhandled nil panic) so a bad URL
+// fails cleanly in the browser.
+func TestExerciseChart_NotFound(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/missing/chart", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("missing")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	err := h.ExerciseChart(c)
+	if err == nil {
+		t.Fatal("expected error for missing exercise")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusNotFound {
+		t.Fatalf("expected not found error, got %v", err)
+	}
+}
+
+// TestExerciseChart_Populated asserts the dedicated chart route renders
+// the full-width chart card and the dedicated exercise-chart canvas
+// when the user has at least 2 unique days of data. Multiple sets on
+// the same day are aggregated to a single point on the line.
+func TestExerciseChart_Populated(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: day1},
+		{ID: "e2", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 3, Weight: 105, CreatedAt: day1.Add(8 * time.Hour)},
+		{ID: "e3", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 110, CreatedAt: day2},
+		{ID: "e4", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 3, Weight: 108, CreatedAt: day2.Add(8 * time.Hour)},
+		// Other-exercise entries must be ignored.
+		{ID: "e5", ExerciseID: "uuid-exercise-other", UserID: "user-1", Reps: 5, Weight: 200, CreatedAt: day1},
+		// Other-user entries must be ignored.
+		{ID: "e6", ExerciseID: "uuid-exercise-1", UserID: "user-other", Reps: 5, Weight: 999, CreatedAt: day1},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChart(c); err != nil {
+		t.Fatalf("ExerciseChart failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Page header copy.
+	if !strings.Contains(body, "Squat Progression") {
+		t.Error("expected page header with exercise name + Progression")
+	}
+	if !strings.Contains(body, "Max weight per training day") {
+		t.Error("expected subtitle describing the chart aggregation")
+	}
+	// Full-width chart card chrome.
+	if !strings.Contains(body, `<div class="card p-4">`) {
+		t.Error("expected full-width card container")
+	}
+	if !strings.Contains(body, `class="h-[60vh] min-h-96"`) {
+		t.Error("expected tall fixed-height chart wrapper")
+	}
+	// Distinct canvas id and JSON data block.
+	if !strings.Contains(body, `<canvas id="exercise-chart">`) {
+		t.Error("expected canvas with id exercise-chart")
+	}
+	if !strings.Contains(body, `id="exercise-chart-data"`) {
+		t.Error("expected exercise-chart-data JSON payload")
+	}
+	// Dataset label reflects the exercise name.
+	if !strings.Contains(body, "Squat (kg)") {
+		t.Error("expected dataset label to include the exercise name + (kg)")
+	}
+	// Aggregation: only 2 unique days -> 2 chart points. Heaviest per
+	// day wins, so day1 = 105 and day2 = 110.
+	re := regexp.MustCompile(`<script id="exercise-chart-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(body)
+	if len(m) < 2 {
+		t.Fatal("could not find exercise-chart-data script block")
+	}
+	var parsed struct {
+		Labels   []string `json:"labels"`
+		Datasets []struct {
+			Values []float64 `json:"values"`
+		} `json:"datasets"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v\ncontent: %s", err, m[1])
+	}
+	if len(parsed.Labels) != 2 {
+		t.Errorf("expected 2 day-bucketed labels, got %d (%v)", len(parsed.Labels), parsed.Labels)
+	}
+	if len(parsed.Datasets) != 1 {
+		t.Fatalf("expected 1 dataset, got %d", len(parsed.Datasets))
+	}
+	if len(parsed.Datasets[0].Values) != 2 || parsed.Datasets[0].Values[0] != 105 || parsed.Datasets[0].Values[1] != 110 {
+		t.Errorf("expected max-weight-per-day values [105, 110], got %v", parsed.Datasets[0].Values)
+	}
+	// Empty state must NOT be rendered in the populated case.
+	if strings.Contains(body, "Log at least 2 sessions") {
+		t.Error("did not expect empty-state message in populated chart view")
+	}
+}
+
+// TestExerciseChart_EmptyState asserts the empty-state message is
+// rendered (and the chart canvas is not) when the user has fewer than
+// 2 unique days of data for the exercise.
+func TestExerciseChart_EmptyState(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	// Single entry, single day — below the 2-day threshold.
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChart(c); err != nil {
+		t.Fatalf("ExerciseChart failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "Log at least 2 sessions to see your progression.") {
+		t.Error("expected friendly empty-state message in the empty-state route test")
+	}
+	if strings.Contains(body, `<canvas id="exercise-chart">`) {
+		t.Error("did not expect chart canvas in empty-state route response")
+	}
+	// The page header copy should still be rendered so the user
+	// understands which exercise the empty state applies to.
+	if !strings.Contains(body, "Squat Progression") {
+		t.Error("expected page header copy even in the empty state")
+	}
+}
+
+// TestExerciseChartAdvanced asserts the dedicated advanced route returns
+// 200 OK, the Advanced link is marked active, the line chart link is
+// NOT marked active, and all three sub-view links are present in the
+// shared button group.
+//
+// Two sets of data are passed so the chart (and its subtitle) is
+// rendered. The empty-state case is covered by
+// TestExerciseChartAdvanced_EmptyState.
+func TestExerciseChartAdvanced(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: day1},
+		{ID: "e2", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 105, CreatedAt: day2},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart/advanced", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChartAdvanced(c); err != nil {
+		t.Fatalf("ExerciseChartAdvanced failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart/advanced" class="btn" aria-current="page"`) {
+		t.Error("expected Advanced link to be the active sub-view")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1/chart"`) {
+		t.Error("expected Chart link in button group")
+	}
+	if !strings.Contains(body, `href="/exercises/uuid-exercise-1"`) {
+		t.Error("expected History (back) link in button group")
+	}
+	// Page header copy is rendered on the advanced view too.
+	if !strings.Contains(body, "Squat Volume") {
+		t.Error("expected page header with exercise name + Volume")
+	}
+	if !strings.Contains(body, "Every set plotted by reps and weight") {
+		t.Error("expected subtitle describing the scatter plot")
+	}
+	// Scatter canvas must be present (2 entries -> 2 dots).
+	if !strings.Contains(body, `<canvas id="exercise-chart-advanced">`) {
+		t.Error("expected scatter canvas when entries exist")
+	}
+	if strings.Contains(body, "Log at least 2 sets to see your volume profile.") {
+		t.Error("did not expect empty-state message when entries exist")
+	}
+}
+
+// TestExerciseChartAdvanced_Populated asserts the dedicated advanced
+// route renders the full-width scatter card and the dedicated
+// exercise-chart-advanced canvas when the user has at least 2 sets of
+// data. Each set is plotted as its own (reps, weight) point — no
+// per-day collapse.
+func TestExerciseChartAdvanced_Populated(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: day1},
+		{ID: "e2", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 3, Weight: 110, CreatedAt: day1.Add(8 * time.Hour)},
+		{ID: "e3", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 115, CreatedAt: day2},
+		// Other-exercise entries must be ignored.
+		{ID: "e4", ExerciseID: "uuid-exercise-other", UserID: "user-1", Reps: 5, Weight: 200, CreatedAt: day1},
+		// Other-user entries must be ignored.
+		{ID: "e5", ExerciseID: "uuid-exercise-1", UserID: "user-other", Reps: 5, Weight: 999, CreatedAt: day1},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart/advanced", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChartAdvanced(c); err != nil {
+		t.Fatalf("ExerciseChartAdvanced failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Full-width scatter card chrome.
+	if !strings.Contains(body, `<div class="card p-4">`) {
+		t.Error("expected full-width card container")
+	}
+	if !strings.Contains(body, `class="h-[60vh] min-h-96"`) {
+		t.Error("expected tall fixed-height scatter wrapper")
+	}
+	// Distinct canvas id from the line chart.
+	if !strings.Contains(body, `<canvas id="exercise-chart-advanced">`) {
+		t.Error("expected canvas with id exercise-chart-advanced")
+	}
+	if strings.Contains(body, `<canvas id="exercise-chart">`) {
+		t.Error("did not expect the line-chart canvas id on the advanced view")
+	}
+	if !strings.Contains(body, `id="exercise-chart-advanced-data"`) {
+		t.Error("expected exercise-chart-advanced-data JSON payload")
+	}
+	// Y-axis label reflects the exercise name.
+	if !strings.Contains(body, "Squat (kg)") {
+		t.Error("expected y-axis label to include the exercise name + (kg)")
+	}
+	// No per-day collapse: 3 owned sets -> 3 scatter points.
+	re := regexp.MustCompile(`<script id="exercise-chart-advanced-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(body)
+	if len(m) < 2 {
+		t.Fatal("could not find exercise-chart-advanced-data script block")
+	}
+	var parsed struct {
+		XLabel   string `json:"xLabel"`
+		YLabel   string `json:"yLabel"`
+		Points   []struct {
+			X    float64 `json:"x"`
+			Y    float64 `json:"y"`
+			Date string  `json:"date"`
+		} `json:"points"`
+		HideAxes bool `json:"hideAxes"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v\ncontent: %s", err, m[1])
+	}
+	if parsed.XLabel != "Reps" {
+		t.Errorf("expected xLabel 'Reps', got %q", parsed.XLabel)
+	}
+	if parsed.YLabel != "Squat (kg)" {
+		t.Errorf("expected yLabel 'Squat (kg)', got %q", parsed.YLabel)
+	}
+	if parsed.HideAxes {
+		t.Error("expected hideAxes=false at full width so axis tick labels are visible")
+	}
+	if len(parsed.Points) != 3 {
+		t.Errorf("expected 3 per-set scatter points, got %d", len(parsed.Points))
+	}
+	// Empty state must NOT be rendered in the populated case.
+	if strings.Contains(body, "Log at least 2 sets") {
+		t.Error("did not expect empty-state message in populated advanced view")
+	}
+}
+
+// TestExerciseChartAdvanced_EmptyState asserts the empty-state message
+// is rendered (and the scatter canvas is not) when the user has fewer
+// than 2 sets for the exercise.
+func TestExerciseChartAdvanced_EmptyState(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	// Single set — below the 2-set threshold.
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart/advanced", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChartAdvanced(c); err != nil {
+		t.Fatalf("ExerciseChartAdvanced failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "Log at least 2 sets to see your volume profile.") {
+		t.Error("expected friendly empty-state message in the empty-state route test")
+	}
+	if strings.Contains(body, `<canvas id="exercise-chart-advanced">`) {
+		t.Error("did not expect scatter canvas in empty-state route response")
+	}
+	// The page header copy should still be rendered so the user
+	// understands which exercise the empty state applies to.
+	if !strings.Contains(body, "Squat Volume") {
+		t.Error("expected page header copy even in the empty state")
+	}
+}
+
+// TestExerciseChartAdvanced_NotFound asserts the advanced route also
+// returns 404 for unknown exercise IDs.
+func TestExerciseChartAdvanced_NotFound(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/missing/chart/advanced", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("missing")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	err := h.ExerciseChartAdvanced(c)
+	if err == nil {
+		t.Fatal("expected error for missing exercise")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusNotFound {
+		t.Fatalf("expected not found error, got %v", err)
+	}
+}
+
+func TestParsePage(t *testing.T) {
+	tests := []struct {
+		raw      string
+		expected int
+	}{
+		{"", 1},
+		{"0", 1},
+		{"-5", 1},
+		{"abc", 1},
+		{"1", 1},
+		{"3", 3},
+		{"42", 42},
+	}
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			if got := parsePage(tt.raw); got != tt.expected {
+				t.Errorf("parsePage(%q) = %d, want %d", tt.raw, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestListExercises(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
@@ -1203,6 +2012,250 @@ func TestParseEntryForm_InvalidWeight(t *testing.T) {
 	}
 }
 
+func TestParseEntrySets_Single(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[0][rest_time]", "90")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 1 {
+		t.Fatalf("expected 1 set, got %d", len(sets))
+	}
+	if sets[0].Reps != 5 || sets[0].Weight != 100 || sets[0].RestTime != 90 {
+		t.Errorf("unexpected set: %+v", sets[0])
+	}
+}
+
+func TestParseEntrySets_Multiple(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "100")
+	form.Set("sets[2][reps]", "5")
+	form.Set("sets[2][weight]", "95")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 3 {
+		t.Fatalf("expected 3 sets, got %d", len(sets))
+	}
+	if sets[2].Weight != 95 {
+		t.Errorf("expected last set weight 95, got %v", sets[2].Weight)
+	}
+}
+
+func TestParseEntrySets_SkipsEmptyRows(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	// sets[1] intentionally empty (no reps)
+	form.Set("sets[2][reps]", "5")
+	form.Set("sets[2][weight]", "100")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 2 {
+		t.Fatalf("expected 2 sets (empty row skipped), got %d", len(sets))
+	}
+}
+
+func TestParseEntrySets_PreservesOrder(t *testing.T) {
+	// Submit out of order to verify server sorts by index.
+	form := url.Values{}
+	form.Set("sets[2][reps]", "5")
+	form.Set("sets[2][weight]", "90")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "95")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 3 {
+		t.Fatalf("expected 3 sets, got %d", len(sets))
+	}
+	expected := []float64{100, 95, 90}
+	for i, want := range expected {
+		if sets[i].Weight != want {
+			t.Errorf("set %d: expected weight %v, got %v", i, want, sets[i].Weight)
+		}
+	}
+}
+
+func TestParseEntrySets_NoSets(t *testing.T) {
+	form := url.Values{}
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 0 {
+		t.Errorf("expected 0 sets, got %d", len(sets))
+	}
+}
+
+func TestParseEntrySets_EmptyRepsTreatedAsBlank(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", " ")
+	form.Set("sets[0][weight]", "100")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 0 {
+		t.Errorf("expected whitespace reps to be skipped, got %d sets", len(sets))
+	}
+}
+
+func TestParseEntrySets_TooManySets(t *testing.T) {
+	form := url.Values{}
+	// Submit MaxSetsPerEntry + 1 rows (all non-empty) to trigger the cap.
+	for i := 0; i <= views.MaxSetsPerEntry; i++ {
+		form.Set(fmt.Sprintf("sets[%d][reps]", i), "5")
+		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
+	}
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error for too many sets")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+	if !strings.Contains(httpErr.Message.(string), "Maximum") {
+		t.Errorf("expected 'Maximum' in error, got %q", httpErr.Message)
+	}
+}
+
+func TestParseEntrySets_EmptyRowsCountTowardCap(t *testing.T) {
+	// A malicious client could send sets[0..99999] with empty reps. Even though
+	// parseEntrySets would skip them on processing, the count of submitted
+	// indices should still trip the cap before we waste cycles.
+	form := url.Values{}
+	for i := 0; i <= views.MaxSetsPerEntry; i++ {
+		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
+		// No reps on any row.
+	}
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error when too many empty rows submitted")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+}
+
+func TestParseEntrySets_InvalidReps(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "abc")
+	form.Set("sets[0][weight]", "100")
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error for non-numeric reps")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+	if !strings.Contains(httpErr.Message.(string), "reps") {
+		t.Errorf("expected 'reps' in error, got %q", httpErr.Message)
+	}
+}
+
+func TestParseEntrySets_InvalidWeight(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "-10")
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error for negative weight")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+	if !strings.Contains(httpErr.Message.(string), "Weight") {
+		t.Errorf("expected 'Weight' in error, got %q", httpErr.Message)
+	}
+}
+
+func TestParseEntrySets_InvalidRestTime(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[0][rest_time]", "abc")
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error for non-numeric rest time")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+}
+
+func TestParseEntrySets_RestTimeDefaultsToZero(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	// rest_time intentionally absent
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 1 || sets[0].RestTime != 0 {
+		t.Errorf("expected rest_time 0, got %+v", sets[0])
+	}
+}
+
+func TestParseEntrySets_PerRowErrorIncludesIndex(t *testing.T) {
+	// Second set is bad — error message should reference set 2 (1-indexed for users).
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "-5")
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "Set 2") {
+		t.Errorf("expected 'Set 2' in error, got %q", err.Error())
+	}
+}
+
 func TestLoginForm(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
@@ -1258,6 +2311,30 @@ func TestTimerPage(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "Timer") {
 		t.Fatalf("expected timer page, got %q", body)
+	}
+	if !strings.Contains(body, `role="tablist"`) {
+		t.Fatalf("expected tablist on timer page, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-tab-timer"`) {
+		t.Fatalf("expected Timer tab button, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-tab-emom"`) {
+		t.Fatalf("expected EMOM tab button, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-panel-timer"`) {
+		t.Fatalf("expected Timer tab panel, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-panel-emom"`) {
+		t.Fatalf("expected EMOM tab panel, got %q", body)
+	}
+	// Timer tab must be the active one when on /timer
+	timerActiveRegex := regexp.MustCompile(`id="timers-tab-timer"[^>]*aria-selected="true"`)
+	emomActiveRegex := regexp.MustCompile(`id="timers-tab-emom"[^>]*aria-selected="true"`)
+	if !timerActiveRegex.MatchString(body) {
+		t.Fatalf("expected Timer tab to be active on /timer, got %q", body)
+	}
+	if emomActiveRegex.MatchString(body) {
+		t.Fatalf("expected EMOM tab to be inactive on /timer, got %q", body)
 	}
 }
 
@@ -1533,6 +2610,24 @@ func TestEMOMPage(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "EMOM") {
 		t.Fatalf("expected emom page, got %q", body)
+	}
+	if !strings.Contains(body, `role="tablist"`) {
+		t.Fatalf("expected tablist on emom page, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-tab-timer"`) {
+		t.Fatalf("expected Timer tab button, got %q", body)
+	}
+	if !strings.Contains(body, `id="timers-tab-emom"`) {
+		t.Fatalf("expected EMOM tab button, got %q", body)
+	}
+	// EMOM tab must be the active one when on /timer/emom
+	timerActiveRegex := regexp.MustCompile(`id="timers-tab-timer"[^>]*aria-selected="true"`)
+	emomActiveRegex := regexp.MustCompile(`id="timers-tab-emom"[^>]*aria-selected="true"`)
+	if !emomActiveRegex.MatchString(body) {
+		t.Fatalf("expected EMOM tab to be active on /timer/emom, got %q", body)
+	}
+	if timerActiveRegex.MatchString(body) {
+		t.Fatalf("expected Timer tab to be inactive on /timer/emom, got %q", body)
 	}
 }
 

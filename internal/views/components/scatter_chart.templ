@@ -1,0 +1,174 @@
+package components
+
+// ScatterPoint is one (reps, weight) datapoint with the date it was logged,
+// used as the tooltip label. The point sits at (X, Y) on the chart; Date is
+// metadata that is NOT used for positioning.
+type ScatterPoint struct {
+	X    float64 `json:"x"`    // reps (x axis)
+	Y    float64 `json:"y"`    // weight (y axis)
+	Date string  `json:"date"` // formatted date, surfaced in the tooltip
+}
+
+// ScatterChartProps configures a ChartJS scatter chart where every datapoint
+// is a single set, x is reps, and y is weight. The wrapper fills its parent
+// (w-full h-full); callers are responsible for sizing the parent so the
+// chart has a defined box to render into.
+type ScatterChartProps struct {
+	ID     string         // unique canvas id (required)
+	Title  string         // optional heading rendered above the canvas
+	XLabel string         // x-axis title, e.g. "Reps"
+	YLabel string         // y-axis title, e.g. "Squat (kg)"
+	Points []ScatterPoint // one per set; render nothing when len < 2
+	// Color is a CSS hex string used for both the dot border and fill
+	// (alpha applied in JS for the fill so overlapping points are still
+	// visible). If empty, chartDefaultColor is used.
+	Color string
+	// HideAxes, when true, hides the tick text on both axes. Axis lines
+	// and gridlines are kept so the chart still has scale context, and
+	// tooltips remain enabled for exact values on hover. Useful when the
+	// chart is sized down to fit a narrow card. Defaults to false.
+	HideAxes bool
+}
+
+// scatterPayload is the JSON-serialised form embedded in a <script
+// type="application/json"> block so the inline <script> can read it
+// without an extra fetch.
+type scatterPayload struct {
+	XLabel   string         `json:"xLabel"`
+	YLabel   string         `json:"yLabel"`
+	Points   []ScatterPoint `json:"points"`
+	Color    string         `json:"color"`
+	HideAxes bool           `json:"hideAxes"`
+}
+
+// ScatterChart renders a ChartJS scatter chart. The data is embedded in a
+// <script type="application/json"> block so the inline <script> can read it
+// without an extra fetch. The component renders nothing when there are
+// fewer than 2 points.
+//
+// Layout mirrors the line chart's: an outer grid with an optional title
+// row and a 1fr row for the canvas. The canvas wrapper carries
+// row-start-2 so the canvas always occupies the 1fr row even when the
+// title is absent.
+templ ScatterChart(props ScatterChartProps) {
+	{{
+		color := props.Color
+		if color == "" {
+			color = chartDefaultColor
+		}
+		payload := scatterPayload{
+			XLabel:   props.XLabel,
+			YLabel:   props.YLabel,
+			Points:   props.Points,
+			Color:    color,
+			HideAxes: props.HideAxes,
+		}
+		canvasID := props.ID
+		dataID := props.ID + "-data"
+	}}
+	if len(props.Points) >= 2 {
+		<div class="w-full h-full max-w-full max-h-full grid grid-rows-[auto_1fr]">
+			if props.Title != "" {
+				<h3 class="text-sm font-semibold mb-2">{ props.Title }</h3>
+			}
+			<div class="min-h-0 min-w-0 row-start-2">
+				<canvas id={ canvasID }></canvas>
+			</div>
+		</div>
+		@templ.JSONScript(dataID, payload)
+		<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+		<script>
+			(function() {
+				var canvas = document.getElementById("{{ canvasID }}");
+				if (!canvas || typeof Chart === 'undefined') return;
+				var dataEl = document.getElementById("{{ dataID }}");
+				if (!dataEl) return;
+				var data;
+				try { data = JSON.parse(dataEl.textContent); } catch (e) { return; }
+				if (!data || !data.points || data.points.length < 2) return;
+				function hexToRgba(hex, alpha) {
+					var h = hex.replace('#', '');
+					if (h.length === 3) h = h.split('').map(function(c){return c+c;}).join('');
+					var r = parseInt(h.substring(0,2), 16);
+					var g = parseInt(h.substring(2,4), 16);
+					var b = parseInt(h.substring(4,6), 16);
+					return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+				}
+				// Compute y-axis min/max with 10% padding either side so the
+				// dots aren't flush with the top/bottom of the chart.
+				var ys = (data.points || []).map(function(p) { return p.y; }).filter(function(v) { return typeof v === 'number' && isFinite(v); });
+				var yMin, yMax;
+				if (ys.length > 0) {
+					var mn = Math.min.apply(null, ys);
+					var mx = Math.max.apply(null, ys);
+					if (mx === mn) { mn = mn - 1; mx = mx + 1; }
+					var pad = (mx - mn) * 0.10;
+					yMin = mn - pad;
+					yMax = mx + pad;
+				}
+				// Compute x-axis min/max with 10% padding either side so the
+				// leftmost/rightmost dots aren't flush with the edges. Floor
+				// at 1 because reps are always >= 1 — a user who only does
+				// high-rep sets shouldn't see an axis that starts at 0.
+				var xs = (data.points || []).map(function(p) { return p.x; }).filter(function(v) { return typeof v === 'number' && isFinite(v); });
+				var xMin, xMax;
+				if (xs.length > 0) {
+					var xmn = Math.min.apply(null, xs);
+					var xmx = Math.max.apply(null, xs);
+					if (xmx === xmn) { xmn = xmn - 1; xmx = xmx + 1; }
+					var xpad = (xmx - xmn) * 0.10;
+					xMin = Math.max(1, xmn - xpad);
+					xMax = xmx + xpad;
+				}
+				new Chart(canvas.getContext('2d'), {
+					type: 'scatter',
+					data: {
+						datasets: [{
+							label: data.yLabel,
+							data: data.points,
+							backgroundColor: hexToRgba(data.color, 0.6),
+							borderColor: data.color,
+							pointRadius: 5,
+							pointHoverRadius: 7
+						}]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							legend: { display: false },
+							tooltip: {
+								callbacks: {
+									label: function(ctx) {
+										var p = ctx.raw || {};
+										return [
+											(data.yLabel || 'Weight') + ': ' + p.y,
+											'Reps: ' + p.x,
+											'Date: ' + p.date
+										];
+									}
+								}
+							}
+						},
+						scales: {
+							x: {
+								type: 'linear',
+								title: { display: !!data.xLabel, text: data.xLabel || '' },
+								ticks: data.hideAxes ? { display: false } : { stepSize: 1, precision: 0 },
+								suggestedMin: xMin,
+								suggestedMax: xMax
+							},
+							y: {
+								title: { display: !!data.yLabel, text: data.yLabel || '' },
+								beginAtZero: false,
+								suggestedMin: yMin,
+								suggestedMax: yMax,
+								ticks: data.hideAxes ? { display: false } : undefined
+							}
+						}
+					}
+				});
+			})();
+		</script>
+	}
+}

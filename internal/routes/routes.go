@@ -5,7 +5,10 @@
 package routes
 
 import (
+	"fmt"
 	"net/http"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -16,37 +19,36 @@ import (
 	"stren/internal/controllers"
 	"stren/internal/models"
 	"stren/internal/utils"
+	"stren/internal/views"
 )
 
 // Handler holds dependencies for HTTP route handlers.
 type Handler struct {
-	authCtrl        *controllers.AuthController
-	entryCtrl       *controllers.EntryController
-	adminCtrl       *controllers.AdminController
-	adminUserCtrl   *controllers.AdminUserController
-	feedbackCtrl    *controllers.FeedbackController
-	timerCtrl       *controllers.TimerController
-	emomCtrl        *controllers.EMOMController
-	weightCtrl      *controllers.WeightController
-	userRepo        models.UserRepo
-	jwtService      *utils.JWTService
-	validator       utils.Validator
+	authCtrl      *controllers.AuthController
+	entryCtrl     *controllers.EntryController
+	adminCtrl     *controllers.AdminController
+	adminUserCtrl *controllers.AdminUserController
+	feedbackCtrl  *controllers.FeedbackController
+	timersCtrl    *controllers.TimersController
+	weightCtrl    *controllers.WeightController
+	userRepo      models.UserRepo
+	jwtService    *utils.JWTService
+	validator     utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timerCtrl *controllers.TimerController, emomCtrl *controllers.EMOMController, weightCtrl *controllers.WeightController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
-		authCtrl:        authCtrl,
-		entryCtrl:       entryCtrl,
-		adminCtrl:       adminCtrl,
-		adminUserCtrl:   adminUserCtrl,
-		feedbackCtrl:    feedbackCtrl,
-		timerCtrl:       timerCtrl,
-		emomCtrl:        emomCtrl,
-		weightCtrl:      weightCtrl,
-		userRepo:         userRepo,
-		jwtService:       jwtService,
-		validator:        validator,
+		authCtrl:      authCtrl,
+		entryCtrl:     entryCtrl,
+		adminCtrl:     adminCtrl,
+		adminUserCtrl: adminUserCtrl,
+		feedbackCtrl:  feedbackCtrl,
+		timersCtrl:    timersCtrl,
+		weightCtrl:    weightCtrl,
+		userRepo:      userRepo,
+		jwtService:    jwtService,
+		validator:     validator,
 	}
 }
 
@@ -86,6 +88,13 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	// Exercise history
 	e.GET("/exercises", h.ListExercisesUI)
 	e.GET("/exercises/:id", h.ExerciseHistory)
+
+	// Exercise chart views
+	e.GET("/exercises/:id/chart", h.ExerciseChart)
+	e.GET("/exercises/:id/chart/advanced", h.ExerciseChartAdvanced)
+
+	// New entry pre-filled for a specific exercise
+	e.GET("/exercises/:id/new", h.NewEntryForm)
 
 	// Feedback
 	e.GET("/feedback", h.FeedbackForm)
@@ -214,6 +223,103 @@ func parseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, e
 		Weight:       input.Weight,
 		RestTime:     input.RestTime,
 	}, nil
+}
+
+// setFieldPattern matches a single set's key in the multi-set form, e.g.
+// "sets[2][reps]". Capture group 1 is the index, group 2 is the field name
+// ("reps", "weight", or "rest_time").
+var setFieldPattern = regexp.MustCompile(`^sets\[(\d+)\]\[(reps|weight|rest_time)\]$`)
+
+// parseEntrySets extracts the array of set inputs from the multi-set form
+// payload. Form field names use PHP-style bracket notation: sets[N][reps],
+// sets[N][weight], sets[N][rest_time]. Echo's c.FormValue only returns scalar
+// values, so we read PostForm directly.
+//
+// Rows with an empty reps value are skipped (the user didn't fill them in).
+// The total number of submitted rows — including empty ones — must not exceed
+// controllers.MaxSetsPerEntry, otherwise a malicious client could submit an
+// unbounded payload. Each non-empty row is validated with the same struct
+// tags used by parseEntryForm so per-row limits (reps 1–1000, weight 0–5000,
+// rest 0–3600) carry over for free.
+func parseEntrySets(c echo.Context, v utils.Validator) ([]controllers.EntrySetInput, error) {
+	postForm, err := c.FormParams()
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid form payload")
+	}
+
+	// Group by set index. rows[i] holds the raw strings for the i-th set row;
+	// only rows with at least one field are counted toward the cap.
+	rows := map[int]map[string]string{}
+	indices := []int{}
+	for key, values := range postForm {
+		m := setFieldPattern.FindStringSubmatch(key)
+		if m == nil || len(values) == 0 {
+			continue
+		}
+		idx, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		if rows[idx] == nil {
+			rows[idx] = map[string]string{}
+			indices = append(indices, idx)
+		}
+		rows[idx][m[2]] = values[0]
+	}
+
+	// Cap by submitted row count (not just non-empty ones) to stop a hostile
+	// client from sending sets[0..99999] with all reps empty.
+	if len(indices) > views.MaxSetsPerEntry {
+		return nil, echo.NewHTTPError(
+			http.StatusBadRequest,
+			fmt.Sprintf("Maximum %d sets per entry", views.MaxSetsPerEntry),
+		)
+	}
+
+	// Process rows in submission order so saved entries follow the order the
+	// user typed them (helpful for descending weight/drop-set patterns).
+	sort.Ints(indices)
+	sets := make([]controllers.EntrySetInput, 0, len(indices))
+	for _, idx := range indices {
+		row := rows[idx]
+		repsStr := strings.TrimSpace(row["reps"])
+		if repsStr == "" {
+			// Empty row — user didn't fill this set in. Skip silently.
+			continue
+		}
+
+		reps, err := strconv.Atoi(repsStr)
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Set %d: reps must be a positive integer", idx+1))
+		}
+
+		weightStr := strings.TrimSpace(row["weight"])
+		weight, err := strconv.ParseFloat(weightStr, 64)
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Set %d: weight must be a valid positive number", idx+1))
+		}
+
+		restTime := 0
+		if rt := strings.TrimSpace(row["rest_time"]); rt != "" {
+			restTime, err = strconv.Atoi(rt)
+			if err != nil {
+				return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Set %d: rest time must be a whole number of seconds", idx+1))
+			}
+		}
+
+		input := entryFormInput{Reps: reps, Weight: weight, RestTime: restTime}
+		if err := v.ValidateStruct(&input); err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Set %d: %s", idx+1, friendlyValidationError(err)))
+		}
+
+		sets = append(sets, controllers.EntrySetInput{
+			Reps:     reps,
+			Weight:   weight,
+			RestTime: restTime,
+		})
+	}
+
+	return sets, nil
 }
 
 // friendlyValidationError converts validation error messages to user-friendly strings.
