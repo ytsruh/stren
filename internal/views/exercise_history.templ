@@ -129,7 +129,7 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 			</div>
 		} else {
 			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: lastSetLabel(page.Stats.LastSet)})
+				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: fmt.Sprintf("%.1f kg", page.Stats.LastSet.Weight)})
 				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", page.Stats.MaxWeight)})
 				{{ chartProps := chartDataForExercise(chartEntries, exercise.Name) }}
 				if len(chartProps.Labels) >= 2 {
@@ -201,15 +201,6 @@ templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage) {
 			})
 		}
 	</div>
-}
-
-// lastSetLabel renders the "Last Set" stat-card value. Returns "No entries"
-// when the user has not yet logged a set for this exercise.
-func lastSetLabel(entry models.ExerciseEntry) string {
-	if entry.ID == "" {
-		return "No entries"
-	}
-	return fmt.Sprintf("%.1f kg × %d", entry.Weight, entry.Reps)
 }
 
 // chartDay holds the max weight recorded for a single calendar day, used by

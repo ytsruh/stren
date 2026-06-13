@@ -98,17 +98,36 @@ templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEnt
 	}
 }
 
-// ExerciseChartAdvanced renders the placeholder advanced chart view for a
-// single exercise. The actual advanced chart content is not yet
-// implemented; the body text describes what will appear here in the
-// future. The view uses the shared Layout and the centered ExerciseNav
-// so the user can switch to the History or Chart views.
-templ ExerciseChartAdvanced(exercise *models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
+// ExerciseChartAdvanced renders the advanced chart view for a single
+// exercise: a full-width scatter plot of every set the user has logged,
+// with reps on the x axis and weight on the y axis. Each dot is a single
+// set and the hover tooltip surfaces the date. The view uses the shared
+// Layout and the centered ExerciseNav so the user can switch to the
+// History or Chart sub-views.
+//
+// chartEntries is the user's full set of entries for the exercise, fed
+// by EntryController.GetAllEntriesForChart. Unlike the line chart, this
+// view does not aggregate — overlapping (reps, weight) points are
+// rendered as separate translucent dots so no set is hidden. With
+// fewer than 2 entries the view shows a short empty-state message
+// instead of a chart.
+templ ExerciseChartAdvanced(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@ExerciseNav(exercise.ID, exerciseNavActiveAdvanced)
-		<p class="text-muted-foreground text-center">
-			Volume, estimated 1RM, and set-by-set breakdowns will appear here.
-		</p>
+		<header class="mb-4">
+			<h1 class="text-xl font-semibold">{ exercise.Name } Volume</h1>
+		</header>
+		<div class="card p-4">
+			if chartScatterHasEnoughData(chartEntries) {
+				<div class="h-[60vh] min-h-96">
+					@components.ScatterChart(chartDataForExerciseScatter(chartEntries, exercise.Name, "Every set plotted by reps and weight"))
+				</div>
+			} else {
+				<p class="text-muted-foreground text-center py-12">
+					Log at least 2 sets to see your volume profile.
+				</p>
+			}
+		</div>
 	}
 }
 
@@ -122,6 +141,14 @@ func chartHasEnoughData(entries []models.ExerciseEntry) bool {
 		seen[key] = struct{}{}
 	}
 	return len(seen) >= 2
+}
+
+// chartScatterHasEnoughData reports whether the given entry slice has
+// at least 2 sets to plot on the scatter chart. Unlike chartHasEnoughData
+// the scatter view does NOT collapse by day — every set is a dot, so the
+// threshold is just len(entries) >= 2.
+func chartScatterHasEnoughData(entries []models.ExerciseEntry) bool {
+	return len(entries) >= 2
 }
 
 // chartDataForExerciseFull aggregates a user's full entry set for a
@@ -168,5 +195,36 @@ func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName strin
 		Datasets: []components.ChartDataset{
 			{Label: exerciseName + " (kg)", Values: values},
 		},
+	}
+}
+
+// chartDataForExerciseScatter converts a user's full entry set for a
+// single exercise into the Chart.js scatter series used by the dedicated
+// /chart/advanced view. Unlike chartDataForExerciseFull the scatter view
+// does NOT collapse by day — every set is its own (reps, weight) point
+// so the user can see set-by-set volume patterns. The date is carried
+// alongside each point and surfaced in the hover tooltip.
+//
+// Entries are NOT sorted — the scatter chart does not need them in any
+// particular order, and Chart.js positions points by (x, y) regardless
+// of array order. A distinct canvas id (`exercise-chart-advanced`) keeps
+// it from colliding with the line chart on the /chart view. The chart
+// does not hide axis tick labels — the full-width layout has room for
+// them, and integer rep ticks help the user read set counts at a glance.
+func chartDataForExerciseScatter(entries []models.ExerciseEntry, exerciseName string, chartTitle string) components.ScatterChartProps {
+	points := make([]components.ScatterPoint, 0, len(entries))
+	for _, e := range entries {
+		points = append(points, components.ScatterPoint{
+			X:    float64(e.Reps),
+			Y:    e.Weight,
+			Date: e.CreatedAt.Format("02 Jan"),
+		})
+	}
+	return components.ScatterChartProps{
+		ID:     "exercise-chart-advanced",
+		Title:  chartTitle,
+		XLabel: "Reps",
+		YLabel: exerciseName + " (kg)",
+		Points: points,
 	}
 }

@@ -1529,7 +1529,7 @@ func TestExerciseChart_Populated(t *testing.T) {
 	if !strings.Contains(body, `<div class="card p-4">`) {
 		t.Error("expected full-width card container")
 	}
-	if !strings.Contains(body, `class="h-[60vh] min-h-[24rem]"`) {
+	if !strings.Contains(body, `class="h-[60vh] min-h-96"`) {
 		t.Error("expected tall fixed-height chart wrapper")
 	}
 	// Distinct canvas id and JSON data block.
@@ -1615,13 +1615,24 @@ func TestExerciseChart_EmptyState(t *testing.T) {
 	}
 }
 
-// TestExerciseChartAdvanced mirrors TestExerciseChart for the advanced
-// sub-view: 200 OK on a valid exercise, advanced link marked active,
-// placeholder text in the body.
+// TestExerciseChartAdvanced asserts the dedicated advanced route returns
+// 200 OK, the Advanced link is marked active, the line chart link is
+// NOT marked active, and all three sub-view links are present in the
+// shared button group.
+//
+// Two sets of data are passed so the chart (and its subtitle) is
+// rendered. The empty-state case is covered by
+// TestExerciseChartAdvanced_EmptyState.
 func TestExerciseChartAdvanced(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
 	mock.exercises = []models.Exercise{
 		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: day1},
+		{ID: "e2", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 105, CreatedAt: day2},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart/advanced", nil)
@@ -1646,6 +1657,156 @@ func TestExerciseChartAdvanced(t *testing.T) {
 	}
 	if !strings.Contains(body, `href="/exercises/uuid-exercise-1"`) {
 		t.Error("expected History (back) link in button group")
+	}
+	// Page header copy is rendered on the advanced view too.
+	if !strings.Contains(body, "Squat Volume") {
+		t.Error("expected page header with exercise name + Volume")
+	}
+	if !strings.Contains(body, "Every set plotted by reps and weight") {
+		t.Error("expected subtitle describing the scatter plot")
+	}
+	// Scatter canvas must be present (2 entries -> 2 dots).
+	if !strings.Contains(body, `<canvas id="exercise-chart-advanced">`) {
+		t.Error("expected scatter canvas when entries exist")
+	}
+	if strings.Contains(body, "Log at least 2 sets to see your volume profile.") {
+		t.Error("did not expect empty-state message when entries exist")
+	}
+}
+
+// TestExerciseChartAdvanced_Populated asserts the dedicated advanced
+// route renders the full-width scatter card and the dedicated
+// exercise-chart-advanced canvas when the user has at least 2 sets of
+// data. Each set is plotted as its own (reps, weight) point — no
+// per-day collapse.
+func TestExerciseChartAdvanced_Populated(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: day1},
+		{ID: "e2", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 3, Weight: 110, CreatedAt: day1.Add(8 * time.Hour)},
+		{ID: "e3", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 115, CreatedAt: day2},
+		// Other-exercise entries must be ignored.
+		{ID: "e4", ExerciseID: "uuid-exercise-other", UserID: "user-1", Reps: 5, Weight: 200, CreatedAt: day1},
+		// Other-user entries must be ignored.
+		{ID: "e5", ExerciseID: "uuid-exercise-1", UserID: "user-other", Reps: 5, Weight: 999, CreatedAt: day1},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart/advanced", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChartAdvanced(c); err != nil {
+		t.Fatalf("ExerciseChartAdvanced failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Full-width scatter card chrome.
+	if !strings.Contains(body, `<div class="card p-4">`) {
+		t.Error("expected full-width card container")
+	}
+	if !strings.Contains(body, `class="h-[60vh] min-h-96"`) {
+		t.Error("expected tall fixed-height scatter wrapper")
+	}
+	// Distinct canvas id from the line chart.
+	if !strings.Contains(body, `<canvas id="exercise-chart-advanced">`) {
+		t.Error("expected canvas with id exercise-chart-advanced")
+	}
+	if strings.Contains(body, `<canvas id="exercise-chart">`) {
+		t.Error("did not expect the line-chart canvas id on the advanced view")
+	}
+	if !strings.Contains(body, `id="exercise-chart-advanced-data"`) {
+		t.Error("expected exercise-chart-advanced-data JSON payload")
+	}
+	// Y-axis label reflects the exercise name.
+	if !strings.Contains(body, "Squat (kg)") {
+		t.Error("expected y-axis label to include the exercise name + (kg)")
+	}
+	// No per-day collapse: 3 owned sets -> 3 scatter points.
+	re := regexp.MustCompile(`<script id="exercise-chart-advanced-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(body)
+	if len(m) < 2 {
+		t.Fatal("could not find exercise-chart-advanced-data script block")
+	}
+	var parsed struct {
+		XLabel   string `json:"xLabel"`
+		YLabel   string `json:"yLabel"`
+		Points   []struct {
+			X    float64 `json:"x"`
+			Y    float64 `json:"y"`
+			Date string  `json:"date"`
+		} `json:"points"`
+		HideAxes bool `json:"hideAxes"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v\ncontent: %s", err, m[1])
+	}
+	if parsed.XLabel != "Reps" {
+		t.Errorf("expected xLabel 'Reps', got %q", parsed.XLabel)
+	}
+	if parsed.YLabel != "Squat (kg)" {
+		t.Errorf("expected yLabel 'Squat (kg)', got %q", parsed.YLabel)
+	}
+	if parsed.HideAxes {
+		t.Error("expected hideAxes=false at full width so axis tick labels are visible")
+	}
+	if len(parsed.Points) != 3 {
+		t.Errorf("expected 3 per-set scatter points, got %d", len(parsed.Points))
+	}
+	// Empty state must NOT be rendered in the populated case.
+	if strings.Contains(body, "Log at least 2 sets") {
+		t.Error("did not expect empty-state message in populated advanced view")
+	}
+}
+
+// TestExerciseChartAdvanced_EmptyState asserts the empty-state message
+// is rendered (and the scatter canvas is not) when the user has fewer
+// than 2 sets for the exercise.
+func TestExerciseChartAdvanced_EmptyState(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	// Single set — below the 2-set threshold.
+	mock.entries = []models.ExerciseEntry{
+		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1/chart/advanced", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseChartAdvanced(c); err != nil {
+		t.Fatalf("ExerciseChartAdvanced failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, "Log at least 2 sets to see your volume profile.") {
+		t.Error("expected friendly empty-state message in the empty-state route test")
+	}
+	if strings.Contains(body, `<canvas id="exercise-chart-advanced">`) {
+		t.Error("did not expect scatter canvas in empty-state route response")
+	}
+	// The page header copy should still be rendered so the user
+	// understands which exercise the empty state applies to.
+	if !strings.Contains(body, "Squat Volume") {
+		t.Error("expected page header copy even in the empty state")
 	}
 }
 

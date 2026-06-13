@@ -250,10 +250,13 @@ func (h *Handler) ExerciseChart(c echo.Context) error {
 	return render(c, views.ExerciseChart(exercise, chartEntries, claims.Name, true, claims.IsAdmin))
 }
 
-// ExerciseChartAdvanced renders the placeholder advanced chart view for a
-// specific exercise. The actual advanced chart is not yet implemented; the
-// view shows a centered button group for switching to the History or Chart
-// sub-views and a short message describing what will appear in the future.
+// ExerciseChartAdvanced renders the advanced chart view for a specific
+// exercise: a full-width scatter plot of every set the user has logged,
+// with reps on the x axis and weight on the y axis. All of the user's
+// entries for the exercise are fetched (uncapped) and handed to the
+// view, which plots one translucent dot per set without per-day
+// aggregation. With fewer than 2 entries the view shows a short
+// empty-state message instead of a chart.
 func (h *Handler) ExerciseChartAdvanced(c echo.Context) error {
 	id := c.Param("id")
 
@@ -266,7 +269,12 @@ func (h *Handler) ExerciseChartAdvanced(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Exercise not found")
 	}
 
-	return render(c, views.ExerciseChartAdvanced(exercise, claims.Name, true, claims.IsAdmin))
+	chartEntries, err := h.entryCtrl.GetAllEntriesForChart(exercise.ID, claims.UserID)
+	if err != nil {
+		return err
+	}
+
+	return render(c, views.ExerciseChartAdvanced(exercise, chartEntries, claims.Name, true, claims.IsAdmin))
 }
 
 // parsePage reads the ?page=N query param and returns a clamped 1-indexed page

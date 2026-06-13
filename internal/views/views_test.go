@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/a-h/templ"
 	"stren/internal/models"
 	"stren/internal/views/components"
+
+	"github.com/a-h/templ"
 )
 
 // renderToString renders a templ component to a string for assertions.
@@ -60,16 +61,6 @@ func TestCalculateVolume(t *testing.T) {
 	got := calculateVolume(entries)
 	if got != 180 {
 		t.Errorf("calculateVolume = %f, want 180", got)
-	}
-}
-
-func TestLastSetLabel(t *testing.T) {
-	if got := lastSetLabel(models.ExerciseEntry{}); got != "No entries" {
-		t.Errorf("lastSetLabel(empty) = %q, want %q", got, "No entries")
-	}
-	got := lastSetLabel(models.ExerciseEntry{ID: "e1", Weight: 100, Reps: 5})
-	if got != "100.0 kg \u00d7 5" {
-		t.Errorf("lastSetLabel = %q, want %q", got, "100.0 kg \u00d7 5")
 	}
 }
 
@@ -557,9 +548,18 @@ func TestExerciseHistory_RendersChartButton(t *testing.T) {
 // Chart link as active (aria-current="page"). The body is exercised in
 // the populated / empty-state / aggregation tests below — this one
 // focuses on the shared chrome that should be present in every variant.
+//
+// Two days of data are passed so the chart (and its subtitle) is
+// rendered. The empty-state case is covered by TestExerciseChart_EmptyState.
 func TestExerciseChart(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
-	html := renderToString(t, ExerciseChart(exercise, nil, "Test User", true, false))
+	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
+	chartEntries := []models.ExerciseEntry{
+		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: day1},
+		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: day2},
+	}
+	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false))
 
 	// Button group container with the documented basecoat class.
 	if !strings.Contains(html, `class="button-group"`) {
@@ -602,10 +602,10 @@ func TestExerciseChart(t *testing.T) {
 }
 
 // TestExerciseChart_RendersFullWidthChartCard locks in the chart card
-// chrome: a full-width wrapper with the tall h-[60vh] min-h-[24rem]
-// height, the dedicated "exercise-chart" canvas id (distinct from the
-// small chart on the History view), and the JSON payload flagging
-// hideAxes=false so axis tick labels are visible.
+// chrome: a full-width wrapper with the tall h-[60vh] min-h-96
+// height (24rem floor), the dedicated "exercise-chart" canvas id
+// (distinct from the small chart on the History view), and the JSON
+// payload flagging hideAxes=false so axis tick labels are visible.
 func TestExerciseChart_RendersFullWidthChartCard(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	now := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
@@ -621,8 +621,8 @@ func TestExerciseChart_RendersFullWidthChartCard(t *testing.T) {
 		t.Error("expected full-width card container with p-4 padding")
 	}
 	// Tall wrapper drives the chart's height.
-	if !strings.Contains(html, `class="h-[60vh] min-h-[24rem]"`) {
-		t.Error("expected tall fixed-height wrapper (h-[60vh] min-h-[24rem])")
+	if !strings.Contains(html, `class="h-[60vh] min-h-96"`) {
+		t.Error("expected tall fixed-height wrapper (h-[60vh] min-h-96)")
 	}
 	// Distinct canvas id so the History view's smaller chart and the
 	// full-width chart can never collide.
@@ -699,10 +699,10 @@ func TestExerciseChart_AggregatesMaxWeightPerDay(t *testing.T) {
 	day2morning := time.Date(2025, 6, 11, 9, 0, 0, 0, time.UTC)
 	day2evening := time.Date(2025, 6, 11, 19, 30, 0, 0, time.UTC)
 	chartEntries := []models.ExerciseEntry{
-		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: day1morning},  // day1: 100
-		{ID: "e2", Reps: 3, Weight: 110, CreatedAt: day1evening},  // day1: 110 (max)
-		{ID: "e3", Reps: 5, Weight: 112, CreatedAt: day2morning},  // day2: 112 (max)
-		{ID: "e4", Reps: 5, Weight: 108, CreatedAt: day2evening},  // day2: 108 (not max)
+		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: day1morning}, // day1: 100
+		{ID: "e2", Reps: 3, Weight: 110, CreatedAt: day1evening}, // day1: 110 (max)
+		{ID: "e3", Reps: 5, Weight: 112, CreatedAt: day2morning}, // day2: 112 (max)
+		{ID: "e4", Reps: 5, Weight: 108, CreatedAt: day2evening}, // day2: 108 (not max)
 	}
 	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false))
 
@@ -738,13 +738,26 @@ func TestExerciseChart_AggregatesMaxWeightPerDay(t *testing.T) {
 }
 
 // TestExerciseChartAdvanced mirrors TestExerciseChart but with the
-// Advanced link marked as active and the advanced placeholder text.
+// Advanced link marked as active. The body is exercised in the
+// populated / empty-state / per-set-plotting tests below — this one
+// focuses on the shared chrome that should be present in every variant.
+//
+// Two sets of data are passed so the chart (and its subtitle) is
+// rendered. The empty-state case is covered by
+// TestExerciseChartAdvanced_EmptyState.
 func TestExerciseChartAdvanced(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
-	html := renderToString(t, ExerciseChartAdvanced(exercise, "Test User", true, false))
+	chartEntries := []models.ExerciseEntry{
+		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
+		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)},
+	}
+	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false))
 
 	if !strings.Contains(html, `class="button-group"`) {
 		t.Error("expected basecoat button-group container")
+	}
+	if !strings.Contains(html, `role="group"`) {
+		t.Error("expected role=\"group\" on the button-group container")
 	}
 	for _, want := range []string{
 		`href="/exercises/ex-1"`,
@@ -766,8 +779,156 @@ func TestExerciseChartAdvanced(t *testing.T) {
 		t.Error("did not expect History link to be marked as the active button")
 	}
 
-	if !strings.Contains(html, "estimated 1RM") {
-		t.Error("expected placeholder text describing the future advanced chart content")
+	// Page header is rendered for the advanced chart view.
+	if !strings.Contains(html, "Squat Volume") {
+		t.Error("expected page header containing the exercise name + Volume")
+	}
+	if !strings.Contains(html, "Every set plotted by reps and weight") {
+		t.Error("expected subtitle describing the scatter plot")
+	}
+}
+
+// TestExerciseChartAdvanced_RendersScatterCard locks in the scatter
+// card chrome: full-width card, tall wrapper, the dedicated
+// "exercise-chart-advanced" canvas id (distinct from the line chart's
+// "exercise-chart" id), and a JSON payload with xLabel/yLabel/points
+// and hideAxes=false so axis tick labels are visible.
+func TestExerciseChartAdvanced_RendersScatterCard(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
+	now := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	chartEntries := []models.ExerciseEntry{
+		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: now},
+		{ID: "e2", Reps: 3, Weight: 110, CreatedAt: now.AddDate(0, 0, 1)},
+		{ID: "e3", Reps: 8, Weight: 90, CreatedAt: now.AddDate(0, 0, 2)},
+	}
+	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false))
+
+	if !strings.Contains(html, `<div class="card p-4">`) {
+		t.Error("expected full-width card container with p-4 padding")
+	}
+	if !strings.Contains(html, `class="h-[60vh] min-h-96"`) {
+		t.Error("expected tall fixed-height wrapper (h-[60vh] min-h-96)")
+	}
+	// Distinct canvas id from the line chart on /chart.
+	if !strings.Contains(html, `<canvas id="exercise-chart-advanced">`) {
+		t.Error("expected canvas with id exercise-chart-advanced")
+	}
+	if strings.Contains(html, `<canvas id="exercise-chart">`) {
+		t.Error("did not expect the line-chart canvas id on the advanced view")
+	}
+
+	re := regexp.MustCompile(`<script id="exercise-chart-advanced-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(html)
+	if len(m) < 2 {
+		t.Fatal("could not find exercise-chart-advanced-data script block")
+	}
+	var parsed struct {
+		XLabel string `json:"xLabel"`
+		YLabel string `json:"yLabel"`
+		Points []struct {
+			X    float64 `json:"x"`
+			Y    float64 `json:"y"`
+			Date string  `json:"date"`
+		} `json:"points"`
+		HideAxes bool `json:"hideAxes"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v\ncontent: %s", err, m[1])
+	}
+	if parsed.XLabel != "Reps" {
+		t.Errorf("expected xLabel 'Reps', got %q", parsed.XLabel)
+	}
+	if parsed.YLabel != "Squat (kg)" {
+		t.Errorf("expected yLabel 'Squat (kg)', got %q", parsed.YLabel)
+	}
+	if parsed.HideAxes {
+		t.Error("expected hideAxes=false at full width so axis tick labels are visible")
+	}
+	if len(parsed.Points) != 3 {
+		t.Errorf("expected 3 scatter points (one per set), got %d", len(parsed.Points))
+	}
+}
+
+// TestExerciseChartAdvanced_EmptyState asserts the friendly empty-state
+// message is rendered in place of the chart when there are fewer than
+// 2 sets to plot. The chart canvas and its JSON payload must not be
+// rendered.
+func TestExerciseChartAdvanced_EmptyState(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
+	cases := map[string][]models.ExerciseEntry{
+		"no entries": nil,
+		"one entry": {
+			{ID: "e1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
+		},
+	}
+	for name, entries := range cases {
+		t.Run(name, func(t *testing.T) {
+			html := renderToString(t, ExerciseChartAdvanced(exercise, entries, "Test User", true, false))
+			if !strings.Contains(html, "Log at least 2 sets to see your volume profile.") {
+				t.Errorf("expected friendly empty-state message for %q", name)
+			}
+			if strings.Contains(html, `<canvas id="exercise-chart-advanced">`) {
+				t.Errorf("did not expect scatter canvas in empty state for %q", name)
+			}
+			if strings.Contains(html, `id="exercise-chart-advanced-data"`) {
+				t.Errorf("did not expect scatter JSON payload in empty state for %q", name)
+			}
+		})
+	}
+}
+
+// TestExerciseChartAdvanced_PlotsEverySet asserts the scatter view does
+// NOT collapse by day — every set is its own (reps, weight) point so
+// the user can see set-by-set volume patterns. Two days, three entries
+// -> 3 scatter points.
+func TestExerciseChartAdvanced_PlotsEverySet(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
+	day1morning := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	day1evening := time.Date(2025, 6, 10, 19, 30, 0, 0, time.UTC)
+	day2morning := time.Date(2025, 6, 11, 9, 0, 0, 0, time.UTC)
+	chartEntries := []models.ExerciseEntry{
+		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: day1morning},
+		{ID: "e2", Reps: 3, Weight: 110, CreatedAt: day1evening},
+		{ID: "e3", Reps: 5, Weight: 112, CreatedAt: day2morning},
+	}
+	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false))
+
+	re := regexp.MustCompile(`<script id="exercise-chart-advanced-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(html)
+	if len(m) < 2 {
+		t.Fatal("could not find exercise-chart-advanced-data script block")
+	}
+	var parsed struct {
+		Points []struct {
+			X    float64 `json:"x"`
+			Y    float64 `json:"y"`
+			Date string  `json:"date"`
+		} `json:"points"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v", err)
+	}
+	if len(parsed.Points) != 3 {
+		t.Fatalf("expected 3 per-set points (no per-day collapse), got %d", len(parsed.Points))
+	}
+	// Spot-check the (reps, weight) pairs flow through untouched.
+	wantXY := []struct {
+		X, Y float64
+	}{
+		{5, 100},
+		{3, 110},
+		{5, 112},
+	}
+	for i, want := range wantXY {
+		if parsed.Points[i].X != want.X || parsed.Points[i].Y != want.Y {
+			t.Errorf("point %d: want (%.0f, %.0f), got (%.0f, %.0f)", i, want.X, want.Y, parsed.Points[i].X, parsed.Points[i].Y)
+		}
+	}
+	// Each point should carry the formatted date for the tooltip.
+	for i, p := range parsed.Points {
+		if p.Date == "" {
+			t.Errorf("point %d missing Date field for tooltip", i)
+		}
 	}
 }
 
