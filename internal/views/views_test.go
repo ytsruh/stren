@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -280,6 +281,34 @@ func TestEntryForm_New(t *testing.T) {
 	// form so a scoped query would miss it).
 	if !strings.Contains(html, `getElementById('entry-set-template')`) {
 		t.Error("expected script to look up clone template by getElementById")
+	}
+	// Date & Time input: a datetime-local field named created_at, marked
+	// required, with a value rendered from FormatDateTimeLocal(time.Now()).
+	if !strings.Contains(html, "Date &amp; Time") && !strings.Contains(html, "Date & Time") {
+		t.Error("expected 'Date & Time' label in new-entry form")
+	}
+	if !strings.Contains(html, `id="entry-date"`) {
+		t.Error("expected id=\"entry-date\" on the datetime input")
+	}
+	// The required input must combine name, type and required attributes
+	// together so a regression that drops the field or its name is caught.
+	dateInputPattern := `<input class="input" type="datetime-local" id="entry-date" name="created_at" value="[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}" required`
+	if !regexp.MustCompile(dateInputPattern).MatchString(html) {
+		t.Errorf("expected datetime-local input with name=\"created_at\" and rendered value matching the formatDateTimeLocal pattern; pattern was %q", dateInputPattern)
+	}
+	// Exercise select and date input sit side-by-side at sm: and above,
+	// stacking on mobile. Assert the wrapper so a regression that drops
+	// the responsive class (or moves the fields out of the wrapper) is
+	// caught.
+	if !strings.Contains(html, `sm:grid-cols-2 sm:items-end`) {
+		t.Error("expected exercise + date to share a sm:grid-cols-2 sm:items-end wrapper")
+	}
+	// The exercise select id="exercise-name" and the date input id="entry-date"
+	// must both be present in the rendered HTML so the wrapper is actually
+	// wrapping the right fields. The regex above already proves the date
+	// input; this double-checks the select is in the same context.
+	if !strings.Contains(html, `id="exercise-name"`) {
+		t.Error("expected exercise select id=\"exercise-name\"")
 	}
 }
 

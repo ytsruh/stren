@@ -42,7 +42,7 @@ type EntrySetInput struct {
 }
 
 // CreateEntry creates a new exercise entry for the given user.
-func (ec *EntryController) CreateEntry(userID string, exerciseID, notes string, reps int, weight float64, restTime int) (*models.ExerciseEntry, error) {
+func (ec *EntryController) CreateEntry(userID string, exerciseID, notes string, createdAt time.Time, reps int, weight float64, restTime int) (*models.ExerciseEntry, error) {
 	entry := &models.ExerciseEntry{
 		ExerciseID: exerciseID,
 		Notes:      notes,
@@ -50,7 +50,7 @@ func (ec *EntryController) CreateEntry(userID string, exerciseID, notes string, 
 		Weight:     weight,
 		RestTime:   restTime,
 		UserID:     userID,
-		CreatedAt:  time.Now(),
+		CreatedAt:  createdAt,
 	}
 	if err := ec.repo.CreateEntry(entry); err != nil {
 		return nil, err
@@ -59,12 +59,13 @@ func (ec *EntryController) CreateEntry(userID string, exerciseID, notes string, 
 }
 
 // CreateEntries persists a group of sets in a single submission, all sharing
-// the same exercise, user, notes and CreatedAt timestamp. A single timestamp
-// is captured before the loop so every row reflects the same submission time.
-// On the first repository error the loop aborts and the error is returned;
-// partial-success semantics aren't worth the complexity for a workout log.
-func (ec *EntryController) CreateEntries(userID, exerciseID, notes string, sets []EntrySetInput) ([]models.ExerciseEntry, error) {
-	now := time.Now()
+// the same exercise, user, notes and the supplied createdAt timestamp. The
+// timestamp comes from the caller (typically parsed from the form's
+// created_at field, or time.Now() when the field is empty) so a multi-set
+// submission can be back-dated as a single unit. On the first repository
+// error the loop aborts and the error is returned; partial-success semantics
+// aren't worth the complexity for a workout log.
+func (ec *EntryController) CreateEntries(userID, exerciseID, notes string, createdAt time.Time, sets []EntrySetInput) ([]models.ExerciseEntry, error) {
 	created := make([]models.ExerciseEntry, 0, len(sets))
 	for _, s := range sets {
 		entry := &models.ExerciseEntry{
@@ -74,7 +75,7 @@ func (ec *EntryController) CreateEntries(userID, exerciseID, notes string, sets 
 			Weight:     s.Weight,
 			RestTime:   s.RestTime,
 			UserID:     userID,
-			CreatedAt:  now,
+			CreatedAt:  createdAt,
 		}
 		if err := ec.repo.CreateEntry(entry); err != nil {
 			return nil, err

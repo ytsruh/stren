@@ -182,23 +182,40 @@ templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userN
 			data-max-sets={ fmt.Sprintf("%d", MaxSetsPerEntry) }
 		>
 			<fieldset class="grid gap-4">
-				<div class="grid gap-2">
-					<label for="exercise-name">Exercise</label>
-					<select
-						id="exercise-name"
-						name="exercise_id"
-						class="select"
-						required
-					>
-						<option value="">-- Select an exercise --</option>
-						for _, e := range exercises {
-							if e.ID == preselectedExerciseID {
-								<option value={ e.ID } selected>{ e.Name }</option>
-							} else {
-								<option value={ e.ID }>{ e.Name }</option>
+				// Exercise + date sit side-by-side at sm: and above, stack on
+				// mobile. items-end aligns the input boxes at the bottom of
+				// each column so the visually-aligned parts (the inputs)
+				// match up regardless of label height.
+				<div class="grid gap-4 sm:grid-cols-2 sm:items-end">
+					<div class="grid gap-2">
+						<label for="exercise-name">Exercise</label>
+						<select
+							id="exercise-name"
+							name="exercise_id"
+							class="select"
+							required
+						>
+							<option value="">-- Select an exercise --</option>
+							for _, e := range exercises {
+								if e.ID == preselectedExerciseID {
+									<option value={ e.ID } selected>{ e.Name }</option>
+								} else {
+									<option value={ e.ID }>{ e.Name }</option>
+								}
 							}
-						}
-					</select>
+						</select>
+					</div>
+					<div class="grid gap-2">
+						<label for="entry-date">Date & Time</label>
+						<input
+							class="input"
+							type="datetime-local"
+							id="entry-date"
+							name="created_at"
+							value={ FormatDateTimeLocal(time.Now()) }
+							required
+						/>
+					</div>
 				</div>
 				<div class="grid gap-3" data-set-list>
 					for i := 0; i < 3; i++ {

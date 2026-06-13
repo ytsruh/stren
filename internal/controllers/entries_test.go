@@ -354,7 +354,7 @@ func TestEntryController_GetEntry_WrongUser(t *testing.T) {
 func TestEntryController_CreateEntry(t *testing.T) {
 	ec, _ := setupEntryController(t)
 
-	entry, err := ec.CreateEntry("user-1", "ex-1", "great set", 5, 100, 60)
+	entry, err := ec.CreateEntry("user-1", "ex-1", "great set", time.Now(), 5, 100, 60)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -370,7 +370,7 @@ func TestEntryController_CreateEntry_RepositoryError(t *testing.T) {
 	ec, mock := setupEntryController(t)
 	mock.errCreateEntry = errors.New("db error")
 
-	_, err := ec.CreateEntry("user-1", "ex-1", "great set", 5, 100, 60)
+	_, err := ec.CreateEntry("user-1", "ex-1", "great set", time.Now(), 5, 100, 60)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -385,7 +385,7 @@ func TestEntryController_CreateEntries_Success(t *testing.T) {
 		{Reps: 5, Weight: 95, RestTime: 90},
 	}
 
-	created, err := ec.CreateEntries("user-1", "ex-1", "felt good", sets)
+	created, err := ec.CreateEntries("user-1", "ex-1", "felt good", time.Now(), sets)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestEntryController_CreateEntries_Success(t *testing.T) {
 func TestEntryController_CreateEntries_EmptySets(t *testing.T) {
 	ec, mock := setupEntryController(t)
 
-	created, err := ec.CreateEntries("user-1", "ex-1", "", nil)
+	created, err := ec.CreateEntries("user-1", "ex-1", "", time.Now(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -443,12 +443,46 @@ func TestEntryController_CreateEntries_RepositoryErrorShortCircuits(t *testing.T
 		{Reps: 5, Weight: 100, RestTime: 0},
 	}
 
-	_, err := ec.CreateEntries("user-1", "ex-1", "", sets)
+	_, err := ec.CreateEntries("user-1", "ex-1", "", time.Now(), sets)
 	if err == nil {
 		t.Fatal("expected error")
 	}
 	if !strings.Contains(err.Error(), "db error") {
 		t.Errorf("expected db error to bubble up, got %v", err)
+	}
+}
+
+// TestEntryController_CreateEntries_PassesCreatedAt verifies that the
+// caller-supplied createdAt is the exact value persisted on every row,
+// including a back-dated timestamp that is clearly not "now".
+func TestEntryController_CreateEntries_PassesCreatedAt(t *testing.T) {
+	ec, mock := setupEntryController(t)
+	want := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	sets := []EntrySetInput{
+		{Reps: 5, Weight: 100, RestTime: 60},
+		{Reps: 5, Weight: 95, RestTime: 90},
+	}
+
+	created, err := ec.CreateEntries("user-1", "ex-1", "back-dated", want, sets)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(created) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(created))
+	}
+	for i, e := range created {
+		if !e.CreatedAt.Equal(want) {
+			t.Errorf("entry %d: expected CreatedAt %v, got %v", i, want, e.CreatedAt)
+		}
+	}
+	if len(mock.entries) != 2 {
+		t.Fatalf("expected 2 entries in mock, got %d", len(mock.entries))
+	}
+	for i, e := range mock.entries {
+		if !e.CreatedAt.Equal(want) {
+			t.Errorf("mock entry %d: expected CreatedAt %v, got %v", i, want, e.CreatedAt)
+		}
 	}
 }
 

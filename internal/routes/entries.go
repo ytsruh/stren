@@ -66,7 +66,22 @@ func (h *Handler) CreateEntry(c echo.Context) error {
 
 	claims := GetClaims(c)
 	notes := c.FormValue("notes")
-	created, err := h.entryCtrl.CreateEntries(claims.UserID, exerciseID, notes, sets)
+
+	// created_at is rendered as datetime-local; the form field carries the
+	// user's wall-clock pick. We default to time.Now() so an empty/absent
+	// value preserves the "log it now" behaviour. Parse errors surface as a
+	// user-visible error rather than silently falling back, since the user
+	// clearly intended to set a date.
+	createdAt := time.Now()
+	if dateStr := c.FormValue("created_at"); dateStr != "" {
+		parsed, parseErr := time.Parse("2006-01-02T15:04", dateStr)
+		if parseErr != nil {
+			return render(c, views.EntryFormError("Invalid date format"))
+		}
+		createdAt = parsed
+	}
+
+	created, err := h.entryCtrl.CreateEntries(claims.UserID, exerciseID, notes, createdAt, sets)
 	if err != nil {
 		return render(c, views.EntryFormError("Failed to save entry: "+err.Error()))
 	}

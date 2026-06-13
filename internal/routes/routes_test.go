@@ -985,6 +985,119 @@ func TestCreateEntry_RepositoryError(t *testing.T) {
 	}
 }
 
+// TestCreateEntry_HTMX_WithCustomDate verifies that a created_at value
+// submitted via the form is parsed (UTC, matching the edit form) and stored
+// on the persisted row. The test fixes a back-dated timestamp that is far
+// from "now" so the assertion can't accidentally pass via the time.Now()
+// fallback.
+func TestCreateEntry_HTMX_WithCustomDate(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	form.Set("created_at", "2024-06-15T14:30")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "95")
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	want := time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC)
+	if len(mock.entries) != 2 {
+		t.Fatalf("expected 2 entries in mock, got %d", len(mock.entries))
+	}
+	for i, got := range mock.entries {
+		if !got.CreatedAt.Equal(want) {
+			t.Errorf("entry %d: expected CreatedAt %v, got %v", i, want, got.CreatedAt)
+		}
+	}
+}
+
+// TestCreateEntry_HTMX_EmptyDateFallsBackToNow verifies that an absent
+// created_at field falls back to time.Now() — this is the "default to now"
+// behaviour when a user submits the form without touching the date input.
+func TestCreateEntry_HTMX_EmptyDateFallsBackToNow(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+
+	before := time.Now()
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	// created_at intentionally omitted
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	after := time.Now()
+	if len(mock.entries) != 1 {
+		t.Fatalf("expected 1 entry in mock, got %d", len(mock.entries))
+	}
+	got := mock.entries[0].CreatedAt
+	// Allow a 5-second window for the fallback to be considered "now".
+	if got.Before(before.Add(-5*time.Second)) || got.After(after.Add(5*time.Second)) {
+		t.Errorf("expected CreatedAt near now (%v..%v), got %v", before, after, got)
+	}
+}
+
+// TestCreateEntry_InvalidDateFormat verifies that a malformed created_at
+// value produces a user-visible error rather than silently being ignored.
+func TestCreateEntry_InvalidDateFormat(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	form.Set("created_at", "not-a-date")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Invalid date format") {
+		t.Errorf("expected error message 'Invalid date format', got %q", body)
+	}
+	if len(mock.entries) != 0 {
+		t.Errorf("expected no entries persisted on parse error, got %d", len(mock.entries))
+	}
+}
+
 func TestEditEntryForm(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
 	mock.entries = []models.ExerciseEntry{
