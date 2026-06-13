@@ -32,6 +32,15 @@ func (ec *EntryController) GetEntry(id, userID string) (*models.ExerciseEntry, e
 	return ec.repo.GetEntry(id, userID)
 }
 
+// EntrySetInput describes a single set to be persisted as part of a multi-set
+// entry submission. All sets within a submission share an exercise, user, notes
+// and timestamp; only per-set values (reps, weight, rest) differ.
+type EntrySetInput struct {
+	Reps     int
+	Weight   float64
+	RestTime int
+}
+
 // CreateEntry creates a new exercise entry for the given user.
 func (ec *EntryController) CreateEntry(userID string, exerciseID, notes string, reps int, weight float64, restTime int) (*models.ExerciseEntry, error) {
 	entry := &models.ExerciseEntry{
@@ -47,6 +56,32 @@ func (ec *EntryController) CreateEntry(userID string, exerciseID, notes string, 
 		return nil, err
 	}
 	return entry, nil
+}
+
+// CreateEntries persists a group of sets in a single submission, all sharing
+// the same exercise, user, notes and CreatedAt timestamp. A single timestamp
+// is captured before the loop so every row reflects the same submission time.
+// On the first repository error the loop aborts and the error is returned;
+// partial-success semantics aren't worth the complexity for a workout log.
+func (ec *EntryController) CreateEntries(userID, exerciseID, notes string, sets []EntrySetInput) ([]models.ExerciseEntry, error) {
+	now := time.Now()
+	created := make([]models.ExerciseEntry, 0, len(sets))
+	for _, s := range sets {
+		entry := &models.ExerciseEntry{
+			ExerciseID: exerciseID,
+			Notes:      notes,
+			Reps:       s.Reps,
+			Weight:     s.Weight,
+			RestTime:   s.RestTime,
+			UserID:     userID,
+			CreatedAt:  now,
+		}
+		if err := ec.repo.CreateEntry(entry); err != nil {
+			return nil, err
+		}
+		created = append(created, *entry)
+	}
+	return created, nil
 }
 
 // UpdateEntry updates an existing entry, including its timestamp.

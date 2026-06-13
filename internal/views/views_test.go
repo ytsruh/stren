@@ -3,6 +3,7 @@ package views
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -226,6 +227,59 @@ func TestEntryForm_New(t *testing.T) {
 	}
 	if !strings.Contains(html, `/entries"`) {
 		t.Error("expected form action to be /entries")
+	}
+	// Multi-set form scaffolding.
+	if !strings.Contains(html, `data-set-list`) {
+		t.Error("expected data-set-list container for set rows")
+	}
+	if !strings.Contains(html, `data-add-set`) {
+		t.Error("expected Add Set button")
+	}
+	if !strings.Contains(html, `id="entry-set-template"`) {
+		t.Error("expected hidden row template for cloning")
+	}
+	// The form exposes the cap so the inline script can read it at runtime.
+	wantMaxAttr := fmt.Sprintf(`data-max-sets="%d"`, MaxSetsPerEntry)
+	if !strings.Contains(html, wantMaxAttr) {
+		t.Errorf("expected form to expose %s", wantMaxAttr)
+	}
+	// Three starter rows rendered, indices 0/1/2.
+	for _, i := range []string{"0", "1", "2"} {
+		want := fmt.Sprintf(`name="sets[%s][reps]"`, i)
+		if !strings.Contains(html, want) {
+			t.Errorf("expected starter row with %s", want)
+		}
+		wantWeight := fmt.Sprintf(`name="sets[%s][weight]"`, i)
+		if !strings.Contains(html, wantWeight) {
+			t.Errorf("expected starter row with %s", wantWeight)
+		}
+	}
+	// Remove button is wired up via data-remove-set.
+	if !strings.Contains(html, `data-remove-set`) {
+		t.Error("expected remove-set buttons on rows")
+	}
+	// Responsive layout: outer row is a single column on mobile and switches
+	// to the 5-column grid at sm:. The header wrapper uses sm:contents so
+	// the label and X button become direct grid items on larger screens.
+	// sm:order-5 on the X button pushes it to the last column on desktop
+	// (otherwise source order would put it next to the label, in column 2).
+	if !strings.Contains(html, `sm:grid-cols-[auto_1fr_1fr_1fr_auto]`) {
+		t.Error("expected sm: 5-column grid on set rows")
+	}
+	if !strings.Contains(html, `sm:contents`) {
+		t.Error("expected sm:contents wrapper to flatten header on larger screens")
+	}
+	if !strings.Contains(html, `sm:items-end`) {
+		t.Error("expected sm:items-end to align row contents on larger screens")
+	}
+	if !strings.Contains(html, `sm:order-5`) {
+		t.Error("expected sm:order-5 on the X button so it sits in the last column on desktop")
+	}
+	// Sanity: the inline script looks the clone template up by id via
+	// getElementById, NOT form.querySelector (the template lives outside the
+	// form so a scoped query would miss it).
+	if !strings.Contains(html, `getElementById('entry-set-template')`) {
+		t.Error("expected script to look up clone template by getElementById")
 	}
 }
 

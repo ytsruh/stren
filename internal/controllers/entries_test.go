@@ -3,6 +3,7 @@ package controllers
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -372,6 +373,82 @@ func TestEntryController_CreateEntry_RepositoryError(t *testing.T) {
 	_, err := ec.CreateEntry("user-1", "ex-1", "great set", 5, 100, 60)
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestEntryController_CreateEntries_Success(t *testing.T) {
+	ec, mock := setupEntryController(t)
+
+	sets := []EntrySetInput{
+		{Reps: 5, Weight: 100, RestTime: 60},
+		{Reps: 5, Weight: 100, RestTime: 60},
+		{Reps: 5, Weight: 95, RestTime: 90},
+	}
+
+	created, err := ec.CreateEntries("user-1", "ex-1", "felt good", sets)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(created) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(created))
+	}
+	if len(mock.entries) != 3 {
+		t.Fatalf("expected 3 entries in mock, got %d", len(mock.entries))
+	}
+
+	// All entries share the same exercise, user, notes and timestamp.
+	first := created[0]
+	for i, e := range created {
+		if e.ExerciseID != "ex-1" {
+			t.Errorf("entry %d: expected exercise 'ex-1', got %q", i, e.ExerciseID)
+		}
+		if e.UserID != "user-1" {
+			t.Errorf("entry %d: expected user 'user-1', got %q", i, e.UserID)
+		}
+		if e.Notes != "felt good" {
+			t.Errorf("entry %d: expected notes 'felt good', got %q", i, e.Notes)
+		}
+		if !e.CreatedAt.Equal(first.CreatedAt) {
+			t.Errorf("entry %d: expected shared timestamp %v, got %v", i, first.CreatedAt, e.CreatedAt)
+		}
+	}
+
+	// Per-set values are preserved in submission order.
+	if created[2].Weight != 95 || created[2].RestTime != 90 {
+		t.Errorf("third set values wrong: %+v", created[2])
+	}
+}
+
+func TestEntryController_CreateEntries_EmptySets(t *testing.T) {
+	ec, mock := setupEntryController(t)
+
+	created, err := ec.CreateEntries("user-1", "ex-1", "", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(created) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(created))
+	}
+	if len(mock.entries) != 0 {
+		t.Errorf("expected mock to be empty, got %d entries", len(mock.entries))
+	}
+}
+
+func TestEntryController_CreateEntries_RepositoryErrorShortCircuits(t *testing.T) {
+	ec, mock := setupEntryController(t)
+	mock.errCreateEntry = errors.New("db error")
+
+	sets := []EntrySetInput{
+		{Reps: 5, Weight: 100, RestTime: 0},
+		{Reps: 5, Weight: 100, RestTime: 0},
+	}
+
+	_, err := ec.CreateEntries("user-1", "ex-1", "", sets)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "db error") {
+		t.Errorf("expected db error to bubble up, got %v", err)
 	}
 }
 

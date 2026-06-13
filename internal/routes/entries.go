@@ -2,6 +2,7 @@
 package routes
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -48,27 +49,36 @@ func (h *Handler) NewEntryForm(c echo.Context) error {
 	return render(c, views.EntryForm(exercises, preselectedID, claims.Name, true, claims.IsAdmin))
 }
 
-// CreateEntry handles the creation of a new entry.
+// CreateEntry handles the creation of a new entry (with one or more sets).
 func (h *Handler) CreateEntry(c echo.Context) error {
-	entry, err := parseEntryForm(c, h.validator)
-	if err != nil {
-		return render(c, views.EntryFormError(friendlyError(err)))
-	}
-
-	claims := GetClaims(c)
 	exerciseID := c.FormValue("exercise_id")
 	if exerciseID == "" {
 		return render(c, views.EntryFormError("Exercise is required"))
 	}
-	_, err = h.entryCtrl.CreateEntry(claims.UserID, exerciseID, entry.Notes, entry.Reps, entry.Weight, entry.RestTime)
+
+	sets, err := parseEntrySets(c, h.validator)
+	if err != nil {
+		return render(c, views.EntryFormError(friendlyError(err)))
+	}
+	if len(sets) == 0 {
+		return render(c, views.EntryFormError("Add at least one set"))
+	}
+
+	claims := GetClaims(c)
+	notes := c.FormValue("notes")
+	created, err := h.entryCtrl.CreateEntries(claims.UserID, exerciseID, notes, sets)
 	if err != nil {
 		return render(c, views.EntryFormError("Failed to save entry: "+err.Error()))
 	}
 
 	// Check if htmx request
 	if c.Request().Header.Get("HX-Request") == "true" {
+		msg := "Entry saved!"
+		if len(created) > 1 {
+			msg = fmt.Sprintf("%d sets saved!", len(created))
+		}
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
-		return render(c, views.EntryFormSuccessToast("Entry saved!"))
+		return render(c, views.EntryFormSuccessToast(msg))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/")

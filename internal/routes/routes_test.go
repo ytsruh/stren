@@ -22,6 +22,7 @@ import (
 	"stren/internal/controllers"
 	"stren/internal/models"
 	"stren/internal/utils"
+	"stren/internal/views"
 )
 
 type mockRepository struct {
@@ -744,8 +745,8 @@ func TestCreateEntry(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "5")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -769,8 +770,8 @@ func TestCreateEntry_HTMX(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "5")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -794,13 +795,44 @@ func TestCreateEntry_HTMX(t *testing.T) {
 	}
 }
 
+func TestCreateEntry_HTMX_MultipleSets(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "100")
+	form.Set("sets[2][reps]", "5")
+	form.Set("sets[2][weight]", "95")
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "3 sets saved") {
+		t.Fatalf("expected toast with '3 sets saved', got body: %s", body)
+	}
+}
+
 func TestCreateEntry_InvalidReps(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "abc")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "abc")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -815,8 +847,8 @@ func TestCreateEntry_InvalidReps(t *testing.T) {
 		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Reps") {
-		t.Fatalf("expected error message containing 'Reps', got %q", body)
+	if !strings.Contains(body, "reps") {
+		t.Fatalf("expected error message containing 'reps', got %q", body)
 	}
 }
 
@@ -825,8 +857,8 @@ func TestCreateEntry_InvalidWeight(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "5")
-	form.Set("weight", "-10")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "-10")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -846,13 +878,67 @@ func TestCreateEntry_InvalidWeight(t *testing.T) {
 	}
 }
 
+func TestCreateEntry_NoSets(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	// sets[0][reps] is intentionally absent — user submitted no valid sets
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "at least one set") {
+		t.Fatalf("expected error message about sets, got %q", body)
+	}
+}
+
+func TestCreateEntry_TooManySets(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := url.Values{}
+	form.Set("exercise_id", "ex-1")
+	// MaxSetsPerEntry + 1 rows
+	for i := 0; i <= views.MaxSetsPerEntry; i++ {
+		form.Set(fmt.Sprintf("sets[%d][reps]", i), "5")
+		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateEntry(c); err != nil {
+		t.Fatalf("CreateEntry failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Maximum") {
+		t.Fatalf("expected error message about max sets, got %q", body)
+	}
+}
+
 func TestCreateEntry_MissingExercise(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
 	form.Set("exercise_id", "")
-	form.Set("reps", "5")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -878,8 +964,8 @@ func TestCreateEntry_RepositoryError(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "5")
-	form.Set("weight", "100")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
 
 	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -1398,6 +1484,250 @@ func TestParseEntryForm_InvalidWeight(t *testing.T) {
 				t.Fatalf("expected bad request error, got %v", err)
 			}
 		})
+	}
+}
+
+func TestParseEntrySets_Single(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[0][rest_time]", "90")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 1 {
+		t.Fatalf("expected 1 set, got %d", len(sets))
+	}
+	if sets[0].Reps != 5 || sets[0].Weight != 100 || sets[0].RestTime != 90 {
+		t.Errorf("unexpected set: %+v", sets[0])
+	}
+}
+
+func TestParseEntrySets_Multiple(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "100")
+	form.Set("sets[2][reps]", "5")
+	form.Set("sets[2][weight]", "95")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 3 {
+		t.Fatalf("expected 3 sets, got %d", len(sets))
+	}
+	if sets[2].Weight != 95 {
+		t.Errorf("expected last set weight 95, got %v", sets[2].Weight)
+	}
+}
+
+func TestParseEntrySets_SkipsEmptyRows(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	// sets[1] intentionally empty (no reps)
+	form.Set("sets[2][reps]", "5")
+	form.Set("sets[2][weight]", "100")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 2 {
+		t.Fatalf("expected 2 sets (empty row skipped), got %d", len(sets))
+	}
+}
+
+func TestParseEntrySets_PreservesOrder(t *testing.T) {
+	// Submit out of order to verify server sorts by index.
+	form := url.Values{}
+	form.Set("sets[2][reps]", "5")
+	form.Set("sets[2][weight]", "90")
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "95")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 3 {
+		t.Fatalf("expected 3 sets, got %d", len(sets))
+	}
+	expected := []float64{100, 95, 90}
+	for i, want := range expected {
+		if sets[i].Weight != want {
+			t.Errorf("set %d: expected weight %v, got %v", i, want, sets[i].Weight)
+		}
+	}
+}
+
+func TestParseEntrySets_NoSets(t *testing.T) {
+	form := url.Values{}
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 0 {
+		t.Errorf("expected 0 sets, got %d", len(sets))
+	}
+}
+
+func TestParseEntrySets_EmptyRepsTreatedAsBlank(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", " ")
+	form.Set("sets[0][weight]", "100")
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 0 {
+		t.Errorf("expected whitespace reps to be skipped, got %d sets", len(sets))
+	}
+}
+
+func TestParseEntrySets_TooManySets(t *testing.T) {
+	form := url.Values{}
+	// Submit MaxSetsPerEntry + 1 rows (all non-empty) to trigger the cap.
+	for i := 0; i <= views.MaxSetsPerEntry; i++ {
+		form.Set(fmt.Sprintf("sets[%d][reps]", i), "5")
+		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
+	}
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error for too many sets")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+	if !strings.Contains(httpErr.Message.(string), "Maximum") {
+		t.Errorf("expected 'Maximum' in error, got %q", httpErr.Message)
+	}
+}
+
+func TestParseEntrySets_EmptyRowsCountTowardCap(t *testing.T) {
+	// A malicious client could send sets[0..99999] with empty reps. Even though
+	// parseEntrySets would skip them on processing, the count of submitted
+	// indices should still trip the cap before we waste cycles.
+	form := url.Values{}
+	for i := 0; i <= views.MaxSetsPerEntry; i++ {
+		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
+		// No reps on any row.
+	}
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error when too many empty rows submitted")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+}
+
+func TestParseEntrySets_InvalidReps(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "abc")
+	form.Set("sets[0][weight]", "100")
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error for non-numeric reps")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+	if !strings.Contains(httpErr.Message.(string), "reps") {
+		t.Errorf("expected 'reps' in error, got %q", httpErr.Message)
+	}
+}
+
+func TestParseEntrySets_InvalidWeight(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "-10")
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error for negative weight")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+	if !strings.Contains(httpErr.Message.(string), "Weight") {
+		t.Errorf("expected 'Weight' in error, got %q", httpErr.Message)
+	}
+}
+
+func TestParseEntrySets_InvalidRestTime(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[0][rest_time]", "abc")
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error for non-numeric rest time")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %v", err)
+	}
+}
+
+func TestParseEntrySets_RestTimeDefaultsToZero(t *testing.T) {
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	// rest_time intentionally absent
+
+	c := newEchoContextWithForm(t, form)
+	sets, err := parseEntrySets(c, utils.NewValidator())
+	if err != nil {
+		t.Fatalf("parseEntrySets failed: %v", err)
+	}
+	if len(sets) != 1 || sets[0].RestTime != 0 {
+		t.Errorf("expected rest_time 0, got %+v", sets[0])
+	}
+}
+
+func TestParseEntrySets_PerRowErrorIncludesIndex(t *testing.T) {
+	// Second set is bad — error message should reference set 2 (1-indexed for users).
+	form := url.Values{}
+	form.Set("sets[0][reps]", "5")
+	form.Set("sets[0][weight]", "100")
+	form.Set("sets[1][reps]", "5")
+	form.Set("sets[1][weight]", "-5")
+
+	c := newEchoContextWithForm(t, form)
+	_, err := parseEntrySets(c, utils.NewValidator())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "Set 2") {
+		t.Errorf("expected 'Set 2' in error, got %q", err.Error())
 	}
 }
 
