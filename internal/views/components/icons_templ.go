@@ -304,8 +304,18 @@ func iconPath(name string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+		case "chevron-left":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<path d=\"m15 18-6-6 6-6\"></path>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		case "chevron-right":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<path d=\"m9 18 6-6-6-6\"></path>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		default:
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<circle cx=\"12\" cy=\"12\" r=\"10\"></circle> <line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"12\"></line> <line x1=\"12\" y1=\"8\" x2=\"12.01\" y2=\"8\"></line>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<circle cx=\"12\" cy=\"12\" r=\"10\"></circle> <line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"12\"></line> <line x1=\"12\" y1=\"8\" x2=\"12.01\" y2=\"8\"></line>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

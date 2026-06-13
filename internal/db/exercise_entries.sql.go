@@ -116,20 +116,23 @@ func (q *Queries) GetEntriesByDateRange(ctx context.Context, arg GetEntriesByDat
 	return items, nil
 }
 
-const getEntriesByExercise = `-- name: GetEntriesByExercise :many
+const getEntriesByExercisePaginated = `-- name: GetEntriesByExercisePaginated :many
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.exercise_id = ? AND e.user_id = ?
 ORDER BY e.created_at DESC
+LIMIT ? OFFSET ?
 `
 
-type GetEntriesByExerciseParams struct {
+type GetEntriesByExercisePaginatedParams struct {
 	ExerciseID string
 	UserID     sql.NullString
+	Limit      int64
+	Offset     int64
 }
 
-type GetEntriesByExerciseRow struct {
+type GetEntriesByExercisePaginatedRow struct {
 	ID           string
 	ExerciseID   string
 	ExerciseName string
@@ -141,15 +144,20 @@ type GetEntriesByExerciseRow struct {
 	CreatedAt    sql.NullTime
 }
 
-func (q *Queries) GetEntriesByExercise(ctx context.Context, arg GetEntriesByExerciseParams) ([]GetEntriesByExerciseRow, error) {
-	rows, err := q.db.QueryContext(ctx, getEntriesByExercise, arg.ExerciseID, arg.UserID)
+func (q *Queries) GetEntriesByExercisePaginated(ctx context.Context, arg GetEntriesByExercisePaginatedParams) ([]GetEntriesByExercisePaginatedRow, error) {
+	rows, err := q.db.QueryContext(ctx, getEntriesByExercisePaginated,
+		arg.ExerciseID,
+		arg.UserID,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetEntriesByExerciseRow
+	var items []GetEntriesByExercisePaginatedRow
 	for rows.Next() {
-		var i GetEntriesByExerciseRow
+		var i GetEntriesByExercisePaginatedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ExerciseID,
@@ -213,6 +221,66 @@ func (q *Queries) GetEntry(ctx context.Context, arg GetEntryParams) (GetEntryRow
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getLastSetByExercise = `-- name: GetLastSetByExercise :one
+SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
+FROM exercise_entries e
+JOIN exercises t ON e.exercise_id = t.id
+WHERE e.exercise_id = ? AND e.user_id = ?
+ORDER BY e.created_at DESC
+LIMIT 1
+`
+
+type GetLastSetByExerciseParams struct {
+	ExerciseID string
+	UserID     sql.NullString
+}
+
+type GetLastSetByExerciseRow struct {
+	ID           string
+	ExerciseID   string
+	ExerciseName string
+	UserID       sql.NullString
+	Reps         int64
+	Weight       float64
+	Notes        sql.NullString
+	RestTime     int64
+	CreatedAt    sql.NullTime
+}
+
+func (q *Queries) GetLastSetByExercise(ctx context.Context, arg GetLastSetByExerciseParams) (GetLastSetByExerciseRow, error) {
+	row := q.db.QueryRowContext(ctx, getLastSetByExercise, arg.ExerciseID, arg.UserID)
+	var i GetLastSetByExerciseRow
+	err := row.Scan(
+		&i.ID,
+		&i.ExerciseID,
+		&i.ExerciseName,
+		&i.UserID,
+		&i.Reps,
+		&i.Weight,
+		&i.Notes,
+		&i.RestTime,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getMaxWeightByExercise = `-- name: GetMaxWeightByExercise :one
+SELECT CAST(COALESCE(MAX(weight), 0) AS REAL) FROM exercise_entries
+WHERE exercise_id = ? AND user_id = ?
+`
+
+type GetMaxWeightByExerciseParams struct {
+	ExerciseID string
+	UserID     sql.NullString
+}
+
+func (q *Queries) GetMaxWeightByExercise(ctx context.Context, arg GetMaxWeightByExerciseParams) (float64, error) {
+	row := q.db.QueryRowContext(ctx, getMaxWeightByExercise, arg.ExerciseID, arg.UserID)
+	var column_1 float64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const listEntries = `-- name: ListEntries :many

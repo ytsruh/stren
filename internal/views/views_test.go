@@ -59,50 +59,13 @@ func TestCalculateVolume(t *testing.T) {
 	}
 }
 
-func TestMaxWeight(t *testing.T) {
-	tests := []struct {
-		name     string
-		entries  []models.ExerciseEntry
-		expected float64
-	}{
-		{
-			name:     "empty",
-			entries:  []models.ExerciseEntry{},
-			expected: 0,
-		},
-		{
-			name:     "single",
-			entries:  []models.ExerciseEntry{{Weight: 100}},
-			expected: 100,
-		},
-		{
-			name:     "multiple",
-			entries:  []models.ExerciseEntry{{Weight: 80}, {Weight: 120}, {Weight: 100}},
-			expected: 120,
-		},
+func TestLastSetLabel(t *testing.T) {
+	if got := lastSetLabel(models.ExerciseEntry{}); got != "No entries" {
+		t.Errorf("lastSetLabel(empty) = %q, want %q", got, "No entries")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := maxWeight(tt.entries)
-			if got != tt.expected {
-				t.Errorf("maxWeight = %f, want %f", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestGetLastSet(t *testing.T) {
-	if got := getLastSet([]models.ExerciseEntry{}); got != "No entries" {
-		t.Errorf("getLastSet(empty) = %q, want %q", got, "No entries")
-	}
-	entries := []models.ExerciseEntry{
-		{Weight: 100, Reps: 5, CreatedAt: time.Now().Add(-1 * time.Hour)},
-		{Weight: 80, Reps: 8, CreatedAt: time.Now().Add(-2 * time.Hour)},
-	}
-	got := getLastSet(entries)
+	got := lastSetLabel(models.ExerciseEntry{ID: "e1", Weight: 100, Reps: 5})
 	if got != "100.0 kg \u00d7 5" {
-		t.Errorf("getLastSet = %q, want %q", got, "100.0 kg \u00d7 5")
+		t.Errorf("lastSetLabel = %q, want %q", got, "100.0 kg \u00d7 5")
 	}
 }
 
@@ -318,24 +281,81 @@ func TestEntryFormError(t *testing.T) {
 }
 
 func TestExerciseHistory_WithEntries(t *testing.T) {
-	entries := []models.ExerciseEntry{
-		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
-	}
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
-	html := renderToString(t, ExerciseHistory(exercise, entries, "Test User", true, false))
+	page := &models.ExerciseHistoryPage{
+		Entries: []models.ExerciseEntry{
+			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		},
+		Stats: models.HistoryStats{
+			MaxWeight: 100,
+			LastSet:   models.ExerciseEntry{ID: "entry-1", Reps: 5, Weight: 100},
+		},
+		Page: 1,
+	}
+	html := renderToString(t, ExerciseHistory(exercise, page, "Test User", true, false))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected exercise name heading")
 	}
 	if strings.Contains(html, "No entries yet") {
 		t.Error("did not expect empty state when entries exist")
 	}
+	if !strings.Contains(html, "100.0 kg") {
+		t.Error("expected personal best value to appear")
+	}
 }
 
 func TestExerciseHistory_Empty(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
-	html := renderToString(t, ExerciseHistory(exercise, []models.ExerciseEntry{}, "Test User", true, false))
+	page := &models.ExerciseHistoryPage{Page: 1}
+	html := renderToString(t, ExerciseHistory(exercise, page, "Test User", true, false))
 	if !strings.Contains(html, "No entries yet") {
 		t.Error("expected empty state")
+	}
+}
+
+func TestHistoryTable_NoPagerWhenSinglePage(t *testing.T) {
+	page := &models.ExerciseHistoryPage{
+		Entries: []models.ExerciseEntry{
+			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		},
+		Page: 1,
+	}
+	html := renderToString(t, HistoryTable("ex-1", page))
+	if !strings.Contains(html, historyTableWrapID) {
+		t.Error("expected swappable wrap region to be present")
+	}
+	if strings.Contains(html, "Previous page") || strings.Contains(html, "Next page") {
+		t.Error("did not expect pagination buttons on a single-page result")
+	}
+}
+
+func TestHistoryTable_ShowsNextAndPrev(t *testing.T) {
+	page := &models.ExerciseHistoryPage{
+		Entries: []models.ExerciseEntry{
+			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+		},
+		Page:    2,
+		HasPrev: true,
+		HasNext: true,
+	}
+	html := renderToString(t, HistoryTable("ex-1", page))
+	if !strings.Contains(html, `aria-label="Previous page"`) {
+		t.Error("expected Previous button on a middle page")
+	}
+	if !strings.Contains(html, `aria-label="Next page"`) {
+		t.Error("expected Next button on a middle page")
+	}
+	if !strings.Contains(html, `hx-get="/exercises/ex-1?page=1"`) {
+		t.Error("expected Previous button to point at page 1")
+	}
+	if !strings.Contains(html, `hx-get="/exercises/ex-1?page=3"`) {
+		t.Error("expected Next button to point at page 3")
+	}
+	if !strings.Contains(html, `hx-push-url="true"`) {
+		t.Error("expected pagination links to push URL for shareable history")
+	}
+	if !strings.Contains(html, `hx-target="#`+historyTableWrapID+`"`) {
+		t.Error("expected pagination to target the swappable wrap region")
 	}
 }
 

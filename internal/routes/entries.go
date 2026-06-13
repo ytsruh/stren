@@ -3,6 +3,7 @@ package routes
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -163,6 +164,11 @@ func (h *Handler) DeleteEntry(c echo.Context) error {
 }
 
 // ExerciseHistory shows all entries for a specific exercise.
+//
+// Reads the optional ?page=N query parameter (1-indexed, clamped to 1) and
+// returns a paginated page of entries together with lifetime stats. When the
+// request comes from htmx (HX-Request: true), the response is the table
+// fragment only so it can swap into the existing #history-table-wrap region.
 func (h *Handler) ExerciseHistory(c echo.Context) error {
 	id := c.Param("id")
 
@@ -172,12 +178,35 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 		return err
 	}
 
-	entries, err := h.entryCtrl.GetEntriesByExercise(exercise.ID, claims.UserID)
+	page := parsePage(c.QueryParam("page"))
+
+	history, err := h.entryCtrl.GetEntriesByExercise(exercise.ID, claims.UserID, page)
 	if err != nil {
 		return err
 	}
 
-	return render(c, views.ExerciseHistory(exercise, entries, claims.Name, true, claims.IsAdmin))
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("Vary", "HX-Request")
+		return render(c, views.HistoryTable(exercise.ID, history))
+	}
+	return render(c, views.ExerciseHistory(exercise, history, claims.Name, true, claims.IsAdmin))
+}
+
+// parsePage reads the ?page=N query param and returns a clamped 1-indexed page
+// number. Defaults to 1 for empty or non-numeric values; values below 1 are
+// clamped to 1.
+func parsePage(raw string) int {
+	if raw == "" {
+		return 1
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 1
+	}
+	if n < 1 {
+		return 1
+	}
+	return n
 }
 
 // ListExercisesJSON returns all exercises as JSON (for autocomplete).

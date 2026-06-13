@@ -15,18 +15,20 @@ type mockRepository struct {
 	exercises []models.Exercise
 	entries   []models.ExerciseEntry
 
-	errCreate            error
-	errGetByName          error
-	errList               error
-	errCreateEntry        error
-	errGetEntry           error
-	errUpdateEntry        error
-	errUpdateEntryWithDate error
-	errDeleteEntry        error
-	errListEntries        error
-	errGetEntriesByExercise error
-	errGetEntriesByDateRange error
-	errGetExerciseByID       error
+	errCreate                       error
+	errGetByName                    error
+	errList                         error
+	errCreateEntry                  error
+	errGetEntry                     error
+	errUpdateEntry                  error
+	errUpdateEntryWithDate          error
+	errDeleteEntry                  error
+	errListEntries                  error
+	errGetEntriesByExercisePaginated error
+	errGetEntriesByDateRange        error
+	errGetExerciseByID              error
+	errGetMaxWeightByExercise       error
+	errGetLastSetByExercise         error
 }
 
 func newMockRepository() *mockRepository {
@@ -171,19 +173,60 @@ func (m *mockRepository) ListEntries(userID string, limit int) ([]models.Exercis
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByExercise(exerciseID string, userID string) ([]models.ExerciseEntry, error) {
-	if m.errGetEntriesByExercise != nil {
-		return nil, m.errGetEntriesByExercise
+func (m *mockRepository) GetEntriesByExercisePaginated(exerciseID string, userID string, limit, offset int) ([]models.ExerciseEntry, error) {
+	if m.errGetEntriesByExercisePaginated != nil {
+		return nil, m.errGetEntriesByExercisePaginated
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var result []models.ExerciseEntry
+	var all []models.ExerciseEntry
 	for _, e := range m.entries {
 		if e.ExerciseID == exerciseID && e.UserID == userID {
-			result = append(result, e)
+			all = append(all, e)
 		}
 	}
-	return result, nil
+	if offset >= len(all) {
+		return []models.ExerciseEntry{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end], nil
+}
+
+func (m *mockRepository) GetMaxWeightByExercise(exerciseID string, userID string) (float64, error) {
+	if m.errGetMaxWeightByExercise != nil {
+		return 0, m.errGetMaxWeightByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var max float64
+	for _, e := range m.entries {
+		if e.ExerciseID == exerciseID && e.UserID == userID && e.Weight > max {
+			max = e.Weight
+		}
+	}
+	return max, nil
+}
+
+func (m *mockRepository) GetLastSetByExercise(exerciseID string, userID string) (*models.ExerciseEntry, error) {
+	if m.errGetLastSetByExercise != nil {
+		return nil, m.errGetLastSetByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var last *models.ExerciseEntry
+	for i, e := range m.entries {
+		if e.ExerciseID != exerciseID || e.UserID != userID {
+			continue
+		}
+		if last == nil || e.CreatedAt.After(last.CreatedAt) {
+			cp := m.entries[i]
+			last = &cp
+		}
+	}
+	return last, nil
 }
 
 func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID string) ([]models.ExerciseEntry, error) {
@@ -388,17 +431,123 @@ func TestEntryController_List_Error(t *testing.T) {
 
 func TestEntryController_GetEntriesByExercise(t *testing.T) {
 	ec, mock := setupEntryController(t)
+	now := time.Now()
 	mock.entries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
-		{ID: "entry-2", UserID: "user-1", ExerciseID: "ex-2", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
-		{ID: "entry-3", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 3, Weight: 110},
+		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: now.Add(-2 * time.Hour)},
+		{ID: "entry-2", UserID: "user-1", ExerciseID: "ex-2", ExerciseName: "Bench Press", Reps: 8, Weight: 80, CreatedAt: now.Add(-1 * time.Hour)},
+		{ID: "entry-3", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 3, Weight: 110, CreatedAt: now},
 	}
 
-	entries, err := ec.GetEntriesByExercise("ex-1", "user-1")
+	page, err := ec.GetEntriesByExercise("ex-1", "user-1", 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 squat entries, got %d", len(entries))
+	if len(page.Entries) != 2 {
+		t.Fatalf("expected 2 squat entries, got %d", len(page.Entries))
+	}
+	if page.Stats.MaxWeight != 110 {
+		t.Errorf("expected max weight 110, got %v", page.Stats.MaxWeight)
+	}
+	if page.Stats.LastSet.Weight != 110 {
+		t.Errorf("expected last set weight 110, got %v", page.Stats.LastSet.Weight)
+	}
+}
+
+func TestEntryController_GetEntriesByExercise_Pagination(t *testing.T) {
+	ec, mock := setupEntryController(t)
+	now := time.Now()
+	var entries []models.ExerciseEntry
+	for i := 0; i < 30; i++ {
+		entries = append(entries, models.ExerciseEntry{
+			ID:         "entry-" + string(rune('a'+i)),
+			UserID:     "user-1",
+			ExerciseID: "ex-1",
+			Reps:       5,
+			Weight:     float64(100 + i),
+			CreatedAt:  now.Add(time.Duration(i) * time.Minute),
+		})
+	}
+	mock.entries = entries
+
+	page1, err := ec.GetEntriesByExercise("ex-1", "user-1", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(page1.Entries) != ExerciseHistoryPageSize {
+		t.Fatalf("page 1: expected %d entries, got %d", ExerciseHistoryPageSize, len(page1.Entries))
+	}
+	if !page1.HasNext {
+		t.Error("page 1 should have a next page")
+	}
+	if page1.HasPrev {
+		t.Error("page 1 should not have a previous page")
+	}
+	if page1.Page != 1 {
+		t.Errorf("expected page 1, got %d", page1.Page)
+	}
+	// Stats should reflect the full history, not the slice.
+	if page1.Stats.MaxWeight != 129 {
+		t.Errorf("expected max weight 129 across all 30 entries, got %v", page1.Stats.MaxWeight)
+	}
+
+	page2, err := ec.GetEntriesByExercise("ex-1", "user-1", 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(page2.Entries) != 5 {
+		t.Fatalf("page 2: expected 5 entries (30 - 25), got %d", len(page2.Entries))
+	}
+	if page2.HasNext {
+		t.Error("page 2 (last page) should not have a next page")
+	}
+	if !page2.HasPrev {
+		t.Error("page 2 should have a previous page")
+	}
+
+	page3, err := ec.GetEntriesByExercise("ex-1", "user-1", 3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(page3.Entries) != 0 {
+		t.Fatalf("page 3 (beyond data): expected 0 entries, got %d", len(page3.Entries))
+	}
+	if page3.HasNext {
+		t.Error("page 3 (beyond data) should not have a next page")
+	}
+	if !page3.HasPrev {
+		t.Error("page 3 (beyond data) should still have a previous page")
+	}
+}
+
+func TestEntryController_GetEntriesByExercise_ClampsInvalidPage(t *testing.T) {
+	ec, mock := setupEntryController(t)
+	mock.entries = []models.ExerciseEntry{
+		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", Reps: 5, Weight: 100},
+	}
+
+	page, err := ec.GetEntriesByExercise("ex-1", "user-1", 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if page.Page != 1 {
+		t.Errorf("expected page to be clamped to 1, got %d", page.Page)
+	}
+}
+
+func TestEntryController_GetEntriesByExercise_EmptyStats(t *testing.T) {
+	ec, _ := setupEntryController(t)
+
+	page, err := ec.GetEntriesByExercise("ex-1", "user-1", 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if page.Stats.MaxWeight != 0 {
+		t.Errorf("expected max weight 0 for empty history, got %v", page.Stats.MaxWeight)
+	}
+	if page.Stats.LastSet.ID != "" {
+		t.Errorf("expected zero-value last set for empty history, got %+v", page.Stats.LastSet)
+	}
+	if page.HasNext || page.HasPrev {
+		t.Error("empty history should have no pagination state")
 	}
 }

@@ -7,8 +7,18 @@ import (
 	"stren/internal/views/components"
 )
 
-// ExerciseHistory shows all entries for a specific exercise.
-templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+// historyTableWrapID is the id of the swappable region around the history
+// table. The htmx-driven pagination controls swap this region's outerHTML
+// on each page change.
+const historyTableWrapID = "history-table-wrap"
+
+// historySpinnerID is the id of the htmx indicator shown while a page loads.
+const historySpinnerID = "history-spinner"
+
+// ExerciseHistory renders the full exercise history page, including the
+// header, lifetime stats, and the paginated table. The pagination controls
+// swap only the table region via htmx.
+templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPage, userName string, isAuthenticated bool, isAdmin bool) {
 	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="">
 			<div class="flex items-center justify-between mb-2 gap-4">
@@ -89,7 +99,7 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 				</section>
 			</details>
 		</div>
-		if len(entries) == 0 {
+		if len(page.Entries) == 0 {
 			<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
 				<header class="flex max-w-sm flex-col items-center gap-3 text-center">
 					<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
@@ -107,67 +117,77 @@ templ ExerciseHistory(exercise *models.Exercise, entries []models.ExerciseEntry,
 			</div>
 		} else {
 			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: getLastSet(entries)})
-				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", maxWeight(entries))})
+				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: lastSetLabel(page.Stats.LastSet)})
+				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", page.Stats.MaxWeight)})
 			</div>
 			<h3 class="flex items-center gap-2 mb-4">
 				@components.Icon(components.IconProps{Name: "dumbbell", Size: 20})
 				History
 			</h3>
-			<div class="overflow-x-auto">
-				<table class="table">
-					<thead>
-						<tr>
-							<th>Date</th>
-							<th>Reps</th>
-							<th>Weight</th>
-							<th>Notes</th>
-							<th>Actions</th>
+			@HistoryTable(exercise.ID, page)
+		}
+	}
+}
+
+// HistoryTable renders the paginated table of entries plus the previous / next
+// controls. It is also the swap target for htmx-driven page changes: the
+// outer wrapper carries an id so the response replaces it via outerHTML.
+templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage) {
+	<div id={ historyTableWrapID } class="mb-4">
+		<div class="overflow-x-auto">
+			<table class="table">
+				<thead>
+					<tr>
+						<th>Date</th>
+						<th>Reps</th>
+						<th>Weight</th>
+						<th>Notes</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, entry := range page.Entries {
+						<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
+							<td>{ entry.FormattedDate() }</td>
+							<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
+							<td>{ entry.FormattedWeight() }</td>
+							<td>{ entry.Notes }</td>
+							<td>
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
+									class="btn-outline p-2"
+									title="Edit"
+								>
+									@components.Icon(components.IconProps{Name: "edit", Size: 16})
+								</a>
+							</td>
 						</tr>
-					</thead>
-					<tbody>
-						for _, entry := range entries {
-							<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
-								<td>{ entry.FormattedDate() }</td>
-								<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
-								<td>{ entry.FormattedWeight() }</td>
-								<td>{ entry.Notes }</td>
-								<td>
-									<a
-										href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
-										class="btn-outline p-2"
-										title="Edit"
-									>
-										@components.Icon(components.IconProps{Name: "edit", Size: 16})
-									</a>
-								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
+					}
+				</tbody>
+			</table>
+		</div>
+		<span id={ historySpinnerID } class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground mt-2">
+			@components.Icon(components.IconProps{Name: "loader", Size: 16})
+			Loading...
+		</span>
+		if page.HasPrev || page.HasNext {
+			@components.Pagination(components.PaginationProps{
+				HxGetBase: fmt.Sprintf("/exercises/%s", exerciseID),
+				Target:    historyTableWrapID,
+				Indicator: historySpinnerID,
+				Page:      page.Page,
+				HasPrev:   page.HasPrev,
+				HasNext:   page.HasNext,
+			})
 		}
-	}
+	</div>
 }
 
-// Helper functions
-func maxWeight(entries []models.ExerciseEntry) float64 {
-	if len(entries) == 0 {
-		return 0
-	}
-	max := entries[0].Weight
-	for _, e := range entries[1:] {
-		if e.Weight > max {
-			max = e.Weight
-		}
-	}
-	return max
-}
-
-func getLastSet(entries []models.ExerciseEntry) string {
-	if len(entries) == 0 {
+// lastSetLabel renders the "Last Set" stat-card value. Returns "No entries"
+// when the user has not yet logged a set for this exercise.
+func lastSetLabel(entry models.ExerciseEntry) string {
+	if entry.ID == "" {
 		return "No entries"
 	}
-	last := entries[0]
-	return fmt.Sprintf("%.1f kg × %d", last.Weight, last.Reps)
+	return fmt.Sprintf("%.1f kg × %d", entry.Weight, entry.Reps)
 }

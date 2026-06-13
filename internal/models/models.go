@@ -44,6 +44,23 @@ type ExerciseEntry struct {
 	CreatedAt    time.Time
 }
 
+// HistoryStats summarises an exercise's training history for the header stat cards.
+// LastSet is a zero-value ExerciseEntry when the user has no entries for the exercise.
+type HistoryStats struct {
+	MaxWeight float64
+	LastSet   ExerciseEntry
+}
+
+// ExerciseHistoryPage bundles a single page of history entries with the stats
+// needed to render the page header and the pagination state.
+type ExerciseHistoryPage struct {
+	Entries []ExerciseEntry
+	Stats   HistoryStats
+	Page    int
+	HasPrev bool
+	HasNext bool
+}
+
 // FormattedWeight returns the weight with unit
 func (e *ExerciseEntry) FormattedWeight() string {
 	return fmt.Sprintf("%.1f kg", e.Weight)

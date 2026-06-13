@@ -77,9 +77,59 @@ func (ec *EntryController) List() ([]models.Exercise, error) {
 	return ec.repo.List()
 }
 
-// GetEntriesByExercise returns all entries for a specific exercise ID.
-func (ec *EntryController) GetEntriesByExercise(exerciseID string, userID string) ([]models.ExerciseEntry, error) {
-	return ec.repo.GetEntriesByExercise(exerciseID, userID)
+// ExerciseHistoryPageSize is the number of entries shown per page on the
+// exercise history view. Exposed as a constant so views and tests can rely on it.
+const ExerciseHistoryPageSize = 25
+
+// GetEntriesByExercise returns a paginated page of entries for a specific exercise
+// ID along with the user's lifetime stats for that exercise. Pages are 1-indexed;
+// invalid pages are clamped to 1. Scopes to the given user ID.
+func (ec *EntryController) GetEntriesByExercise(exerciseID string, userID string, page int) (*models.ExerciseHistoryPage, error) {
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * ExerciseHistoryPageSize
+
+	// Fetch one extra row to detect whether a next page exists without a COUNT(*).
+	rows, err := ec.repo.GetEntriesByExercisePaginated(exerciseID, userID, ExerciseHistoryPageSize+1, offset)
+	if err != nil {
+		return nil, err
+	}
+	hasNext := len(rows) > ExerciseHistoryPageSize
+	if hasNext {
+		rows = rows[:ExerciseHistoryPageSize]
+	}
+
+	stats, err := ec.loadHistoryStats(exerciseID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.ExerciseHistoryPage{
+		Entries: rows,
+		Stats:   stats,
+		Page:    page,
+		HasPrev: page > 1,
+		HasNext: hasNext,
+	}, nil
+}
+
+// loadHistoryStats fetches the personal best and most recent set for the header
+// stat cards. Always reflects the user's full history, not just the current page.
+func (ec *EntryController) loadHistoryStats(exerciseID string, userID string) (models.HistoryStats, error) {
+	maxWeight, err := ec.repo.GetMaxWeightByExercise(exerciseID, userID)
+	if err != nil {
+		return models.HistoryStats{}, err
+	}
+	lastSet, err := ec.repo.GetLastSetByExercise(exerciseID, userID)
+	if err != nil {
+		return models.HistoryStats{}, err
+	}
+	stats := models.HistoryStats{MaxWeight: maxWeight}
+	if lastSet != nil {
+		stats.LastSet = *lastSet
+	}
+	return stats, nil
 }
 
 // GetExerciseByID returns an exercise by its UUID.

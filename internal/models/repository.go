@@ -46,9 +46,17 @@ type Repository interface {
 	// If limit > 0, results are capped at that count. Scopes to the given user ID.
 	ListEntries(userID string, limit int) ([]ExerciseEntry, error)
 
-	// GetEntriesByExercise returns all entries for a specific exercise ID.
-	// Scopes to the given user ID.
-	GetEntriesByExercise(exerciseID string, userID string) ([]ExerciseEntry, error)
+	// GetEntriesByExercisePaginated returns a page of entries for a specific exercise ID,
+	// ordered by created_at descending. Scopes to the given user ID.
+	GetEntriesByExercisePaginated(exerciseID string, userID string, limit, offset int) ([]ExerciseEntry, error)
+
+	// GetMaxWeightByExercise returns the heaviest weight logged for the given exercise by
+	// the given user. Returns 0 when no entries exist. Scopes to the given user ID.
+	GetMaxWeightByExercise(exerciseID string, userID string) (float64, error)
+
+	// GetLastSetByExercise returns the most recent entry for the given exercise by the
+	// given user, or sql.ErrNoRows when no entries exist. Scopes to the given user ID.
+	GetLastSetByExercise(exerciseID string, userID string) (*ExerciseEntry, error)
 
 	// GetEntriesByDateRange returns entries within an inclusive date range.
 	// Scopes to the given user ID.

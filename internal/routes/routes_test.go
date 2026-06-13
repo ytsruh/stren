@@ -29,20 +29,22 @@ type mockRepository struct {
 	exercises []models.Exercise
 	entries   []models.ExerciseEntry
 
-	errCreate              error
-	errGetByName           error
-	errGetByID             error
-	errUpdate              error
-	errList                error
-	errCreateEntry         error
-	errGetEntry            error
-	errUpdateEntry         error
-	errUpdateEntryWithDate error
-	errDeleteEntry         error
-	errListEntries         error
-	errGetEntriesByExercise error
-	errGetEntriesByDateRange error
-	errGetExerciseByID       error
+	errCreate                       error
+	errGetByName                    error
+	errGetByID                      error
+	errUpdate                       error
+	errList                         error
+	errCreateEntry                  error
+	errGetEntry                     error
+	errUpdateEntry                  error
+	errUpdateEntryWithDate          error
+	errDeleteEntry                  error
+	errListEntries                  error
+	errGetEntriesByExercisePaginated error
+	errGetEntriesByDateRange        error
+	errGetExerciseByID              error
+	errGetMaxWeightByExercise       error
+	errGetLastSetByExercise         error
 }
 
 func newMockRepository() *mockRepository {
@@ -259,19 +261,60 @@ func (m *mockRepository) ListEntries(userID string, limit int) ([]models.Exercis
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByExercise(exerciseID string, userID string) ([]models.ExerciseEntry, error) {
-	if m.errGetEntriesByExercise != nil {
-		return nil, m.errGetEntriesByExercise
+func (m *mockRepository) GetEntriesByExercisePaginated(exerciseID string, userID string, limit, offset int) ([]models.ExerciseEntry, error) {
+	if m.errGetEntriesByExercisePaginated != nil {
+		return nil, m.errGetEntriesByExercisePaginated
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var result []models.ExerciseEntry
+	var all []models.ExerciseEntry
 	for _, e := range m.entries {
 		if e.ExerciseID == exerciseID && e.UserID == userID {
-			result = append(result, e)
+			all = append(all, e)
 		}
 	}
-	return result, nil
+	if offset >= len(all) {
+		return []models.ExerciseEntry{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end], nil
+}
+
+func (m *mockRepository) GetMaxWeightByExercise(exerciseID string, userID string) (float64, error) {
+	if m.errGetMaxWeightByExercise != nil {
+		return 0, m.errGetMaxWeightByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var max float64
+	for _, e := range m.entries {
+		if e.ExerciseID == exerciseID && e.UserID == userID && e.Weight > max {
+			max = e.Weight
+		}
+	}
+	return max, nil
+}
+
+func (m *mockRepository) GetLastSetByExercise(exerciseID string, userID string) (*models.ExerciseEntry, error) {
+	if m.errGetLastSetByExercise != nil {
+		return nil, m.errGetLastSetByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var last *models.ExerciseEntry
+	for i, e := range m.entries {
+		if e.ExerciseID != exerciseID || e.UserID != userID {
+			continue
+		}
+		if last == nil || e.CreatedAt.After(last.CreatedAt) {
+			cp := m.entries[i]
+			last = &cp
+		}
+	}
+	return last, nil
 }
 
 func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID string) ([]models.ExerciseEntry, error) {
@@ -1089,6 +1132,114 @@ func TestExerciseHistory(t *testing.T) {
 	}
 	if rec.Body.String() == "" {
 		t.Fatal("expected non-empty body")
+	}
+}
+
+func TestExerciseHistory_PageQuery(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	now := time.Now()
+	var entries []models.ExerciseEntry
+	for i := 0; i < 30; i++ {
+		entries = append(entries, models.ExerciseEntry{
+			ID:         fmt.Sprintf("entry-%d", i),
+			UserID:     "user-1",
+			ExerciseID: "uuid-exercise-1",
+			Reps:       5,
+			Weight:     float64(100 + i),
+			CreatedAt:  now.Add(time.Duration(i) * time.Minute),
+		})
+	}
+	mock.entries = entries
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1?page=2", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseHistory(c); err != nil {
+		t.Fatalf("ExerciseHistory (?page=2) failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Page 2") {
+		t.Error("expected 'Page 2' indicator in full-page response")
+	}
+}
+
+func TestExerciseHistory_HtmxFragment(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+	mock.exercises = []models.Exercise{
+		{ID: "uuid-exercise-1", Name: "Squat"},
+	}
+	now := time.Now()
+	var entries []models.ExerciseEntry
+	for i := 0; i < 30; i++ {
+		entries = append(entries, models.ExerciseEntry{
+			ID:         fmt.Sprintf("entry-%d", i),
+			UserID:     "user-1",
+			ExerciseID: "uuid-exercise-1",
+			Reps:       5,
+			Weight:     float64(100 + i),
+			CreatedAt:  now.Add(time.Duration(i) * time.Minute),
+		})
+	}
+	mock.entries = entries
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1?page=2", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("uuid-exercise-1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ExerciseHistory(c); err != nil {
+		t.Fatalf("ExerciseHistory (htmx) failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if vary := rec.Header().Get("Vary"); !strings.Contains(vary, "HX-Request") {
+		t.Errorf("expected Vary: HX-Request header, got %q", vary)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "history-table-wrap") {
+		t.Error("expected fragment to contain swappable wrap id")
+	}
+	// Fragment must NOT include the full page chrome.
+	if strings.Contains(body, "<html") {
+		t.Error("fragment response should not include the full HTML document")
+	}
+	if !strings.Contains(body, "Page 2") {
+		t.Error("expected 'Page 2' indicator inside the fragment")
+	}
+}
+
+func TestParsePage(t *testing.T) {
+	tests := []struct {
+		raw      string
+		expected int
+	}{
+		{"", 1},
+		{"0", 1},
+		{"-5", 1},
+		{"abc", 1},
+		{"1", 1},
+		{"3", 3},
+		{"42", 42},
+	}
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			if got := parsePage(tt.raw); got != tt.expected {
+				t.Errorf("parsePage(%q) = %d, want %d", tt.raw, got, tt.expected)
+			}
+		})
 	}
 }
 
