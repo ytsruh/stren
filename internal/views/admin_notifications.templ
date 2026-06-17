@@ -12,11 +12,13 @@ templ AdminNotificationsPage(userName string, isAdmin bool) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Notifications"})
 		<p class="text-sm text-muted-foreground my-4">Send a push notification to every subscribed device. Use sparingly — a notification goes to every active subscription in the system.</p>
 		<form
+			id="admin-notifications-form"
 			hx-post="/admin/notifications/send"
 			hx-target="#send-result"
 			hx-swap="innerHTML"
 			hx-indicator="#send-spinner"
-			class="form grid gap-6 max-w-[600px]"
+			hx-on:admin-notification-sent="this.reset()"
+			class="form grid gap-6 max-w-full"
 		>
 			<div class="grid gap-2">
 				<label for="title">Title</label>
@@ -66,7 +68,7 @@ templ AdminNotificationResult(result push.BroadcastResult) {
 					<dd>{ itoa(result.Deleted) }</dd>
 				}
 				if result.Failed > 0 {
-					<dt class="text-muted-foreground text-destructive">Failed:</dt>
+					<dt class="text-destructive">Failed:</dt>
 					<dd class="text-destructive">{ itoa(result.Failed) }</dd>
 				}
 				<dt class="text-muted-foreground">Total attempted:</dt>

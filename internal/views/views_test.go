@@ -461,16 +461,13 @@ func TestEntryForm_New(t *testing.T) {
 	if !strings.Contains(html, wantMaxAttr) {
 		t.Errorf("expected form to expose %s", wantMaxAttr)
 	}
-	// Three starter rows rendered, indices 0/1/2.
-	for _, i := range []string{"0", "1", "2"} {
-		want := fmt.Sprintf(`name="sets[%s][reps]"`, i)
-		if !strings.Contains(html, want) {
-			t.Errorf("expected starter row with %s", want)
-		}
-		wantWeight := fmt.Sprintf(`name="sets[%s][weight]"`, i)
-		if !strings.Contains(html, wantWeight) {
-			t.Errorf("expected starter row with %s", wantWeight)
-		}
+	// One starter row rendered at index 0; the user adds more via the
+	// Add Set button (which clones the hidden #entry-set-template).
+	if !strings.Contains(html, `name="sets[0][reps]"`) {
+		t.Error(`expected starter row with name="sets[0][reps]"`)
+	}
+	if !strings.Contains(html, `name="sets[0][weight]"`) {
+		t.Error(`expected starter row with name="sets[0][weight]"`)
 	}
 	// Remove button is wired up via data-remove-set.
 	if !strings.Contains(html, `data-remove-set`) {
@@ -1141,23 +1138,23 @@ func TestIcon_Trash(t *testing.T) {
 	if !strings.Contains(html, `width="16"`) {
 		t.Error("expected width attribute")
 	}
-	if !strings.Contains(html, "polyline") {
-		t.Error("expected trash icon path")
+	if !strings.Contains(html, "lucide-trash") {
+		t.Error("expected trash icon (lucide-trash class)")
 	}
 }
 
 func TestIcon_Unknown(t *testing.T) {
 	html := renderToString(t, components.Icon(components.IconProps{Name: "nonexistent"}))
-	if !strings.Contains(html, `<circle`) {
-		t.Error("expected fallback circle for unknown icon")
+	if !strings.Contains(html, "lucide-file-question-mark") {
+		t.Error("expected file-question-mark fallback for unknown icon")
 	}
 }
 
 func TestIcon_Alias(t *testing.T) {
 	// "delete" should resolve to "trash" icon.
 	html := renderToString(t, components.Icon(components.IconProps{Name: "delete"}))
-	if !strings.Contains(html, "polyline") {
-		t.Error("expected trash icon path for 'delete' alias")
+	if !strings.Contains(html, "lucide-trash") {
+		t.Error("expected trash icon (lucide-trash class) for 'delete' alias")
 	}
 }
 

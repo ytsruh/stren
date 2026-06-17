@@ -16,11 +16,20 @@ func (h *Handler) AdminNotificationsForm(c echo.Context) error {
 	return render(c, views.AdminNotificationsPage(claims.Name, claims.IsAdmin))
 }
 
+// adminNotificationSentTrigger is the HTMX trigger name fired via the
+// HX-Trigger response header when a broadcast (or a no-subscribers
+// short-circuit) completes. The admin notifications form listens for
+// it and clears its fields.
+const adminNotificationSentTrigger = "admin-notification-sent"
+
 // AdminNotificationsSend handles POST /admin/notifications/send. It
 // validates the form, runs the fan-out, and returns an HTMX-swapped
 // result card summarising the broadcast. Empty subscriber lists
 // short-circuit to a friendly "no subscribers yet" card so the admin
-// gets immediate feedback.
+// gets immediate feedback. On any successful run the HX-Trigger
+// response header asks the form to reset itself; validation errors
+// deliberately omit it so the admin can correct and retry without
+// losing their draft.
 func (h *Handler) AdminNotificationsSend(c echo.Context) error {
 	in := controllers.BroadcastInput{
 		Title: c.FormValue("title"),
@@ -38,6 +47,7 @@ func (h *Handler) AdminNotificationsSend(c echo.Context) error {
 		return render(c, views.AdminNotificationError(err.Error()))
 	}
 
+	c.Response().Header().Set("HX-Trigger", adminNotificationSentTrigger)
 	if result.Total == 0 {
 		return render(c, views.AdminNotificationNoSubscribers())
 	}
