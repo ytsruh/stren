@@ -31,13 +31,23 @@ type ChartDataset struct {
 	Label  string    // tooltip/legend label (e.g., "Weight")
 	Values []float64 // y-axis values, in label order
 	Color  string    // line/fill color; defaults to blue
+	// Dashed renders the series as a reference line: no fill, no point
+	// markers, dashed stroke. Use for trendlines, targets, etc. Defaults
+	// to false (filled area line) so existing call sites are unchanged.
+	Dashed bool
+	// HiddenInLegend suppresses the series in the legend while still
+	// rendering it on the chart and showing it in tooltips. Defaults to
+	// false so existing call sites are unchanged.
+	HiddenInLegend bool
 }
 
 // chartSeries is the JSON-serialised form of a dataset with the color resolved.
 type chartSeries struct {
-	Label  string    `json:"label"`
-	Values []float64 `json:"values"`
-	Color  string    `json:"color"`
+	Label         string    `json:"label"`
+	Values        []float64 `json:"values"`
+	Color         string    `json:"color"`
+	Dashed        bool      `json:"dashed"`
+	HiddenInLegend bool     `json:"hiddenInLegend"`
 }
 
 // Chart renders a generic ChartJS line/area chart. The data is embedded in
@@ -53,9 +63,11 @@ templ Chart(props ChartProps) {
 				color = chartDefaultColor
 			}
 			series = append(series, chartSeries{
-				Label:  d.Label,
-				Values: d.Values,
-				Color:  color,
+				Label:          d.Label,
+				Values:         d.Values,
+				Color:          color,
+				Dashed:         d.Dashed,
+				HiddenInLegend: d.HiddenInLegend,
 			})
 		}
 		payload := struct {
@@ -99,6 +111,20 @@ templ Chart(props ChartProps) {
 					return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
 				}
 				var ds = data.datasets.map(function(d) {
+					if (d.dashed) {
+						return {
+							label: d.label,
+							data: d.values,
+							borderColor: d.color,
+							backgroundColor: hexToRgba(d.color, 0.0),
+							fill: false,
+							borderDash: [6, 4],
+							borderWidth: 1.5,
+							tension: 0,
+							pointRadius: 0,
+							pointHoverRadius: 0
+						};
+					}
 					return {
 						label: d.label,
 						data: d.values,
@@ -131,7 +157,15 @@ templ Chart(props ChartProps) {
 						maintainAspectRatio: false,
 						interaction: { mode: 'index', intersect: false },
 						plugins: {
-							legend: { display: ds.length > 1 },
+							legend: {
+								display: ds.length > 1,
+								labels: {
+									filter: function(item, data) {
+										var ds = data.datasets[item.datasetIndex];
+										return !(ds && ds.hiddenInLegend);
+									}
+								}
+							},
 							tooltip: {
 								callbacks: {
 									labelColor: function(context) {

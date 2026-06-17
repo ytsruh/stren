@@ -30,8 +30,12 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 
 // chartDataForWeight converts a list of weight entries into the generic Chart
 // props expected by components.Chart. Entries are sorted ascending by date so
-// the line runs left-to-right. Labels are short dates ("10 Jun"). The chart
-// renders nothing when fewer than 2 entries are provided (handled inside Chart).
+// the line runs left-to-right. Labels are short dates ("10 Jun"). A second
+// dataset containing a least-squares regression line is appended so the
+// user can see the overall trend at a glance. The trendline is rendered
+// dashed and hidden from the legend via opt-in flags on ChartDataset. The
+// chart renders nothing when fewer than 2 entries are provided (handled
+// inside Chart).
 func chartDataForWeight(entries []models.WeightEntry) components.ChartProps {
 	sorted := make([]models.WeightEntry, len(entries))
 	copy(sorted, entries)
@@ -44,13 +48,22 @@ func chartDataForWeight(entries []models.WeightEntry) components.ChartProps {
 		labels[i] = e.CreatedAt.Format("02 Jan")
 		values[i] = e.Weight
 	}
+	datasets := []components.ChartDataset{
+		{Label: "Weight (kg)", Values: values},
+	}
+	if len(values) >= 2 {
+		datasets = append(datasets, components.ChartDataset{
+			Label:          "Trend",
+			Values:         components.LinearRegression(values),
+			Dashed:         true,
+			HiddenInLegend: true,
+		})
+	}
 	return components.ChartProps{
-		ID:     "weight-chart",
-		Title:  "",
-		Labels: labels,
-		Datasets: []components.ChartDataset{
-			{Label: "Weight (kg)", Values: values},
-		},
+		ID:       "weight-chart",
+		Title:    "",
+		Labels:   labels,
+		Datasets: datasets,
 	}
 }
 
