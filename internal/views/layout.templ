@@ -160,20 +160,31 @@ templ Layout(data PageData) {
 												<span>Users</span>
 											</a>
 										</li>
-										<li>
-											<a
-												href="/admin/feedback"
-												if data.CurrentPath == "/admin/feedback" {
-													aria-current="page"
-												}
-											>
-												@components.Icon(components.IconProps{Name: "message", Size: 18})
-												<span>Feedback</span>
-											</a>
-										</li>
-									</ul>
-								</div>
-							}
+						<li>
+							<a
+								href="/admin/feedback"
+								if data.CurrentPath == "/admin/feedback" {
+									aria-current="page"
+								}
+							>
+								@components.Icon(components.IconProps{Name: "message", Size: 18})
+								<span>Feedback</span>
+							</a>
+						</li>
+						<li>
+							<a
+								href="/admin/notifications"
+								if data.CurrentPath == "/admin/notifications" {
+									aria-current="page"
+								}
+							>
+								@components.Icon(components.IconProps{Name: "bell", Size: 18})
+								<span>Notifications</span>
+							</a>
+						</li>
+					</ul>
+				</div>
+			}
 							<div>
 								<h3>Account</h3>
 								<ul>
@@ -302,14 +313,15 @@ templ Layout(data PageData) {
 					}, 500);
 				});
 			</script>
-			<script>
-				if ('serviceWorker' in navigator) {
-					navigator.serviceWorker.register('/sw.js').catch(function(err) {
-						console.error('Service worker registration failed:', err);
-					});
-				}
-			</script>
-			<div id="toaster" class="toaster"></div>
+		<script>
+			if ('serviceWorker' in navigator) {
+				navigator.serviceWorker.register('/sw.js').catch(function(err) {
+					console.error('Service worker registration failed:', err);
+				});
+			}
+		</script>
+		<script src="/js/push.js" defer></script>
+		<div id="toaster" class="toaster"></div>
 		</body>
 	</html>
 }

@@ -24,31 +24,41 @@ import (
 
 // Handler holds dependencies for HTTP route handlers.
 type Handler struct {
-	authCtrl      *controllers.AuthController
-	entryCtrl     *controllers.EntryController
-	adminCtrl     *controllers.AdminController
-	adminUserCtrl *controllers.AdminUserController
-	feedbackCtrl  *controllers.FeedbackController
-	timersCtrl    *controllers.TimersController
-	weightCtrl    *controllers.WeightController
-	userRepo      models.UserRepo
-	jwtService    *utils.JWTService
-	validator     utils.Validator
+	authCtrl               *controllers.AuthController
+	entryCtrl              *controllers.EntryController
+	adminCtrl              *controllers.AdminController
+	adminUserCtrl          *controllers.AdminUserController
+	feedbackCtrl           *controllers.FeedbackController
+	timersCtrl             *controllers.TimersController
+	weightCtrl             *controllers.WeightController
+	pushCtrl               *controllers.PushController
+	adminNotificationsCtrl *controllers.AdminNotificationsController
+	pushRepo               models.PushSubscriptionRepo
+	vapidPublicKey         string
+	pushConfigured         bool
+	userRepo               models.UserRepo
+	jwtService             *utils.JWTService
+	validator              utils.Validator
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
-		authCtrl:      authCtrl,
-		entryCtrl:     entryCtrl,
-		adminCtrl:     adminCtrl,
-		adminUserCtrl: adminUserCtrl,
-		feedbackCtrl:  feedbackCtrl,
-		timersCtrl:    timersCtrl,
-		weightCtrl:    weightCtrl,
-		userRepo:      userRepo,
-		jwtService:    jwtService,
-		validator:     validator,
+		authCtrl:               authCtrl,
+		entryCtrl:              entryCtrl,
+		adminCtrl:              adminCtrl,
+		adminUserCtrl:          adminUserCtrl,
+		feedbackCtrl:           feedbackCtrl,
+		timersCtrl:             timersCtrl,
+		weightCtrl:             weightCtrl,
+		pushCtrl:               pushCtrl,
+		adminNotificationsCtrl: adminNotificationsCtrl,
+		pushRepo:               pushRepo,
+		vapidPublicKey:         vapidPublicKey,
+		pushConfigured:         pushConfigured,
+		userRepo:               userRepo,
+		jwtService:             jwtService,
+		validator:              validator,
 	}
 }
 
@@ -120,6 +130,10 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	// Photo upload (presigned URL for direct browser → R2)
 	e.POST("/api/weight/photo-upload", h.PhotoUploadURL)
 
+	// Push subscription endpoints (authenticated)
+	e.POST("/api/push/subscribe", h.PushSubscribe)
+	e.DELETE("/api/push/unsubscribe", h.PushUnsubscribe)
+
 	// Admin routes
 	admin := e.Group("/admin", AdminMiddleware())
 	admin.GET("/exercises", h.AdminListExercises)
@@ -131,6 +145,8 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	admin.GET("/feedback/:id", h.AdminFeedbackDetail)
 	admin.POST("/feedback/:id/close", h.AdminCloseFeedback)
 	admin.GET("/users", h.AdminListUsers)
+	admin.GET("/notifications", h.AdminNotificationsForm)
+	admin.POST("/notifications/send", h.AdminNotificationsSend)
 
 	// API routes for htmx
 	e.GET("/api/exercises", h.ListExercisesJSON)

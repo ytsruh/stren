@@ -25,15 +25,21 @@ func TestIcon(t *testing.T) {
 	if !strings.Contains(html, `height="18"`) {
 		t.Error("expected height 18")
 	}
-	if !strings.Contains(html, `<polyline points="20 6 9 17 4 12"></polyline>`) {
+	if !strings.Contains(html, `lucide-check`) {
+		t.Error("expected check icon")
+	}
+	if !strings.Contains(html, `<path d="M20 6 9 17l-5-5"></path>`) {
 		t.Error("expected check icon path")
 	}
 }
 
 func TestIconAlias(t *testing.T) {
 	html := renderToString(t, Icon(IconProps{Name: "delete", Size: 24}))
-	if !strings.Contains(html, `<polyline points="3 6 5 6 21 6"></polyline>`) {
+	if !strings.Contains(html, `lucide-trash`) {
 		t.Error("expected delete aliased to trash")
+	}
+	if !strings.Contains(html, `<path d="M3 6h18"></path>`) {
+		t.Error("expected trash icon path")
 	}
 }
 
@@ -46,8 +52,8 @@ func TestIconDefaultSize(t *testing.T) {
 
 func TestIconUnknownName(t *testing.T) {
 	html := renderToString(t, Icon(IconProps{Name: "unknown-icon", Size: 24}))
-	if !strings.Contains(html, `<circle cx="12" cy="12" r="10"></circle>`) {
-		t.Error("expected fallback circle for unknown icon")
+	if !strings.Contains(html, `lucide-file-question-mark`) {
+		t.Error("expected fallback icon for unknown name")
 	}
 }
 

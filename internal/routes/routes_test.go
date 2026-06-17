@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -586,6 +587,81 @@ func (m *mockWeightRepository) Delete(id string, userID string) error {
 	return nil
 }
 
+// mockPushSubscriptionRepository satisfies the models.PushSubscriptionRepo
+// interface for the route tests. The push routes only use a subset of
+// the methods, but every method on the interface is implemented so
+// the compile-time check holds.
+type mockPushSubscriptionRepository struct {
+	mu    sync.Mutex
+	rows  map[string]models.PushSubscription
+	errOp error
+}
+
+func newMockPushSubscriptionRepository() *mockPushSubscriptionRepository {
+	return &mockPushSubscriptionRepository{rows: map[string]models.PushSubscription{}}
+}
+
+func (m *mockPushSubscriptionRepository) UpsertForUser(_ context.Context, userID string, sub models.PushSubscription) (*models.PushSubscription, error) {
+	if m.errOp != nil {
+		return nil, m.errOp
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if existing, ok := m.rows[sub.Endpoint]; ok {
+		existing.P256dh = sub.P256dh
+		existing.Auth = sub.Auth
+		m.rows[sub.Endpoint] = existing
+		out := existing
+		return &out, nil
+	}
+	row := sub
+	row.UserID = userID
+	m.rows[sub.Endpoint] = row
+	out := row
+	return &out, nil
+}
+
+func (m *mockPushSubscriptionRepository) ListForUser(_ context.Context, userID string) ([]models.PushSubscription, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []models.PushSubscription{}
+	for _, r := range m.rows {
+		if r.UserID == userID {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func (m *mockPushSubscriptionRepository) ListAll(_ context.Context) ([]models.PushSubscription, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]models.PushSubscription, 0, len(m.rows))
+	for _, r := range m.rows {
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func (m *mockPushSubscriptionRepository) DeleteByEndpoint(_ context.Context, endpoint string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.rows, endpoint)
+	return nil
+}
+
+func (m *mockPushSubscriptionRepository) CountForUser(_ context.Context, userID string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var n int64
+	for _, r := range m.rows {
+		if r.UserID == userID {
+			n++
+		}
+	}
+	return n, nil
+}
+
 func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository, *echo.Echo) {
 	t.Helper()
 	e := echo.New()
@@ -594,6 +670,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	mockAdminUser := newMockAdminUserRepository()
 	mockFeedback := newMockFeedbackRepository()
 	mockWeight := newMockWeightRepository()
+	mockPush := newMockPushSubscriptionRepository()
 	jwtService := utils.NewJWTService("test-secret")
 	mock.exercises = []models.Exercise{
 		{ID: "ex-1", Name: "Squat"},
@@ -606,8 +683,16 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(mockWeight)
+	pushCtrl := controllers.NewPushController(mockPush)
+	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil)
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timersCtrl, weightCtrl, mockUser, jwtService, validator)
+	h := NewHandler(
+		authCtrl, entryCtrl, adminCtrl, adminUserCtrl,
+		feedbackCtrl, timersCtrl, weightCtrl,
+		pushCtrl, adminNotificationsCtrl,
+		mockPush, "", false,
+		mockUser, jwtService, validator,
+	)
 	return h, mock, mockUser, e
 }
 

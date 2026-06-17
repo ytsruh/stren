@@ -16,7 +16,31 @@ type profileInput struct {
 // Profile renders the authenticated user's profile page.
 func (h *Handler) Profile(c echo.Context) error {
 	claims := GetClaims(c)
-	return render(c, views.ProfilePage(claims.Name, claims.Email, claims.IsAdmin))
+
+	// The push banner needs two pieces of information:
+	//   1. Has the user already subscribed? Used for first-paint
+	//      state; the JS will reconcile with the browser on load.
+	//   2. The VAPID public key. Server-rendered into a data
+	//      attribute so the JS can call pushManager.subscribe without
+	//      a separate round trip.
+	hasSubscription, err := h.pushCtrl.HasSubscription(c.Request().Context(), claims.UserID)
+	if err != nil {
+		// A failed DB read shouldn't take the profile page down.
+		// We log via the Echo logger and fall through with the
+		// "disabled" first-paint state — the JS will correct it
+		// on load if the user is actually subscribed.
+		c.Logger().Errorf("push subscription count failed: %v", err)
+		hasSubscription = false
+	}
+
+	return render(c, views.ProfilePage(
+		claims.Name,
+		claims.Email,
+		claims.IsAdmin,
+		h.pushConfigured,
+		hasSubscription,
+		h.vapidPublicKey,
+	))
 }
 
 // UpdateProfile handles profile update requests.

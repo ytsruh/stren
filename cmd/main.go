@@ -4,12 +4,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
 
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/controllers"
 	"stren/internal/db"
 	"stren/internal/models"
+	"stren/internal/push"
 	"stren/internal/routes"
 	"stren/internal/utils"
 	"stren/internal/views"
@@ -39,9 +41,29 @@ func main() {
 	userRepo := models.NewUserRepository(database)
 	adminUserRepo := models.NewUserAdminRepository(database)
 	weightRepo := models.NewWeightRepository(database)
+	pushRepo := models.NewPushSubscriptionRepository(database)
 
 	// Initialize auth service
 	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
+
+	// Load or generate the VAPID keypair. Keys live alongside the
+	// SQLite file in the same persistent directory so subscriptions
+	// survive restarts. If the directory is wiped (e.g. a fresh
+	// container) a new keypair is generated and existing
+	// subscriptions become invalid until the user re-enables them.
+	vapidDataDir := filepath.Dir(cfg.DB_PATH)
+	keys, err := push.LoadOrGenerate(vapidDataDir)
+	if err != nil {
+		log.Fatalf("Failed to load or generate VAPID keys: %v", err)
+	}
+	vapidPublicKey := keys.PublicKeyString()
+	log.Printf("vapid: loaded keypair from %s", vapidDataDir)
+
+	// Wire the push client + fan-out service. A bounded HTTP client
+	// timeout (30s) is applied via the package default; no need to
+	// expose it.
+	pushClient := push.NewClient(keys, push.ClientConfig{})
+	pushService := push.NewService(pushClient, push.NewStoreAdapter(pushRepo), push.ServiceConfig{})
 
 	// Initialize controllers
 	authCtrl := controllers.NewAuthController(userRepo, jwtService)
@@ -51,10 +73,28 @@ func main() {
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
 	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(weightRepo)
+	pushCtrl := controllers.NewPushController(pushRepo)
+	adminNotificationsCtrl := controllers.NewAdminNotificationsController(pushService)
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
-	h := routes.NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timersCtrl, weightCtrl, userRepo, jwtService, validator)
+	h := routes.NewHandler(
+		authCtrl,
+		entryCtrl,
+		adminCtrl,
+		adminUserCtrl,
+		feedbackCtrl,
+		timersCtrl,
+		weightCtrl,
+		pushCtrl,
+		adminNotificationsCtrl,
+		pushRepo,
+		vapidPublicKey,
+		true, // pushConfigured — keys are always present after LoadOrGenerate
+		userRepo,
+		jwtService,
+		validator,
+	)
 
 	// Create Echo instance
 	e := echo.New()

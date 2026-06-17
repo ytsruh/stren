@@ -3,6 +3,7 @@
 ## Application & Business Logic Instructions
 - Weight doesn't have KG or lbs and is stored as a number only. App is currently set to KG but ultimately will let a user determine this via a custom setting in their profile
 - Every entry created for a workout is a single set. A set has a number of repititions (reps) & a weight 
+- Push notifications are powered by the protocol `webpush-go` (one Go dep, isolated in `internal/push`); the third-party is the push service (FCM / Mozilla autopush / Apple), not a Go library. The VAPID keypair lives in `/data` alongside the SQLite file so subscriptions survive restarts.
 
 ## Code & Development Instructions
 - Use Makefile scripts where possible
