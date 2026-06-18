@@ -2,6 +2,8 @@
 package routes
 
 import (
+	"strconv"
+
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/models"
@@ -9,9 +11,17 @@ import (
 )
 
 // profileInput represents the parsed and validated form data for profile updates.
+// TargetWeight is a pointer so an empty form value can be distinguished from a
+// real "0" entry and stored as SQL NULL (i.e. "no goal").
 type profileInput struct {
-	Name string `validate:"required,min=2,max=100"`
+	Name         string   `validate:"required,min=2,max=100"`
+	TargetWeight *float64 `validate:"omitempty,gte=0,lte=1000"`
+	WeightUnit   string   `validate:"omitempty,oneof=kg lbs"`
 }
+
+// defaultWeightUnit is used when the form omits the weight_unit field entirely
+// (e.g. on older forms). Matches the SQL DEFAULT in migration 00005.
+const defaultWeightUnit = "kg"
 
 // Profile renders the authenticated user's profile page.
 func (h *Handler) Profile(c echo.Context) error {
@@ -33,10 +43,21 @@ func (h *Handler) Profile(c echo.Context) error {
 		hasSubscription = false
 	}
 
+	// Fetch the user to pre-populate the target_weight and weight_unit fields.
+	// A missing user (shouldn't happen — claims came from a verified JWT)
+	// is treated as a user with no goal and the default unit.
+	user, err := h.userRepo.GetUserByID(claims.UserID)
+	if err != nil {
+		c.Logger().Errorf("failed to load user for profile: %v", err)
+		user = &models.User{WeightUnit: defaultWeightUnit}
+	}
+
 	return render(c, views.ProfilePage(
 		claims.Name,
 		claims.Email,
 		claims.IsAdmin,
+		user.TargetWeight,
+		user.WeightUnit,
 		h.pushConfigured,
 		hasSubscription,
 		h.vapidPublicKey,
@@ -44,12 +65,27 @@ func (h *Handler) Profile(c echo.Context) error {
 }
 
 // UpdateProfile handles profile update requests.
-// It validates the input, updates the user's name, regenerates the JWT, and sets a new auth cookie.
+// It validates the input, updates the user's name, target weight, and weight
+// unit, regenerates the JWT so the new name is reflected in the cookie, and
+// re-issues the auth cookie.
 func (h *Handler) UpdateProfile(c echo.Context) error {
 	claims := GetClaims(c)
 
 	input := profileInput{
-		Name: c.FormValue("name"),
+		Name:       c.FormValue("name"),
+		WeightUnit: c.FormValue("weight_unit"),
+	}
+	if input.WeightUnit == "" {
+		input.WeightUnit = defaultWeightUnit
+	}
+
+	// target_weight is optional. An empty form value clears the goal.
+	if raw := c.FormValue("target_weight"); raw != "" {
+		target, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return render(c, views.ProfileUpdateError("Target weight must be a valid positive number"))
+		}
+		input.TargetWeight = &target
 	}
 
 	if err := h.validator.ValidateStruct(&input); err != nil {
@@ -57,10 +93,12 @@ func (h *Handler) UpdateProfile(c echo.Context) error {
 	}
 
 	user := &models.User{
-		ID:       claims.UserID,
-		Name:     input.Name,
-		Email:    claims.Email,
-		IsAdmin:  claims.IsAdmin,
+		ID:           claims.UserID,
+		Name:         input.Name,
+		Email:        claims.Email,
+		IsAdmin:      claims.IsAdmin,
+		TargetWeight: input.TargetWeight,
+		WeightUnit:   input.WeightUnit,
 	}
 
 	if err := h.userRepo.UpdateUser(user); err != nil {

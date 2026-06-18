@@ -1,6 +1,10 @@
 package views
 
-import "stren/internal/views/components"
+import (
+	"fmt"
+
+	"stren/internal/views/components"
+)
 
 // ProfilePage renders the user profile page. The push-related
 // parameters drive the @PushBanner child: pushConfigured is true
@@ -8,7 +12,12 @@ import "stren/internal/views/components"
 // tells the server's best guess at the user's subscription state for
 // first paint (the JS reconciles it on load), and vapidPublicKey is
 // injected into a data attribute the JS reads.
-templ ProfilePage(userName string, email string, isAdmin bool, pushConfigured bool, pushHasSubscription bool, vapidPublicKey string) {
+//
+// targetWeight is the user's body-weight goal; nil means no goal has
+// been set, in which case the form input is empty. weightUnit is the
+// user's preferred unit ("kg" / "lbs") and drives the <select>'s
+// initial selection.
+templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *float64, weightUnit string, pushConfigured bool, pushHasSubscription bool, vapidPublicKey string) {
 	@Layout(PageData{Title: "Profile", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/profile"}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Profile"})
 		<form
@@ -37,6 +46,31 @@ templ ProfilePage(userName string, email string, isAdmin bool, pushConfigured bo
 			<div class="grid gap-2">
 				<label for="name">Name</label>
 				<input class="input" type="text" id="name" name="name" value={ userName } required/>
+			</div>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+				<div class="grid gap-2">
+					<label for="target_weight">Target weight</label>
+					<input
+						class="input"
+						type="number"
+						id="target_weight"
+						name="target_weight"
+						step="0.1"
+						min="0"
+						max="1000"
+						placeholder="e.g. 75.0"
+						if targetWeight != nil {
+							value={ fmt.Sprintf("%.1f", *targetWeight) }
+						}
+					/>
+				</div>
+				<div class="grid gap-2">
+					<label for="weight_unit">Preferred weight unit</label>
+					<select class="input w-full" id="weight_unit" name="weight_unit">
+						<option value="kg" selected?={ weightUnit == "kg" }>kg</option>
+						<option value="lbs" selected?={ weightUnit == "lbs" }>lbs</option>
+					</select>
+				</div>
 			</div>
 			<button type="submit" class="btn-primary">
 				<span class="btn-spinner hidden absolute animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent"></span>

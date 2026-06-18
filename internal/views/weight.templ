@@ -2,13 +2,16 @@ package views
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"stren/internal/models"
 	"stren/internal/views/components"
 )
 
-// WeightPage renders the weight entries list page
-templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool) {
+// WeightPage renders the weight entries list page. targetWeight is the
+// user's body-weight goal; when non-nil, a progress widget is rendered
+// alongside the chart.
+templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool, targetWeight *float64) {
 	@Layout(PageData{Title: "Weight", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Body Weight"})
@@ -17,8 +20,22 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 				Log Weight
 			</a>
 		</div>
-		<div class="card p-2 h-32 md:h-40">
-			@components.Chart(chartDataForWeight(entries))
+		<div class="flex flex-col sm:flex-row gap-4">
+			<div
+				class={ templ.Classes(
+				"w-full",
+				"h-32 sm:h-40",
+				"card p-2",
+				map[string]bool{"sm:w-3/4": targetWeight != nil && len(entries) > 0},
+			) }
+			>
+				@components.Chart(chartDataForWeight(entries))
+			</div>
+			if targetWeight != nil && len(entries) > 0 {
+				<div class="w-full sm:w-1/4 sm:h-40">
+					@WeightProgressCard(entries, *targetWeight)
+				</div>
+			}
 		</div>
 		if len(entries) == 0 {
 			@WeightEmptyState()
@@ -133,4 +150,88 @@ templ WeightEmptyState() {
 			</a>
 		</section>
 	</div>
+}
+
+// WeightProgressCard renders a small card summarising progress towards the
+// user's body-weight goal. entries must be non-empty; the caller is
+// responsible for not invoking this with a nil/empty slice — the chart row
+// guards that with `len(entries) > 0`. The card is hidden by the caller
+// when targetWeight is nil.
+templ WeightProgressCard(entries []models.WeightEntry, target float64) {
+	{{
+		// Sort ascending by date so the first/last weight reads as
+		// "the user's starting point" and "their latest reading".
+		sorted := make([]models.WeightEntry, len(entries))
+		copy(sorted, entries)
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
+		})
+		start := sorted[0].Weight
+		current := sorted[len(sorted)-1].Weight
+		pct, label := weightProgress(start, current, target)
+	}}
+	<div class="card p-4 h-full flex flex-col gap-3 justify-center">
+		<div>
+			<p class="text-sm text-muted-foreground">Goal progress</p>
+			<p class="text-2xl font-semibold">{ fmt.Sprintf("%.0f%%", pct) }</p>
+		</div>
+		<div
+			class="h-2 w-full rounded-full bg-muted overflow-hidden"
+			role="progressbar"
+			aria-valuenow={ fmt.Sprintf("%.0f", pct) }
+			aria-valuemin="0"
+			aria-valuemax="100"
+			aria-label={ label }
+		>
+			<div
+				class="h-full bg-primary"
+				style={ fmt.Sprintf("width: %.0f%%", pct) }
+			></div>
+		</div>
+		<p class="text-xs text-muted-foreground">
+			{ label }
+		</p>
+		<dl class="grid grid-cols-3 gap-2 text-xs mt-1">
+			<div>
+				<dt class="text-muted-foreground">Start</dt>
+				<dd class="font-medium">{ fmt.Sprintf("%.1f kg", start) }</dd>
+			</div>
+			<div>
+				<dt class="text-muted-foreground">Current</dt>
+				<dd class="font-medium">{ fmt.Sprintf("%.1f kg", current) }</dd>
+			</div>
+			<div>
+				<dt class="text-muted-foreground">Target</dt>
+				<dd class="font-medium">{ fmt.Sprintf("%.1f kg", target) }</dd>
+			</div>
+		</dl>
+	</div>
+}
+
+// weightProgress returns the percent progress (clamped to [0, 100]) and a
+// short human-readable summary line for the WeightProgressCard.
+//
+// The percent is the simplest possible: current as a percentage of target.
+//   - 67.6 / 70 * 100 = 96.6%
+//   - 90 / 80 * 100   = 112.5% → clamped to 100% (overshot)
+//   - 100 / 80 * 100  = 125%   → clamped to 100% (well over target)
+//
+// The label reports the distance from current to target. When current
+// is within 0.05 kg of the target, "Goal reached" is shown instead.
+func weightProgress(start, current, target float64) (float64, string) {
+	if target == 0 {
+		return 0, "Set a new target weight to see progress."
+	}
+	pct := current / target * 100
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	remaining := math.Abs(target - current)
+	if remaining < 0.05 {
+		return pct, "Goal reached — keep it up!"
+	}
+	return pct, fmt.Sprintf("%.1f kg to go", remaining)
 }

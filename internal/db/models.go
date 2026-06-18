@@ -55,6 +55,8 @@ type User struct {
 	Email        string
 	PasswordHash string
 	IsAdmin      int64
+	TargetWeight sql.NullFloat64
+	WeightUnit   string
 	CreatedAt    sql.NullTime
 	UpdatedAt    sql.NullTime
 }

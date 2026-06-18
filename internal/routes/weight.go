@@ -52,7 +52,18 @@ func (h *Handler) WeightPage(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.WeightPage(entries, claims.Name, true, claims.IsAdmin))
+	// Look up the user's body-weight goal (if any) to drive the progress
+	// widget. A failed load is logged and treated as "no goal" so the page
+	// still renders.
+	var target *float64
+	user, err := h.userRepo.GetUserByID(claims.UserID)
+	if err != nil {
+		c.Logger().Errorf("failed to load user for weight page: %v", err)
+	} else if user != nil {
+		target = user.TargetWeight
+	}
+
+	return render(c, views.WeightPage(entries, claims.Name, true, claims.IsAdmin, target))
 }
 
 // NewWeightForm renders the form for creating a new weight entry.
