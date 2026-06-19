@@ -7,7 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/models"
-	"stren/internal/views"
+	"stren/internal/views/profile"
 )
 
 // profileInput represents the parsed and validated form data for profile updates.
@@ -52,7 +52,7 @@ func (h *Handler) Profile(c echo.Context) error {
 		user = &models.User{WeightUnit: defaultWeightUnit}
 	}
 
-	return render(c, views.ProfilePage(
+	return render(c, profile.ProfilePage(
 		claims.Name,
 		claims.Email,
 		claims.IsAdmin,
@@ -83,13 +83,13 @@ func (h *Handler) UpdateProfile(c echo.Context) error {
 	if raw := c.FormValue("target_weight"); raw != "" {
 		target, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
-			return render(c, views.ProfileUpdateError("Target weight must be a valid positive number"))
+			return render(c, profile.ProfileUpdateError("Target weight must be a valid positive number"))
 		}
 		input.TargetWeight = &target
 	}
 
 	if err := h.validator.ValidateStruct(&input); err != nil {
-		return render(c, views.ProfileUpdateError(friendlyValidationError(err)))
+		return render(c, profile.ProfileUpdateError(friendlyValidationError(err)))
 	}
 
 	user := &models.User{
@@ -102,14 +102,14 @@ func (h *Handler) UpdateProfile(c echo.Context) error {
 	}
 
 	if err := h.userRepo.UpdateUser(user); err != nil {
-		return render(c, views.ProfileUpdateError("Failed to update profile"))
+		return render(c, profile.ProfileUpdateError("Failed to update profile"))
 	}
 
 	token, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Name, user.IsAdmin)
 	if err != nil {
-		return render(c, views.ProfileUpdateError("Failed to generate token"))
+		return render(c, profile.ProfileUpdateError("Failed to generate token"))
 	}
 	setAuthCookie(c, token)
 
-	return render(c, views.ProfileUpdateSuccess())
+	return render(c, profile.ProfileUpdateSuccess())
 }

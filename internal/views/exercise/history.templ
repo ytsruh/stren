@@ -1,12 +1,11 @@
-package views
+package exercise
 
 import (
 	"fmt"
-	"sort"
 	"stren/internal/models"
 	"stren/internal/utils"
+	"stren/internal/views"
 	"stren/internal/views/components"
-	"time"
 )
 
 // historyTableWrapID is the id of the swappable region around the history
@@ -25,7 +24,7 @@ const historySpinnerID = "history-spinner"
 // chart shown next to the stat cards. May be nil or short; the chart
 // renders nothing when fewer than 2 unique calendar days are present.
 templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPage, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="">
 			<div class="flex items-center justify-between mb-2 gap-4">
 				<div class="flex items-center gap-2">
@@ -203,13 +202,6 @@ templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage) {
 	</div>
 }
 
-// chartDay holds the max weight recorded for a single calendar day, used by
-// chartDataForExercise to collapse multiple sets into a single line point.
-type chartDay struct {
-	date   time.Time
-	weight float64
-}
-
 // chartDataForExercise converts a slice of recent entries into the generic
 // Chart props expected by components.Chart. Entries are grouped by calendar
 // day and reduced to the heaviest weight of that day so the line reads as a
@@ -220,27 +212,8 @@ type chartDay struct {
 // so the user can tell at a glance how much history the line represents. The
 // chart component itself renders nothing when there are fewer than 2 labels.
 func chartDataForExercise(entries []models.ExerciseEntry, exerciseName string) components.ChartProps {
-	byDay := make(map[string]chartDay)
-	for _, e := range entries {
-		key := e.CreatedAt.Format("2006-01-02")
-		existing, ok := byDay[key]
-		if !ok || e.Weight > existing.weight {
-			byDay[key] = chartDay{date: e.CreatedAt, weight: e.Weight}
-		}
-	}
-	days := make([]chartDay, 0, len(byDay))
-	for _, d := range byDay {
-		days = append(days, d)
-	}
-	sort.Slice(days, func(i, j int) bool {
-		return days[i].date.Before(days[j].date)
-	})
-	labels := make([]string, len(days))
-	values := make([]float64, len(days))
-	for i, d := range days {
-		labels[i] = d.date.Format("02 Jan")
-		values[i] = d.weight
-	}
+	days := aggregateEntriesByDay(entries)
+	labels, values := dayLabelsAndValues(days, "02 Jan")
 	return components.ChartProps{
 		ID:     "exercise-history-chart",
 		Title:  fmt.Sprintf("Last %d Sets", len(entries)),

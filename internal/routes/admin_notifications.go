@@ -7,13 +7,13 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/controllers"
-	"stren/internal/views"
+	"stren/internal/views/admin"
 )
 
 // AdminNotificationsForm renders the admin "Notifications" page.
 func (h *Handler) AdminNotificationsForm(c echo.Context) error {
 	claims := GetClaims(c)
-	return render(c, views.AdminNotificationsPage(claims.Name, claims.IsAdmin))
+	return render(c, admin.AdminNotificationsPage(claims.Name, claims.IsAdmin))
 }
 
 // adminNotificationSentTrigger is the HTMX trigger name fired via the
@@ -44,12 +44,12 @@ func (h *Handler) AdminNotificationsSend(c echo.Context) error {
 		// admin sees the message inline rather than as a
 		// dismissable toast — a more visible cue for an action
 		// that didn't go through.
-		return render(c, views.AdminNotificationError(err.Error()))
+		return render(c, admin.AdminNotificationError(err.Error()))
 	}
 
 	c.Response().Header().Set("HX-Trigger", adminNotificationSentTrigger)
 	if result.Total == 0 {
-		return render(c, views.AdminNotificationNoSubscribers())
+		return render(c, admin.AdminNotificationNoSubscribers())
 	}
-	return render(c, views.AdminNotificationResult(result))
+	return render(c, admin.AdminNotificationResult(result))
 }

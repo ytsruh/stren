@@ -8,7 +8,7 @@ import (
 
 	"stren/internal/controllers"
 	"stren/internal/models"
-	"stren/internal/views"
+	"stren/internal/views/admin"
 )
 
 // --- Admin User Handlers ---
@@ -21,7 +21,7 @@ func (h *Handler) AdminListUsers(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.AdminUserList(users, claims.Name, true, claims.IsAdmin))
+	return render(c, admin.AdminUserList(users, claims.Name, true, claims.IsAdmin))
 }
 
 // --- Admin Exercise Handlers ---
@@ -34,20 +34,20 @@ func (h *Handler) AdminListExercises(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.AdminExerciseList(exercises, claims.Name, true, claims.IsAdmin))
+	return render(c, admin.AdminExerciseList(exercises, claims.Name, true, claims.IsAdmin))
 }
 
 // AdminNewExerciseForm renders the form for creating a new exercise.
 func (h *Handler) AdminNewExerciseForm(c echo.Context) error {
 	claims := GetClaims(c)
-	return render(c, views.AdminExerciseForm(views.AdminExerciseFormData{IsEdit: false}, claims.Name, true, claims.IsAdmin))
+	return render(c, admin.AdminExerciseForm(admin.AdminExerciseFormData{IsEdit: false}, claims.Name, true, claims.IsAdmin))
 }
 
 // AdminCreateExercise handles creating a new exercise.
 func (h *Handler) AdminCreateExercise(c echo.Context) error {
 	name := c.FormValue("name")
 	if name == "" {
-		return render(c, views.AdminExerciseFormError("Exercise name is required"))
+		return render(c, admin.AdminExerciseFormError("Exercise name is required"))
 	}
 
 	params := models.CreateExerciseParams{
@@ -61,15 +61,15 @@ func (h *Handler) AdminCreateExercise(c echo.Context) error {
 	_, err := h.adminCtrl.Create(params)
 	if err != nil {
 		if errors.Is(err, controllers.ErrExerciseNameExists) {
-			return render(c, views.AdminExerciseFormError("An exercise with this name already exists"))
+			return render(c, admin.AdminExerciseFormError("An exercise with this name already exists"))
 		}
 		c.Logger().Errorf("admin create exercise failed: %v", err)
-		return render(c, views.AdminExerciseFormError("Failed to save exercise. Please try again."))
+		return render(c, admin.AdminExerciseFormError("Failed to save exercise. Please try again."))
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/admin/exercises"}`)
-		return render(c, views.AdminExerciseSuccessToast("Exercise created!"))
+		return render(c, admin.AdminExerciseSuccessToast("Exercise created!"))
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/exercises")
 }
@@ -87,7 +87,7 @@ func (h *Handler) AdminEditExerciseForm(c echo.Context) error {
 	}
 
 	claims := GetClaims(c)
-	return render(c, views.AdminExerciseForm(views.AdminExerciseFormData{Exercise: exercise, IsEdit: true}, claims.Name, true, claims.IsAdmin))
+	return render(c, admin.AdminExerciseForm(admin.AdminExerciseFormData{Exercise: exercise, IsEdit: true}, claims.Name, true, claims.IsAdmin))
 }
 
 // AdminUpdateExercise handles updating an existing exercise.
@@ -96,7 +96,7 @@ func (h *Handler) AdminUpdateExercise(c echo.Context) error {
 
 	name := c.FormValue("name")
 	if name == "" {
-		return render(c, views.AdminExerciseFormError("Exercise name is required"))
+		return render(c, admin.AdminExerciseFormError("Exercise name is required"))
 	}
 
 	params := models.UpdateExerciseParams{
@@ -113,15 +113,15 @@ func (h *Handler) AdminUpdateExercise(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusNotFound, "Exercise not found")
 		}
 		if errors.Is(err, controllers.ErrExerciseNameExists) {
-			return render(c, views.AdminExerciseFormError("An exercise with this name already exists"))
+			return render(c, admin.AdminExerciseFormError("An exercise with this name already exists"))
 		}
 		c.Logger().Errorf("admin update exercise failed: %v", err)
-		return render(c, views.AdminExerciseFormError("Failed to save exercise. Please try again."))
+		return render(c, admin.AdminExerciseFormError("Failed to save exercise. Please try again."))
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/admin/exercises"}`)
-		return render(c, views.AdminExerciseSuccessToast("Exercise updated!"))
+		return render(c, admin.AdminExerciseSuccessToast("Exercise updated!"))
 	}
 	return c.Redirect(http.StatusSeeOther, "/admin/exercises")
 }

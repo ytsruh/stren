@@ -1,13 +1,14 @@
-package views
+package admin
 
 import (
 	"stren/internal/models"
+	"stren/internal/views"
 	"stren/internal/views/components"
 )
 
 // AdminUserList renders the admin page listing all users.
 templ AdminUserList(users []models.User, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Admin - Users", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin, CurrentPath: "/admin/users"}) {
+	@views.Layout(views.PageData{Title: "Admin - Users", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin, CurrentPath: "/admin/users"}) {
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Users"})
 		</div>

@@ -1,14 +1,17 @@
-package views
+package admin
 
-import "stren/internal/push"
-import "stren/internal/views/components"
+import (
+	"stren/internal/push"
+	"stren/internal/views"
+	"stren/internal/views/components"
+)
 
 // AdminNotificationsPage renders the admin "Notifications" page. It
 // has a single "Send" form (HTMX posting to /admin/notifications/send)
 // and a result panel that the HTMX response swaps into. The initial
 // state shows a placeholder; the result state summarises the broadcast.
 templ AdminNotificationsPage(userName string, isAdmin bool) {
-	@Layout(PageData{Title: "Notifications", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/admin/notifications"}) {
+	@views.Layout(views.PageData{Title: "Notifications", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/admin/notifications"}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Notifications"})
 		<p class="text-sm text-muted-foreground my-4">Send a push notification to every subscribed device. Use sparingly — a notification goes to every active subscription in the system.</p>
 		<form

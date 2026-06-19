@@ -1,10 +1,11 @@
-package views
+package weight
 
 import (
 	"fmt"
 	"math"
 	"sort"
 	"stren/internal/models"
+	"stren/internal/views"
 	"stren/internal/views/components"
 )
 
@@ -12,7 +13,7 @@ import (
 // user's body-weight goal; when non-nil, a progress widget is rendered
 // alongside the chart.
 templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool, targetWeight *float64) {
-	@Layout(PageData{Title: "Weight", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: "Weight", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Body Weight"})
 			<a href="/weight/new" class="btn">

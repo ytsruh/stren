@@ -1,14 +1,15 @@
-package views
+package weight
 
 import (
 	"fmt"
 	"stren/internal/models"
+	"stren/internal/views"
 	"stren/internal/views/components"
 )
 
 // WeightForm renders the form for creating a new weight entry
 templ WeightForm(userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "New Weight Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: "New Weight Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Weight Entry"})
 		<form
 			id="weight-form"
@@ -70,7 +71,7 @@ templ WeightForm(userName string, isAuthenticated bool, isAdmin bool) {
 
 // EditWeightForm renders the form for editing an existing weight entry
 templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Edit Weight Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: "Edit Weight Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="w-full flex items-center justify-between">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Weight Entry"})
 			<button
@@ -120,7 +121,7 @@ templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated
 						type="datetime-local"
 						id="date"
 						name="created_at"
-						value={ FormatDateTimeLocal(entry.CreatedAt) }
+						value={ views.FormatDateTimeLocal(entry.CreatedAt) }
 						required
 					/>
 				</div>
@@ -163,7 +164,7 @@ templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated
 
 // WeightFormSuccess is shown after successful form submission
 templ WeightFormSuccess(message string, stayOnPage bool) {
-	@Toast("success", "Weight saved!", message)
+	@views.Toast("success", "Weight saved!", message)
 	if !stayOnPage {
 		<div class="mt-6 flex flex-col gap-3 sm:flex-row">
 			<a href="/weight" class="btn-outline">
@@ -180,15 +181,15 @@ templ WeightFormSuccess(message string, stayOnPage bool) {
 
 // WeightFormError shows form validation errors
 templ WeightFormError(message string) {
-	@Toast("error", "Error", message)
+	@views.Toast("error", "Error", message)
 }
 
 // WeightFormSuccessToast returns only the toast (for HTMX responses)
 templ WeightFormSuccessToast(message string) {
-	@Toast("success", "Weight entry updated!", message)
+	@views.Toast("success", "Weight entry updated!", message)
 }
 
 // WeightDeleteSuccess returns the toast for successful deletion (for HTMX responses)
 templ WeightDeleteSuccess() {
-	@Toast("success", "Weight entry deleted!", "")
+	@views.Toast("success", "Weight entry deleted!", "")
 }

@@ -1,8 +1,9 @@
-package views
+package profile
 
 import (
 	"fmt"
 
+	"stren/internal/views"
 	"stren/internal/views/components"
 )
 
@@ -18,7 +19,7 @@ import (
 // user's preferred unit ("kg" / "lbs") and drives the <select>'s
 // initial selection.
 templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *float64, weightUnit string, pushConfigured bool, pushHasSubscription bool, vapidPublicKey string) {
-	@Layout(PageData{Title: "Profile", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/profile"}) {
+	@views.Layout(views.PageData{Title: "Profile", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/profile"}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Profile"})
 		<form
 			hx-post="/profile"
@@ -112,12 +113,12 @@ func roleLabel(isAdmin bool) string {
 
 // ProfileUpdateSuccess renders a success toast for HTMX responses.
 templ ProfileUpdateSuccess() {
-	@Toast("success", "Profile updated", "")
+	@views.Toast("success", "Profile updated", "")
 }
 
 // ProfileUpdateError renders an error toast for HTMX responses.
 templ ProfileUpdateError(message string) {
-	@Toast("error", "Error", message)
+	@views.Toast("error", "Error", message)
 }
 
 // PushBanner renders the "Notifications" card on the user's profile
@@ -222,17 +223,17 @@ func pushStatusLabel(hasSubscription bool) string {
 // PushSubscribeSuccess renders a success toast for HTMX responses
 // after a successful subscription.
 templ PushSubscribeSuccess() {
-	@Toast("success", "Notifications enabled", "You'll receive admin messages.")
+	@views.Toast("success", "Notifications enabled", "You'll receive admin messages.")
 }
 
 // PushUnsubscribeSuccess renders a success toast for HTMX responses
 // after a successful unsubscribe.
 templ PushUnsubscribeSuccess() {
-	@Toast("success", "Notifications disabled", "")
+	@views.Toast("success", "Notifications disabled", "")
 }
 
 // PushSubscribeError renders an error toast for HTMX responses
 // related to a subscribe or unsubscribe attempt.
 templ PushSubscribeError(message string) {
-	@Toast("error", "Notifications", message)
+	@views.Toast("error", "Notifications", message)
 }

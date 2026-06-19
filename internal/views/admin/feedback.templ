@@ -1,74 +1,17 @@
-package views
+package admin
 
 import (
 	"fmt"
+
 	"stren/internal/models"
+	"stren/internal/views"
 	"stren/internal/views/components"
 )
 
-templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Submit Feedback", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Submit Feedback"})
-		<p class="text-muted-foreground mb-6">Have feedback or found a bug? Let us know!</p>
-		<form
-			hx-post="/feedback"
-			hx-target="#toaster"
-			hx-swap="beforeend"
-			class="form grid gap-6 max-w-[600px]"
-		>
-			<fieldset class="grid gap-4">
-				<div class="grid gap-2">
-					<label for="title">Title</label>
-					<input
-						class="input"
-						type="text"
-						id="title"
-						name="title"
-						placeholder="Brief summary of your feedback"
-						required
-					/>
-					<p class="text-sm text-muted-foreground">5-100 characters</p>
-				</div>
-				<div class="grid gap-2">
-					<label for="message">Message</label>
-					<textarea
-						id="message"
-						name="message"
-						class="textarea"
-						placeholder="Please describe your feedback in detail..."
-						rows="6"
-						required
-					></textarea>
-					<p class="text-sm text-muted-foreground">10-1000 characters</p>
-				</div>
-			</fieldset>
-			<div class="flex gap-3">
-				<button type="submit" hx-indicator="#feedback-spinner" class="btn relative inline-flex">
-					<span class="btn-text flex items-center gap-2 justify-between">
-						@components.Icon(components.IconProps{Name: "check", Size: 18})
-						Submit Feedback
-					</span>
-					<span id="feedback-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
-						@components.Icon(components.IconProps{Name: "loader", Size: 18})
-					</span>
-				</button>
-			</div>
-		</form>
-	}
-}
-
-// FeedbackFormSuccess shows success message
-templ FeedbackFormSuccess(message string) {
-	@Toast("success", "Success", message)
-}
-
-// FeedbackFormError shows validation errors
-templ FeedbackFormError(message string) {
-	@Toast("error", "Error", message)
-}
-
+// AdminFeedbackList renders the admin page listing all feedback with
+// Open / Closed / All filter buttons.
 templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Admin - Feedback", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: "Admin - Feedback", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Feedback"})
 		</div>
@@ -135,8 +78,10 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 	}
 }
 
+// AdminFeedbackDetail renders the read-only detail view for a single
+// feedback item, with a Close / Reopen action button.
 templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Admin - Feedback Detail", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: "Admin - Feedback Detail", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<a href="/admin/feedback" class="btn-outline mb-4 inline-flex">
 			@components.Icon(components.IconProps{Name: "arrow-left", Size: 18})
 			Back
@@ -225,10 +170,14 @@ templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenti
 	}
 }
 
+// AdminFeedbackClosedSuccess is the toast returned to HTMX after a
+// close / reopen action succeeds.
 templ AdminFeedbackClosedSuccess() {
-	@Toast("success", "Feedback status updated", "")
+	@views.Toast("success", "Feedback status updated", "")
 }
 
+// getFilterBtnClass returns the button class for the filter pill that
+// matches the current filter; non-active pills use the outline variant.
 func getFilterBtnClass(currentFilter, targetFilter string) string {
 	if currentFilter == targetFilter {
 		return "btn"

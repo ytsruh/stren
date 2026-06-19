@@ -10,6 +10,8 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/views"
+	"stren/internal/views/dashboard"
+	exerciseviews "stren/internal/views/exercise"
 )
 
 // --- Entry Handlers ---
@@ -22,7 +24,7 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.Dashboard(entries, claims.Name, true, claims.IsAdmin))
+	return render(c, dashboard.Dashboard(entries, claims.Name, true, claims.IsAdmin))
 }
 
 // NewEntryForm renders the form for creating a new entry.
@@ -46,22 +48,22 @@ func (h *Handler) NewEntryForm(c echo.Context) error {
 		}
 	}
 
-	return render(c, views.EntryForm(exercises, preselectedID, claims.Name, true, claims.IsAdmin))
+	return render(c, exerciseviews.EntryForm(exercises, preselectedID, claims.Name, true, claims.IsAdmin))
 }
 
 // CreateEntry handles the creation of a new entry (with one or more sets).
 func (h *Handler) CreateEntry(c echo.Context) error {
 	exerciseID := c.FormValue("exercise_id")
 	if exerciseID == "" {
-		return render(c, views.EntryFormError("Exercise is required"))
+		return render(c, exerciseviews.EntryFormError("Exercise is required"))
 	}
 
 	sets, err := parseEntrySets(c, h.validator)
 	if err != nil {
-		return render(c, views.EntryFormError(friendlyError(err)))
+		return render(c, exerciseviews.EntryFormError(friendlyError(err)))
 	}
 	if len(sets) == 0 {
-		return render(c, views.EntryFormError("Add at least one set"))
+		return render(c, exerciseviews.EntryFormError("Add at least one set"))
 	}
 
 	claims := GetClaims(c)
@@ -76,14 +78,14 @@ func (h *Handler) CreateEntry(c echo.Context) error {
 	if dateStr := c.FormValue("created_at"); dateStr != "" {
 		parsed, parseErr := time.Parse("2006-01-02T15:04", dateStr)
 		if parseErr != nil {
-			return render(c, views.EntryFormError("Invalid date format"))
+			return render(c, exerciseviews.EntryFormError("Invalid date format"))
 		}
 		createdAt = parsed
 	}
 
 	created, err := h.entryCtrl.CreateEntries(claims.UserID, exerciseID, notes, createdAt, sets)
 	if err != nil {
-		return render(c, views.EntryFormError("Failed to save entry: "+err.Error()))
+		return render(c, exerciseviews.EntryFormError("Failed to save entry: "+err.Error()))
 	}
 
 	// Check if htmx request
@@ -93,7 +95,7 @@ func (h *Handler) CreateEntry(c echo.Context) error {
 			msg = fmt.Sprintf("%d sets saved!", len(created))
 		}
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
-		return render(c, views.EntryFormSuccessToast(msg))
+		return render(c, exerciseviews.EntryFormSuccessToast(msg))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/")
@@ -112,7 +114,7 @@ func (h *Handler) EditEntryForm(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Entry not found")
 	}
 
-	return render(c, views.EditEntryForm(entry, claims.Name, true, claims.IsAdmin))
+	return render(c, exerciseviews.EditEntryForm(entry, claims.Name, true, claims.IsAdmin))
 }
 
 // GetEntry returns a single entry (for API/hx-get).
@@ -128,7 +130,7 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Entry not found")
 	}
 
-	return render(c, views.EntryRow(*entry))
+	return render(c, dashboard.EntryRow(*entry))
 }
 
 // UpdateEntry handles updating an existing entry.
@@ -147,7 +149,7 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 
 	entry, err := parseEntryForm(c, h.validator)
 	if err != nil {
-		return render(c, views.EntryFormError(friendlyError(err)))
+		return render(c, exerciseviews.EntryFormError(friendlyError(err)))
 	}
 
 	createdAt := existing.CreatedAt
@@ -155,17 +157,17 @@ func (h *Handler) UpdateEntry(c echo.Context) error {
 	if dateStr := c.FormValue("created_at"); dateStr != "" {
 		createdAt, err = time.Parse("2006-01-02T15:04", dateStr)
 		if err != nil {
-			return render(c, views.EntryFormError("Invalid date format"))
+			return render(c, exerciseviews.EntryFormError("Invalid date format"))
 		}
 	}
 
 	_, err = h.entryCtrl.UpdateEntry(id, claims.UserID, existing.ExerciseID, entry.Notes, entry.Reps, entry.Weight, entry.RestTime, createdAt)
 	if err != nil {
-		return render(c, views.EntryFormError("Failed to update entry: "+err.Error()))
+		return render(c, exerciseviews.EntryFormError("Failed to update entry: "+err.Error()))
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		return render(c, views.EntryFormSuccessToast("Entry updated!"))
+		return render(c, exerciseviews.EntryFormSuccessToast("Entry updated!"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/")
@@ -212,13 +214,13 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("Vary", "HX-Request")
-		return render(c, views.HistoryTable(exercise.ID, history))
+		return render(c, exerciseviews.HistoryTable(exercise.ID, history))
 	}
 	chartEntries, err := h.entryCtrl.GetRecentEntriesForChart(exercise.ID, claims.UserID)
 	if err != nil {
 		return err
 	}
-	return render(c, views.ExerciseHistory(exercise, history, chartEntries, claims.Name, true, claims.IsAdmin))
+	return render(c, exerciseviews.ExerciseHistory(exercise, history, chartEntries, claims.Name, true, claims.IsAdmin))
 }
 
 // ExerciseChart renders the dedicated chart view for a specific exercise:
@@ -247,7 +249,7 @@ func (h *Handler) ExerciseChart(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.ExerciseChart(exercise, chartEntries, claims.Name, true, claims.IsAdmin))
+	return render(c, exerciseviews.ExerciseChart(exercise, chartEntries, claims.Name, true, claims.IsAdmin))
 }
 
 // ExerciseChartAdvanced renders the advanced chart view for a specific
@@ -274,7 +276,7 @@ func (h *Handler) ExerciseChartAdvanced(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.ExerciseChartAdvanced(exercise, chartEntries, claims.Name, true, claims.IsAdmin))
+	return render(c, exerciseviews.ExerciseChartAdvanced(exercise, chartEntries, claims.Name, true, claims.IsAdmin))
 }
 
 // parsePage reads the ?page=N query param and returns a clamped 1-indexed page
@@ -312,5 +314,5 @@ func (h *Handler) ListExercisesUI(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.ExercisesList(exercises, claims.Name, true, claims.IsAdmin))
+	return render(c, exerciseviews.ExercisesList(exercises, claims.Name, true, claims.IsAdmin))
 }

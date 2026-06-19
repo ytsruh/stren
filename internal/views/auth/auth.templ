@@ -1,10 +1,13 @@
-package views
+package auth
 
-import "stren/internal/views/components"
+import (
+	"stren/internal/views"
+	"stren/internal/views/components"
+)
 
 // LoginPage renders the login form.
 templ LoginPage(errorMsg string) {
-	@Layout(PageData{Title: "Login", UserName: "", IsAuthenticated: false}) {
+	@views.Layout(views.PageData{Title: "Login", UserName: "", IsAuthenticated: false}) {
 		@components.Card(components.CardProps{Class: "w-full max-w-[400px] mx-auto mt-8"}) {
 			@components.CardHeader(components.CardHeaderProps{}) {
 				<h2>Login</h2>
@@ -42,12 +45,12 @@ templ LoginPage(errorMsg string) {
 
 // LoginPageError renders an error alert for HTMX responses.
 templ LoginPageError(message string) {
-	@Toast("error", "Error", message)
+	@views.Toast("error", "Error", message)
 }
 
 // RegisterPage renders the registration form.
 templ RegisterPage(errorMsg string) {
-	@Layout(PageData{Title: "Register", UserName: "", IsAuthenticated: false}) {
+	@views.Layout(views.PageData{Title: "Register", UserName: "", IsAuthenticated: false}) {
 		@components.Card(components.CardProps{Class: "w-full max-w-[400px] mx-auto mt-8"}) {
 			@components.CardHeader(components.CardHeaderProps{}) {
 				<h2>Register</h2>
@@ -89,20 +92,20 @@ templ RegisterPage(errorMsg string) {
 
 // RegisterPageError renders an error alert for HTMX responses.
 templ RegisterPageError(message string) {
-	@Toast("error", "Error", message)
+	@views.Toast("error", "Error", message)
 }
 
 // LoginSuccessToast is shown after a successful login (for HTMX responses).
 templ LoginSuccessToast() {
-	@Toast("success", "Logged in", "")
+	@views.Toast("success", "Logged in", "")
 }
 
 // RegisterSuccessToast is shown after a successful registration (for HTMX responses).
 templ RegisterSuccessToast() {
-	@Toast("success", "Account created", "")
+	@views.Toast("success", "Account created", "")
 }
 
 // LogoutSuccessToast is shown after a successful logout (for HTMX responses).
 templ LogoutSuccessToast() {
-	@Toast("success", "Logged out", "")
+	@views.Toast("success", "Logged out", "")
 }

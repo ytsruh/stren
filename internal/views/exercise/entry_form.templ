@@ -1,8 +1,9 @@
-package views
+package exercise
 
 import (
 	"fmt"
 	"stren/internal/models"
+	"stren/internal/views"
 	"stren/internal/views/components"
 	"time"
 )
@@ -171,7 +172,7 @@ templ entryFormSetScript() {
 // EntryForm renders the form for creating a new entry.
 // preselectedExerciseID, when non-empty, marks the matching <option> as selected.
 templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Entry"})
 		<form
 			id="entry-form"
@@ -179,7 +180,7 @@ templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userN
 			hx-target="#toaster"
 			hx-swap="beforeend"
 			class="form grid gap-6"
-			data-max-sets={ fmt.Sprintf("%d", MaxSetsPerEntry) }
+			data-max-sets={ fmt.Sprintf("%d", views.MaxSetsPerEntry) }
 		>
 			<fieldset class="grid gap-4">
 				// Exercise + date sit side-by-side at sm: and above, stack on
@@ -212,7 +213,7 @@ templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userN
 							type="datetime-local"
 							id="entry-date"
 							name="created_at"
-							value={ FormatDateTimeLocal(time.Now()) }
+							value={ views.FormatDateTimeLocal(time.Now()) }
 							required
 						/>
 					</div>
@@ -267,7 +268,7 @@ templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userN
 
 // EditEntryForm renders the form for editing an existing entry
 templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="w-full flex items-center justify-between">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
 			<button
@@ -356,7 +357,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 						type="datetime-local"
 						id="date"
 						name="created_at"
-						value={ FormatDateTimeLocal(entry.CreatedAt) }
+						value={ views.FormatDateTimeLocal(entry.CreatedAt) }
 						required
 					/>
 				</div>
@@ -392,7 +393,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 
 // EntryFormSuccess is shown after successful form submission
 templ EntryFormSuccess(message string, stayOnPage bool) {
-	@Toast("success", "Entry saved!", message)
+	@views.Toast("success", "Entry saved!", message)
 	if !stayOnPage {
 		<div class="mt-6 flex flex-col gap-3 sm:flex-row">
 			<a href="/" class="btn-outline">
@@ -409,14 +410,10 @@ templ EntryFormSuccess(message string, stayOnPage bool) {
 
 // EntryFormError shows form validation errors
 templ EntryFormError(message string) {
-	@Toast("error", "Error", message)
+	@views.Toast("error", "Error", message)
 }
 
 // EntryFormSuccessToast returns only the toast (for HTMX responses)
 templ EntryFormSuccessToast(message string) {
-	@Toast("success", "Entry saved!", message)
-}
-
-func FormatDateTimeLocal(t time.Time) string {
-	return t.Format("2006-01-02T15:04")
+	@views.Toast("success", "Entry saved!", message)
 }

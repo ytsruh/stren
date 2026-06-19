@@ -1,16 +1,17 @@
-package views
+package dashboard
 
 import (
 	"fmt"
 	"sort"
 	"stren/internal/models"
+	"stren/internal/views"
 	"stren/internal/views/components"
 	"time"
 )
 
 // Dashboard renders the main dashboard page
 templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<section class="mb-8">
 			<div class="grid grid-cols-2 gap-2 sm:gap-4">
 				@components.ActionCard(components.ActionCardProps{Label: "Add Entry", Href: "/entries/new", Icon: "plus"})
@@ -18,7 +19,7 @@ templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated
 			</div>
 		</section>
 		if len(entries) == 0 {
-			@EmptyState()
+			@views.EmptyState()
 		} else {
 			<section class="flex flex-col gap-y-4">
 				<div class="flex justify-between items-center">
@@ -91,7 +92,7 @@ templ RecentEntries(entries []models.ExerciseEntry) {
 	<section>
 		<h2 class="mb-4">Recent Workouts</h2>
 		if len(entries) == 0 {
-			@EmptyState()
+			@views.EmptyState()
 		} else {
 			@EntryList(entries)
 		}

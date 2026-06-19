@@ -9,7 +9,7 @@ import (
 
 	"stren/internal/models"
 	"stren/internal/utils"
-	"stren/internal/views"
+	"stren/internal/views/weight"
 )
 
 // weightFormInput represents the parsed and validated form data for a weight entry.
@@ -63,31 +63,31 @@ func (h *Handler) WeightPage(c echo.Context) error {
 		target = user.TargetWeight
 	}
 
-	return render(c, views.WeightPage(entries, claims.Name, true, claims.IsAdmin, target))
+	return render(c, weight.WeightPage(entries, claims.Name, true, claims.IsAdmin, target))
 }
 
 // NewWeightForm renders the form for creating a new weight entry.
 func (h *Handler) NewWeightForm(c echo.Context) error {
 	claims := GetClaims(c)
-	return render(c, views.WeightForm(claims.Name, true, claims.IsAdmin))
+	return render(c, weight.WeightForm(claims.Name, true, claims.IsAdmin))
 }
 
 // CreateWeight handles the creation of a new weight entry.
 func (h *Handler) CreateWeight(c echo.Context) error {
 	entry, err := parseWeightForm(c, h.validator)
 	if err != nil {
-		return render(c, views.WeightFormError(friendlyError(err)))
+		return render(c, weight.WeightFormError(friendlyError(err)))
 	}
 
 	claims := GetClaims(c)
 	_, err = h.weightCtrl.CreateWeightEntry(claims.UserID, entry.Weight, entry.Notes, entry.PhotoKey)
 	if err != nil {
-		return render(c, views.WeightFormError("Failed to save weight entry: "+err.Error()))
+		return render(c, weight.WeightFormError("Failed to save weight entry: "+err.Error()))
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/weight"}`)
-		return render(c, views.WeightFormSuccessToast("Weight saved!"))
+		return render(c, weight.WeightFormSuccessToast("Weight saved!"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/weight")
@@ -106,7 +106,7 @@ func (h *Handler) EditWeightForm(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Weight entry not found")
 	}
 
-	return render(c, views.EditWeightForm(entry, claims.Name, true, claims.IsAdmin))
+	return render(c, weight.EditWeightForm(entry, claims.Name, true, claims.IsAdmin))
 }
 
 // UpdateWeight handles updating an existing weight entry.
@@ -125,14 +125,14 @@ func (h *Handler) UpdateWeight(c echo.Context) error {
 
 	entry, err := parseWeightForm(c, h.validator)
 	if err != nil {
-		return render(c, views.WeightFormError(friendlyError(err)))
+		return render(c, weight.WeightFormError(friendlyError(err)))
 	}
 
 	createdAt := existing.CreatedAt
 	if dateStr := c.FormValue("created_at"); dateStr != "" {
 		createdAt, err = time.Parse("2006-01-02T15:04", dateStr)
 		if err != nil {
-			return render(c, views.WeightFormError("Invalid date format"))
+			return render(c, weight.WeightFormError("Invalid date format"))
 		}
 	}
 
@@ -156,12 +156,12 @@ func (h *Handler) UpdateWeight(c echo.Context) error {
 
 	_, err = h.weightCtrl.UpdateWeightEntry(id, claims.UserID, entry.Weight, entry.Notes, photoKey, createdAt)
 	if err != nil {
-		return render(c, views.WeightFormError("Failed to update weight entry: "+err.Error()))
+		return render(c, weight.WeightFormError("Failed to update weight entry: "+err.Error()))
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/weight"}`)
-		return render(c, views.WeightFormSuccessToast("Weight entry updated!"))
+		return render(c, weight.WeightFormSuccessToast("Weight entry updated!"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/weight")
@@ -178,7 +178,7 @@ func (h *Handler) DeleteWeight(c echo.Context) error {
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/weight"}`)
-		return render(c, views.WeightDeleteSuccess())
+		return render(c, weight.WeightDeleteSuccess())
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/weight")

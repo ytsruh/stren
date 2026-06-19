@@ -1,12 +1,26 @@
-package views
+package weight
 
 import (
+	"bytes"
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"stren/internal/models"
+
+	"github.com/a-h/templ"
 )
+
+// renderToString renders a templ component to a string for assertions.
+func renderToString(t *testing.T, component templ.Component) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := component.Render(context.Background(), &buf); err != nil {
+		t.Fatalf("failed to render component: %v", err)
+	}
+	return buf.String()
+}
 
 // TestWeightProgress covers the boundaries of the progress formula. The
 // helper is unexported but lives in this package, so the tests can call it
