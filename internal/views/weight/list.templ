@@ -41,8 +41,13 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 		if len(entries) == 0 {
 			@WeightEmptyState()
 		} else {
-			@WeightList(entries)
+			<div class="py-2 flex flex-col gap-2">
+				@WeightList(entries)
+				@CompareBar()
+			</div>
 		}
+		<div id="weight-compare-modal-container"></div>
+		@WeightCompareScript()
 	}
 }
 
@@ -90,6 +95,9 @@ templ WeightList(entries []models.WeightEntry) {
 	<table class="table w-full">
 		<thead>
 			<tr>
+				<th class="w-10">
+					<span class="sr-only">Select for compare</span>
+				</th>
 				<th>Date</th>
 				<th>Weight</th>
 				<th class="hidden lg:table-cell">Photo</th>
@@ -108,6 +116,19 @@ templ WeightList(entries []models.WeightEntry) {
 // WeightRow renders a single weight entry row
 templ WeightRow(entry models.WeightEntry) {
 	<tr id={ fmt.Sprintf("weight-%s", entry.ID) }>
+		<td>
+			if entry.HasPhoto() {
+				<input
+					type="checkbox"
+					class="input"
+					aria-label={ fmt.Sprintf("Select weight entry from %s for comparison", entry.FormattedDate()) }
+					data-compare-pick
+					data-entry-id={ entry.ID }
+					data-entry-date={ entry.FormattedDate() }
+					data-entry-weight={ entry.FormattedWeight() }
+				/>
+			}
+		</td>
 		<td>{ entry.FormattedDate() }</td>
 		<td>{ entry.FormattedWeight() }</td>
 		<td class="hidden lg:table-cell">
@@ -235,4 +256,97 @@ func weightProgress(start, current, target float64) (float64, string) {
 		return pct, "Goal reached — keep it up!"
 	}
 	return pct, fmt.Sprintf("%.1f kg to go", remaining)
+}
+
+// WeightCompareScript renders the inline JavaScript that wires up the
+// "compare" selection on the weight table. It enforces a maximum of
+// two selected entries, updates the sticky CompareBar's count and
+// button state, and writes the selected entry IDs into the bar's
+// hidden inputs so the htmx-powered "Compare" button can submit them.
+//
+// The script is mounted once on the weight list page; it is
+// self-contained (no global state, no other JS dependencies).
+templ WeightCompareScript() {
+	<script>
+		(function() {
+			var bar = document.getElementById('weight-compare-bar');
+			var goBtn = document.getElementById('weight-compare-go');
+			var clearBtn = document.getElementById('weight-compare-clear');
+			var countEl = bar ? bar.querySelector('[data-compare-count]') : null;
+			var hintEl = bar ? bar.querySelector('[data-compare-hint]') : null;
+			var hiddenA = document.getElementById('weight-compare-id-a');
+			var hiddenB = document.getElementById('weight-compare-id-b');
+			if (!bar || !goBtn || !clearBtn || !countEl || !hintEl || !hiddenA || !hiddenB) return;
+
+			// Basecoat toast helper, mirrors the one in photo_upload.templ
+			// (kept in sync intentionally so error feedback is consistent).
+			var TOAST_ICONS = {
+				warning: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>'
+			};
+			function showToast(category, title, message) {
+				var toaster = document.getElementById('toaster');
+				if (!toaster) return;
+				var cat = TOAST_ICONS[category] ? category : 'warning';
+				var icon = TOAST_ICONS[cat] || TOAST_ICONS.warning;
+				var descHTML = message ? '<p>' + message + '</p>' : '';
+				var el = document.createElement('div');
+				el.className = 'toast';
+				el.setAttribute('role', 'status');
+				el.setAttribute('aria-atomic', 'true');
+				el.setAttribute('aria-hidden', 'false');
+				el.setAttribute('data-category', cat);
+				el.innerHTML = '<div class="toast-content">' + icon + '<section><h2>' + title + '</h2>' + descHTML + '</section></div>';
+				toaster.appendChild(el);
+			}
+
+			function selected() {
+				return Array.from(document.querySelectorAll('[data-compare-pick]:checked'));
+			}
+
+			function render() {
+				var picks = selected();
+				var n = picks.length;
+				countEl.textContent = String(n);
+				if (n === 0) {
+					bar.classList.add('hidden');
+					goBtn.disabled = true;
+					hintEl.textContent = 'Select two entries to compare';
+				} else {
+					bar.classList.remove('hidden');
+					if (n === 1) {
+						goBtn.disabled = true;
+						hintEl.textContent = 'Select one more';
+					} else {
+						goBtn.disabled = false;
+						hintEl.textContent = 'Ready to compare';
+					}
+				}
+				hiddenA.value = picks[0] ? picks[0].getAttribute('data-entry-id') : '';
+				hiddenB.value = picks[1] ? picks[1].getAttribute('data-entry-id') : '';
+			}
+
+			document.querySelectorAll('[data-compare-pick]').forEach(function(cb) {
+				cb.addEventListener('change', function() {
+					if (cb.checked) {
+						var picks = selected();
+						if (picks.length > 2) {
+							// Reject the third selection so the user can only
+							// ever compare two at a time.
+							cb.checked = false;
+							showToast('warning', 'Only 2 at a time', 'Uncheck one entry to choose a different one.');
+							return;
+						}
+					}
+					render();
+				});
+			});
+
+			clearBtn.addEventListener('click', function() {
+				document.querySelectorAll('[data-compare-pick]:checked').forEach(function(cb) {
+					cb.checked = false;
+				});
+				render();
+			});
+		})();
+	</script>
 }

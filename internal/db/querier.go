@@ -34,6 +34,7 @@ type Querier interface {
 	GetPushSubscriptionByEndpoint(ctx context.Context, endpoint string) (PushSubscription, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id string) (User, error)
+	GetWeightEntriesByIDs(ctx context.Context, arg GetWeightEntriesByIDsParams) ([]WeightEntry, error)
 	GetWeightEntry(ctx context.Context, arg GetWeightEntryParams) (WeightEntry, error)
 	List(ctx context.Context) ([]Exercise, error)
 	ListAllPushSubscriptions(ctx context.Context) ([]PushSubscription, error)

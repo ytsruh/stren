@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"stren/internal/models"
@@ -41,6 +43,35 @@ func (wc *WeightController) CreateWeightEntry(userID string, weight float64, not
 // GetWeightEntry retrieves a single weight entry by ID, scoped to the user.
 func (wc *WeightController) GetWeightEntry(id, userID string) (*models.WeightEntry, error) {
 	return wc.repo.GetByID(id, userID)
+}
+
+// GetWeightEntriesForCompare fetches two weight entries by ID for the
+// image-comparison feature. Both must belong to the given user and both
+// must have an associated photo. Returned slice is sorted by created_at
+// ascending so callers can treat [0] as "before" and [1] as "after".
+// Returns an error when the pair is incomplete, the entries are
+// missing, or either entry lacks a photo — these are presented to the
+// user as a toast, not as a 500.
+func (wc *WeightController) GetWeightEntriesForCompare(idA, idB, userID string) ([]models.WeightEntry, error) {
+	if idA == "" || idB == "" || idA == idB {
+		return nil, fmt.Errorf("please choose two different weight entries to compare")
+	}
+	entries, err := wc.repo.GetByIDs(idA, idB, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) < 2 {
+		return nil, fmt.Errorf("could not find both weight entries")
+	}
+	for _, e := range entries {
+		if !e.HasPhoto() {
+			return nil, fmt.Errorf("both entries must have a photo to be compared")
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].CreatedAt.Before(entries[j].CreatedAt)
+	})
+	return entries, nil
 }
 
 // UpdateWeightEntry updates an existing weight entry including its timestamp.

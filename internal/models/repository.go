@@ -102,6 +102,7 @@ type WeightRepo interface {
 	List(userID string) ([]WeightEntry, error)
 	Update(entry *WeightEntry, userID string) error
 	Delete(id string, userID string) error
+	GetByIDs(idA, idB, userID string) ([]WeightEntry, error)
 }
 
 // Compile-time check to ensure WeightRepository implements WeightRepo.

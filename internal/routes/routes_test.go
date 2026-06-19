@@ -587,6 +587,21 @@ func (m *mockWeightRepository) Delete(id string, userID string) error {
 	return nil
 }
 
+func (m *mockWeightRepository) GetByIDs(idA, idB, userID string) ([]models.WeightEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []models.WeightEntry
+	for _, e := range m.entries {
+		if e.UserID != userID {
+			continue
+		}
+		if e.ID == idA || e.ID == idB {
+			result = append(result, e)
+		}
+	}
+	return result, nil
+}
+
 // mockPushSubscriptionRepository satisfies the models.PushSubscriptionRepo
 // interface for the route tests. The push routes only use a subset of
 // the methods, but every method on the interface is implemented so

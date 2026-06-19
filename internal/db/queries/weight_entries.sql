@@ -20,3 +20,7 @@ WHERE id = ? AND user_id = ?;
 -- name: DeleteWeightEntry :exec
 DELETE FROM weight_entries
 WHERE id = ? AND user_id = ?;
+
+-- name: GetWeightEntriesByIDs :many
+SELECT * FROM weight_entries
+WHERE id IN (?, ?) AND user_id = ?;

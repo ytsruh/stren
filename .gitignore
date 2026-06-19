@@ -1,5 +1,4 @@
-internal/views/*_templ.go
-internal/views/components/*_templ.go
+internal/views/**/*_templ.go
 *.env
 /data/*
 *.db

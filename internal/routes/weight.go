@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"stren/internal/models"
 	"stren/internal/utils"
+	"stren/internal/views"
 	"stren/internal/views/weight"
 )
 
@@ -182,4 +184,48 @@ func (h *Handler) DeleteWeight(c echo.Context) error {
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/weight")
+}
+
+// CompareWeightModal returns the modal fragment used by the image-comparison
+// feature on the weight list page. It is fetched by htmx in response to the
+// "Compare" button on the table and is swapped into a container element
+// next to the table. On any error the response is a Basecoat error toast
+// (still in the same container) so the page can show feedback without
+// reloading.
+func (h *Handler) CompareWeightModal(c echo.Context) error {
+	idA := c.QueryParam("a")
+	idB := c.QueryParam("b")
+
+	claims := GetClaims(c)
+	entries, err := h.weightCtrl.GetWeightEntriesForCompare(idA, idB, claims.UserID)
+	if err != nil {
+		return render(c, views.Toast("error", "Cannot compare photos", err.Error()))
+	}
+
+	before := entries[0]
+	after := entries[1]
+	delta := after.Weight - before.Weight
+	deltaStr := formatWeightDelta(delta)
+
+	return render(c, weight.CompareModal(
+		before.FormattedDateLong(), before.FormattedWeight(), before.PhotoURL(),
+		after.FormattedDateLong(), after.FormattedWeight(), after.PhotoURL(),
+		deltaStr,
+	))
+}
+
+// formatWeightDelta produces a short human-readable summary of the
+// weight change between two entries. Positive deltas are prefixed with
+// "+", negative with "−" (U+2212), and deltas within ±0.05 kg return
+// an empty string so the caller can omit the change indicator entirely
+// (avoids the awkward "· no change" label).
+func formatWeightDelta(delta float64) string {
+	switch {
+	case delta > 0.05:
+		return fmt.Sprintf("+%.1f kg", delta)
+	case delta < -0.05:
+		return fmt.Sprintf("−%.1f kg", -delta)
+	default:
+		return ""
+	}
 }

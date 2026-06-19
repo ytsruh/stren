@@ -62,6 +62,47 @@ func (q *Queries) DeleteWeightEntry(ctx context.Context, arg DeleteWeightEntryPa
 	return err
 }
 
+const getWeightEntriesByIDs = `-- name: GetWeightEntriesByIDs :many
+SELECT id, user_id, weight, notes, photo_key, created_at FROM weight_entries
+WHERE id IN (?, ?) AND user_id = ?
+`
+
+type GetWeightEntriesByIDsParams struct {
+	ID     string
+	ID_2   string
+	UserID string
+}
+
+func (q *Queries) GetWeightEntriesByIDs(ctx context.Context, arg GetWeightEntriesByIDsParams) ([]WeightEntry, error) {
+	rows, err := q.db.QueryContext(ctx, getWeightEntriesByIDs, arg.ID, arg.ID_2, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WeightEntry
+	for rows.Next() {
+		var i WeightEntry
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Weight,
+			&i.Notes,
+			&i.PhotoKey,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getWeightEntry = `-- name: GetWeightEntry :one
 SELECT id, user_id, weight, notes, photo_key, created_at FROM weight_entries
 WHERE id = ? AND user_id = ?

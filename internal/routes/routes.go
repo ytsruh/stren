@@ -123,6 +123,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/weight", h.WeightPage)
 	e.GET("/weight/new", h.NewWeightForm)
 	e.POST("/weight", h.CreateWeight)
+	e.GET("/weight/compare-modal", h.CompareWeightModal)
 	e.GET("/weight/:id/edit", h.EditWeightForm)
 	e.PUT("/weight/:id", h.UpdateWeight)
 	e.DELETE("/weight/:id", h.DeleteWeight)
