@@ -129,15 +129,6 @@ type ClientConfig struct {
 	TTL time.Duration
 	// Urgency is the delivery priority hint. Default: normal.
 	Urgency webpush.Urgency
-	// Logger, if non-nil, is called once per outbound push with a
-	// diagnostic line containing the VAPID Authorization header
-	// (the JWT webpush-go built for this request, in the form
-	// "vapid t=<JWT>,k=<pubkey>"). Intended for debugging
-	// non-2xx responses like Apple's BadJwtToken, where the push
-	// service's body alone doesn't tell us which JWT claim is
-	// wrong. nil = silent. The default production configuration
-	// leaves this nil so the wrapper pays zero cost.
-	Logger func(format string, args ...any)
 }
 
 // NewClient returns a Client ready to send. The keys must already be
@@ -162,12 +153,6 @@ func NewClient(keys *Keys, cfg ClientConfig) *Client {
 	if cfg.Urgency == "" {
 		cfg.Urgency = defaultUrgency
 	}
-	if cfg.Logger != nil {
-		cfg.HTTPClient = &loggingHTTPClient{
-			inner:  cfg.HTTPClient,
-			logger: cfg.Logger,
-		}
-	}
 	return &Client{
 		keys:       keys,
 		httpClient: cfg.HTTPClient,
@@ -176,24 +161,6 @@ func NewClient(keys *Keys, cfg ClientConfig) *Client {
 		ttl:        cfg.TTL,
 		urgency:    cfg.Urgency,
 	}
-}
-
-// loggingHTTPClient is a thin webpush.HTTPClient wrapper that
-// records the VAPID Authorization header on every outbound push.
-// It is installed by NewClient only when ClientConfig.Logger is
-// non-nil, so the default production config pays no cost. The
-// request body is not logged — the JWT and the endpoint are what
-// we need to diagnose a BadJwtToken-style rejection.
-type loggingHTTPClient struct {
-	inner  webpush.HTTPClient
-	logger func(format string, args ...any)
-}
-
-func (l *loggingHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	if auth := req.Header.Get("Authorization"); auth != "" {
-		l.logger("push: %s %s auth=%q", req.Method, req.URL.String(), auth)
-	}
-	return l.inner.Do(req)
 }
 
 // Send delivers msg to a single subscription. It returns a SendOutcome

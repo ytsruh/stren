@@ -1,13 +1,11 @@
 package push
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -309,150 +307,31 @@ type errFake string
 
 func (e errFake) Error() string { return string(e) }
 
-// safeBuffer is a bytes.Buffer guarded by a mutex. ClientConfig.Logger
-// is called from the Send path; the test goroutine reads the buffer
-// afterwards. Without the lock the race detector would flag the
-// access even though Send is synchronous today, because future
-// changes could move the log call to a worker goroutine.
-type safeBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *safeBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *safeBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
-
-func (b *safeBuffer) WriteByte(c byte) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.WriteByte(c)
-}
-
-// TestClient_Send_LoggerCapturesVAPIDHeader makes sure that when
-// ClientConfig.Logger is set, the wrapper around the HTTPClient
-// records the VAPID Authorization header on every outbound push.
-// This is the diagnostic hook that surfaces Apple's BadJwtToken
-// rejections: the JWT in the log line can be split on '.' and
-// base64url-decoded to see alg/aud/exp/sub, none of which the
-// push service's 403 body tells us.
-func TestClient_Send_LoggerCapturesVAPIDHeader(t *testing.T) {
-	keys := validKeys(t)
-
-	var logBuf safeBuffer
-	logger := func(format string, args ...any) {
-		// Mirror log.Printf semantics so the captured string is
-		// the same one an operator would see in production.
-		fmt.Fprintf(&logBuf, format, args...)
-		logBuf.WriteByte('\n')
-	}
-
-	// Use a real httptest server so webpush-go builds a real JWT
-	// (its encryption + VAPID signing paths only run when there is
-	// a real network round-trip). The server returns 403 with the
-	// body that mimics Apple's BadJwtToken response.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		_, _ = w.Write([]byte(`{"reason":"BadJwtToken"}`))
-	}))
-	defer srv.Close()
-
-	client := NewClient(keys, ClientConfig{
-		HTTPClient: srv.Client(),
-		Subscriber: "mailto:test@example.com",
-		Logger:     logger,
-	})
-
-	sub := validSub()
-	sub.Endpoint = srv.URL + "/push/abc"
-
-	out := client.Send(context.Background(), sub, Message{Title: "x", Body: "y"})
-	if out.Error == nil {
-		t.Fatal("expected error from 403 response")
-	}
-	if !contains(out.Error.Error(), "BadJwtToken") {
-		t.Errorf("error should include response body, got %q", out.Error.Error())
-	}
-
-	logged := logBuf.String()
-	if logged == "" {
-		t.Fatal("Logger was never called; expected the VAPID Authorization header to be recorded")
-	}
-	if !contains(logged, "vapid t=") {
-		t.Errorf("log line should contain the VAPID JWT prefix; got %q", logged)
-	}
-	if !contains(logged, "k=") {
-		t.Errorf("log line should contain the VAPID public key segment; got %q", logged)
-	}
-	if !contains(logged, srv.URL) {
-		t.Errorf("log line should mention the push service URL; got %q", logged)
-	}
-	if !contains(logged, "POST") {
-		t.Errorf("log line should mention the HTTP method; got %q", logged)
-	}
-}
-
-// TestClient_Send_NoLoggerNoLog makes sure the default
-// configuration (no Logger) is completely silent on the wire.
-// This locks in the "zero cost when not configured" promise of
-// the ClientConfig.Logger field.
-func TestClient_Send_NoLoggerNoLog(t *testing.T) {
-	keys := validKeys(t)
-
-	var logBuf safeBuffer
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body)
-		w.WriteHeader(http.StatusCreated)
-	}))
-	defer srv.Close()
-
-	// Note: no Logger set on ClientConfig.
-	client := NewClient(keys, ClientConfig{
-		HTTPClient: srv.Client(),
-		Subscriber: "mailto:test@example.com",
-	})
-
-	sub := validSub()
-	sub.Endpoint = srv.URL + "/push/abc"
-	if out := client.Send(context.Background(), sub, Message{Title: "x", Body: "y"}); out.Error != nil {
-		t.Fatalf("send failed: %v", out.Error)
-	}
-
-	if logBuf.String() != "" {
-		t.Errorf("expected silent log buffer, got %q", logBuf.String())
-	}
-}
-
 // TestClient_Send_VAPIDSubClaimIsNotDoublePrefixed is the
 // regression test for the bug that surfaced as Apple's
 // `BadJwtToken` 403: webpush-go prepends `mailto:` to any
 // `Subscriber` value that does not start with `https:`, so
 // passing `mailto:foo@bar` produces the malformed
-// `mailto:mailto:foo@bar` in the JWT. This test pins down the
-// exact `sub` claim value the default configuration produces,
-// so any future change to defaultSubject or to the way the
-// value is passed to webpush-go is caught at unit-test time
-// rather than discovered by an iOS user.
+// `mailto:mailto:foo@bar` in the JWT. The httptest server
+// captures the Authorization header webpush-go built, the
+// test decodes the JWT payload, and asserts the sub claim
+// matches the configured default — never the double-prefixed
+// form. If a future change reintroduces the bug, this test
+// fails at unit-test time rather than at the iOS user's
+// notification screen.
 func TestClient_Send_VAPIDSubClaimIsNotDoublePrefixed(t *testing.T) {
 	keys := validKeys(t)
 
-	var logBuf safeBuffer
-	logger := func(format string, args ...any) {
-		fmt.Fprintf(&logBuf, format, args...)
-		logBuf.WriteByte('\n')
-	}
+	// capturedAuth is written by the httptest handler in the
+	// request goroutine and read by the test goroutine after
+	// Send returns, so it needs a mutex.
+	var mu sync.Mutex
+	var capturedAuth string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		capturedAuth = r.Header.Get("Authorization")
+		mu.Unlock()
 		_, _ = io.Copy(io.Discard, r.Body)
 		w.WriteHeader(http.StatusCreated)
 	}))
@@ -461,11 +340,10 @@ func TestClient_Send_VAPIDSubClaimIsNotDoublePrefixed(t *testing.T) {
 	// Use the package default (no Subscriber override) so this
 	// test is the one that catches a regression in defaultSubject
 	// itself. The other tests in this file pass
-	// `mailto:test@example.com` explicitly, which is the case the
-	// new doc comment warns about.
+	// `mailto:test@example.com` explicitly, which is the case
+	// the doc comment warns about.
 	client := NewClient(keys, ClientConfig{
 		HTTPClient: srv.Client(),
-		Logger:     logger,
 	})
 
 	sub := validSub()
@@ -474,38 +352,30 @@ func TestClient_Send_VAPIDSubClaimIsNotDoublePrefixed(t *testing.T) {
 		t.Fatalf("send failed: %v", out.Error)
 	}
 
-	logged := logBuf.String()
-	if !contains(logged, "vapid t=") {
-		t.Fatalf("no VAPID header in log; got %q", logged)
+	mu.Lock()
+	authValue := capturedAuth
+	mu.Unlock()
+
+	if !strings.HasPrefix(authValue, "vapid t=") {
+		t.Fatalf("Authorization header is not in VAPID form; got %q", authValue)
 	}
 
-	// Extract the JWT from the auth="vapid t=...,k=..." line.
-	// The log format is fixed by the loggingHTTPClient wrapper.
-	const marker = `auth="vapid t=`
-	start := strings.Index(logged, marker)
-	if start < 0 {
-		t.Fatalf("could not find VAPID marker in log line %q", logged)
-	}
-	rest := logged[start+len(marker):]
-	end := strings.Index(rest, `"`)
-	if end < 0 {
-		t.Fatalf("could not find end of auth value in log line %q", logged)
-	}
-	authValue := rest[:end]
-
-	// authValue is "<JWT>, k=<key>". The marker already consumed
-	// "vapid t=", so the rest starts with the JWT itself. The JWT
-	// is everything before the ", k=" separator. webpush-go emits
-	// the separator with a space (see vapid.go:106 in the library).
+	// authValue is "vapid t=<JWT>, k=<key>". Pull the JWT
+	// between "t=" and ", k=". webpush-go emits the separator
+	// with a space (see vapid.go:106 in the library).
 	const sep = ", k="
-	comma := strings.Index(authValue, sep)
+	start := strings.Index(authValue, "t=")
+	if start < 0 {
+		t.Fatalf("no t= in auth value %q", authValue)
+	}
+	jwtAndMore := authValue[start+2:]
+	comma := strings.Index(jwtAndMore, sep)
 	if comma < 0 {
 		t.Fatalf(`no %q separator in auth value %q`, sep, authValue)
 	}
-	jwt := authValue[:comma]
+	jwt := jwtAndMore[:comma]
 
-	// JWT is header.payload.signature. We only need the payload
-	// (the second segment) to assert the sub claim.
+	// JWT is header.payload.signature. We only need the payload.
 	parts := strings.Split(jwt, ".")
 	if len(parts) != 3 {
 		t.Fatalf("expected 3-part JWT, got %d parts: %q", len(parts), jwt)
@@ -530,16 +400,10 @@ func TestClient_Send_VAPIDSubClaimIsNotDoublePrefixed(t *testing.T) {
 		t.Errorf("sub claim contains the double-prefix bug; got payload: %s", payload)
 	}
 
-	// Also confirm the rest of the JWT looks right, so a future
+	// And confirm an aud claim is present, so a future
 	// regression that swapped `sub` for some other claim is
 	// caught here too.
-	if !contains(string(payload), `"aud":"https://web.push.apple.com"`) &&
-		!contains(string(payload), `"aud":"https://`+srv.Listener.Addr().String()) {
-		// The aud claim is the origin of the endpoint, which is
-		// the test server's address when using httptest. Just
-		// confirm an aud claim is present at all.
-		if !contains(string(payload), `"aud":"`) {
-			t.Errorf("payload missing aud claim: %s", payload)
-		}
+	if !contains(string(payload), `"aud":"`) {
+		t.Errorf("payload missing aud claim: %s", payload)
 	}
 }

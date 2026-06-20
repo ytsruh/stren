@@ -55,6 +55,13 @@ self.addEventListener('push', function (event) {
 // notificationclick — fired when the user taps the notification.
 // Opens the URL in an existing tab if possible, otherwise in a new
 // tab. Falls back to the dashboard if no URL is provided.
+//
+// We use postMessage to ask an existing client to navigate itself
+// rather than calling client.navigate() directly. client.navigate()
+// is unreliable on iOS PWA — it silently no-ops, leaving the
+// focused client on whatever URL it was already on. The page-side
+// handler (registered in layout.templ) does window.location.href,
+// which works on every platform.
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
@@ -74,9 +81,7 @@ self.addEventListener('notificationclick', function (event) {
           var client = clientList[i];
           if (client.url && 'focus' in client) {
             client.focus();
-            if ('navigate' in client) {
-              return client.navigate(targetUrl);
-            }
+            client.postMessage({ type: 'push-navigate', url: targetUrl });
             return;
           }
         }
