@@ -16,10 +16,24 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 	@views.Layout(views.PageData{Title: "Weight", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Body Weight"})
-			<a href="/weight/new" class="btn">
-				@components.Icon(components.IconProps{Name: "plus", Size: 18})
-				Log Weight
-			</a>
+			<div class="flex items-center gap-2">
+				if len(entries) > 0 {
+					<a
+						href="/weight/export"
+						id="weight-export-link"
+						download
+						class="btn-outline"
+						title="Download all weight entries and photos as a ZIP"
+					>
+						@components.Icon(components.IconProps{Name: "download", Size: 18})
+						Export
+					</a>
+				}
+				<a href="/weight/new" class="btn">
+					@components.Icon(components.IconProps{Name: "plus", Size: 18})
+					Log Weight
+				</a>
+			</div>
 		</div>
 		<div class="flex flex-col sm:flex-row gap-4">
 			<div
@@ -48,6 +62,7 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 		}
 		<div id="weight-compare-modal-container"></div>
 		@WeightCompareScript()
+		@WeightExportScript()
 	}
 }
 
@@ -283,6 +298,7 @@ templ WeightCompareScript() {
 			var TOAST_ICONS = {
 				warning: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>'
 			};
+
 			function showToast(category, title, message) {
 				var toaster = document.getElementById('toaster');
 				if (!toaster) return;
@@ -346,6 +362,86 @@ templ WeightCompareScript() {
 					cb.checked = false;
 				});
 				render();
+			});
+		})();
+	</script>
+}
+
+// WeightExportScript wires up the "Export" button on the weight list
+// page so it shows the global confirmation dialog (defined in
+// layout.templ) before kicking off the download. The download itself
+// is a plain <a href download> navigation — we don't use htmx for it
+// because htmx-swapped binary content doesn't trigger a browser save.
+//
+// The confirm dialog already has htmx:confirm plumbing, but that path
+// is only triggered by elements with hx-confirm. Since our <a> doesn't
+// go through htmx we wire the click directly: open the dialog,
+// populate its message and OK-button handler, and on confirm navigate
+// the browser to the export URL.
+templ WeightExportScript() {
+	<script>
+		(function() {
+			var link = document.getElementById('weight-export-link');
+			if (!link) return;
+
+			link.addEventListener('click', function(evt) {
+				// Honour cmd/ctrl-click, middle-click etc. — those
+				// are deliberate "open in new tab" gestures and
+				// shouldn't be intercepted by the confirm dialog.
+				if (evt.metaKey || evt.ctrlKey || evt.shiftKey || evt.altKey || evt.button !== 0) {
+					return;
+				}
+				evt.preventDefault();
+
+				var dialog = document.getElementById('confirm-dialog');
+				if (!dialog || typeof dialog.showModal !== 'function') {
+					// No dialog available — fall back to a plain
+					// browser confirm. Better than silently
+					// downloading.
+					if (window.confirm('Download a ZIP containing all your weight entries and photos?')) {
+						window.location.href = link.href;
+					}
+					return;
+				}
+
+				var message = document.getElementById('confirm-message');
+				var ok = document.getElementById('confirm-ok');
+				if (message) {
+					message.textContent = 'Download a ZIP containing all your weight entries and photos?';
+				}
+
+				// The shared #confirm-dialog has btn-destructive
+				// on its OK button by default — that's the right
+				// look for delete-style htmx confirmations but
+				// wrong for a non-destructive download. We swap
+				// the class to btn (the primary brand variant) for
+				// the duration of this dialog, then restore the
+				// original class on close so any future
+				// destructive confirmation (e.g. a delete
+				// confirmation) opens the dialog with its default
+				// styling again.
+				//
+				// The native <dialog> is showModal()-blocked so
+				// only one instance can be open at a time — that
+				// removes any race risk between the swap and
+				// restore, even with concurrent triggers from
+				// different parts of the page.
+				if (ok) {
+					var originalOkClass = ok.className;
+					ok.className = ok.className.replace(/\bbtn-destructive\b/, 'btn');
+					ok.onclick = function() {
+						dialog.close();
+						window.location.href = link.href;
+					};
+					// `{ once: true }` so the listener detaches
+					// itself after firing — important because
+					// the dialog can be closed and re-opened
+					// many times in one page lifetime.
+					dialog.addEventListener('close', function restoreOkClass() {
+						ok.className = originalOkClass;
+					}, { once: true });
+				}
+				dialog.showModal();
 			});
 		})();
 	</script>

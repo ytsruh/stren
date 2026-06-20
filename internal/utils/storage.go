@@ -6,6 +6,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -130,6 +131,25 @@ func DeleteObject(key string) error {
 		return fmt.Errorf("failed to delete object: %w", err)
 	}
 	return nil
+}
+
+// GetObject fetches the raw bytes stream of an R2 object by key. The
+// caller is responsible for closing the returned io.ReadCloser. Errors
+// (including "not found" from R2) are wrapped.
+func GetObject(ctx context.Context, key string) (io.ReadCloser, error) {
+	client, err := GetS3Client()
+	if err != nil {
+		return nil, err
+	}
+	sc := storageConfig
+	out, err := client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(sc.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object %q: %w", key, err)
+	}
+	return out.Body, nil
 }
 
 // PublicURLFor returns the public URL for an object key, given the configured

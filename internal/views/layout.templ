@@ -275,23 +275,37 @@ templ Layout(data PageData) {
 					{ children... }
 				</div>
 			</main>
-			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
-				<form method="dialog">
-					<header>
-						<h3>Confirm</h3>
-						<p id="confirm-message"></p>
-					</header>
-					<footer class="flex items-center gap-3">
-						<button type="button" commandfor="confirm-dialog" command="close" class="btn-outline">Cancel</button>
-						<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
-							<span class="btn-text">Confirm</span>
-							<span id="confirm-spinner" class="htmx-indicator flex items-center justify-center animate-spin">
-								@components.Icon(components.IconProps{Name: "loader", Size: 18})
-							</span>
-						</button>
-					</footer>
-				</form>
-			</dialog>
+		<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
+			<form method="dialog">
+				<header>
+					<h3>Confirm</h3>
+					<p id="confirm-message"></p>
+				</header>
+				<footer class="flex items-center gap-3">
+					<button type="button" commandfor="confirm-dialog" command="close" class="btn-outline">Cancel</button>
+					{{/*
+						The OK button defaults to `btn-destructive`
+						because the dialog was originally built for
+						"are you sure you want to delete …?"
+						confirmations (the only htmx-confirm uses in
+						the app today). Non-destructive callers
+						(e.g. the weight export) swap the class to
+						`btn` (or another non-destructive variant)
+						right before showModal() and restore the
+						original className on the dialog's `close`
+						event — see WeightExportScript in
+						internal/views/weight/list.templ for the
+						canonical example.
+					*/}}
+					<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
+						<span class="btn-text">Confirm</span>
+						<span id="confirm-spinner" class="htmx-indicator flex items-center justify-center animate-spin">
+							@components.Icon(components.IconProps{Name: "loader", Size: 18})
+						</span>
+					</button>
+				</footer>
+			</form>
+		</dialog>
 			<script>
 				document.body.addEventListener('htmx:confirm', function(evt) {
 					if (!evt.target.hasAttribute('hx-confirm')) return;

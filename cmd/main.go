@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -10,6 +12,7 @@ import (
 
 	"stren/internal/controllers"
 	"stren/internal/db"
+	"stren/internal/export"
 	"stren/internal/models"
 	"stren/internal/push"
 	"stren/internal/routes"
@@ -72,7 +75,7 @@ func main() {
 	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
 	timersCtrl := controllers.NewTimersController()
-	weightCtrl := controllers.NewWeightController(weightRepo)
+	weightCtrl := controllers.NewWeightController(weightRepo, r2PhotoGetter{})
 	pushCtrl := controllers.NewPushController(pushRepo)
 	adminNotificationsCtrl := controllers.NewAdminNotificationsController(pushService)
 
@@ -150,3 +153,15 @@ func getLocalIP() string {
 	}
 	return ""
 }
+
+// r2PhotoGetter adapts utils.GetObject to the export.PhotoGetter
+// interface. Kept as its own type so a test fake can be substituted in
+// if/when the export package is exercised via the controller.
+type r2PhotoGetter struct{}
+
+func (r2PhotoGetter) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	return utils.GetObject(ctx, key)
+}
+
+// Compile-time check: r2PhotoGetter satisfies export.PhotoGetter.
+var _ export.PhotoGetter = r2PhotoGetter{}

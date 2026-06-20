@@ -420,3 +420,40 @@ func TestWeightEntry_FormattedDateLong(t *testing.T) {
 		t.Errorf("FormattedDateLong = %q, want %q", got, want)
 	}
 }
+
+// TestWeightPage_RendersExportLinkWithEntries asserts that the export
+// link is present in the page header when the user has at least one
+// entry. The link points at /weight/export and carries id="weight-export-link"
+// so the inline script can wire up the confirm dialog.
+func TestWeightPage_RendersExportLinkWithEntries(t *testing.T) {
+	day := time.Date(2026, 1, 9, 8, 0, 0, 0, time.UTC)
+	entries := []models.WeightEntry{
+		{ID: "w1", Weight: 80, CreatedAt: day},
+	}
+	html := renderToString(t, WeightPage(entries, "Test User", true, false, nil))
+
+	if !strings.Contains(html, `id="weight-export-link"`) {
+		t.Error("expected export link in header")
+	}
+	if !strings.Contains(html, `href="/weight/export"`) {
+		t.Error("expected export link to point at /weight/export")
+	}
+	if !strings.Contains(html, `download`) {
+		t.Error("expected export link to carry the download attribute")
+	}
+}
+
+// TestWeightPage_HidesExportLinkWhenEmpty ensures users with no
+// entries don't see an export button — exporting an empty zip would
+// just be a confusing no-op.
+func TestWeightPage_HidesExportLinkWhenEmpty(t *testing.T) {
+	html := renderToString(t, WeightPage(nil, "Test User", true, false, nil))
+	if strings.Contains(html, `id="weight-export-link"`) {
+		t.Error("expected no export link when the user has no entries")
+	}
+	// The page is in the empty-state branch, so the regular
+	// table/CompareBar/WeightExportScript are not rendered.
+	if strings.Contains(html, `id="weight-compare-bar"`) {
+		t.Error("expected no compare bar in empty state")
+	}
+}

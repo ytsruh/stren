@@ -2,6 +2,7 @@ package routes
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -228,4 +229,31 @@ func formatWeightDelta(delta float64) string {
 	default:
 		return ""
 	}
+}
+
+// ExportWeightZip streams a zip archive of the authenticated user's
+// weight entries (and any photos that can be fetched from R2) as the
+// response body. Content-Disposition forces a download with a
+// date-stamped filename. The zip is built in a background goroutine
+// (see controllers.WeightController.ExportWeightZip) so the response
+// streams end-to-end.
+func (h *Handler) ExportWeightZip(c echo.Context) error {
+	claims := GetClaims(c)
+
+	reader, filename, err := h.weightCtrl.ExportWeightZip(c.Request().Context(), claims.UserID)
+	if err != nil {
+		return err
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, "application/zip")
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Response().WriteHeader(http.StatusOK)
+	if _, err := io.Copy(c.Response().Writer, reader); err != nil {
+		// We've already sent headers, so we can't return a
+		// proper error response. Log it and abort the
+		// connection so the client doesn't see a truncated
+		// zip labelled "OK".
+		c.Logger().Errorf("weight export stream failed: %v", err)
+	}
+	return nil
 }
