@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -21,10 +22,17 @@ func (f roundTripperFunc) Do(req *http.Request) (*http.Response, error) { return
 
 // fakeResponse builds a minimal *http.Response the wrapper will accept.
 func fakeResponse(status int) *http.Response {
+	return fakeResponseWithBody(status, "")
+}
+
+// fakeResponseWithBody is fakeResponse with a non-empty body. Used by
+// the "response body is captured on non-2xx" tests; the body is what
+// Apple / FCM / Mozilla actually return to explain a 4xx/5xx.
+func fakeResponseWithBody(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
 		Status:     http.StatusText(status),
-		Body:       io.NopCloser(strReader("")),
+		Body:       io.NopCloser(strReader(body)),
 		Header:     http.Header{},
 	}
 }
@@ -140,6 +148,85 @@ func TestClient_Send_5xxIsFailedNotDeleted(t *testing.T) {
 	}
 }
 
+// TestClient_Send_403IncludesBody makes sure that when the push
+// service rejects a request with a non-2xx (e.g. Apple's 403 with
+// {"reason":"BadJwt"}), the response body ends up in the returned
+// error so the admin toast and server log can show the real reason
+// instead of just "unexpected status 403". This was the gap that
+// masked the iOS `.local` VAPID subscriber bug.
+func TestClient_Send_403IncludesBody(t *testing.T) {
+	keys := validKeys(t)
+	body := `{"reason":"BadSubscriber"}`
+	client := NewClient(keys, ClientConfig{
+		HTTPClient: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return fakeResponseWithBody(http.StatusForbidden, body), nil
+		}),
+	})
+	out := client.Send(context.Background(), validSub(), Message{Title: "x", Body: "y"})
+	if out.Deleted {
+		t.Fatal("403 should not mark deleted")
+	}
+	if out.Error == nil {
+		t.Fatal("expected non-nil error on 403")
+	}
+	if out.Status != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d", out.Status)
+	}
+	if !contains(out.Error.Error(), "403") {
+		t.Errorf("error should mention status 403, got %q", out.Error.Error())
+	}
+	if !contains(out.Error.Error(), "BadSubscriber") {
+		t.Errorf("error should include response body %q, got %q", body, out.Error.Error())
+	}
+}
+
+// TestClient_Send_410WithBodyStillIncludesBody exercises the same
+// body-capture path through the "subscription gone" branch: even
+// though the row is marked Deleted, the body should still appear in
+// the error message so the operator can see WHY the push service
+// dropped the subscription.
+func TestClient_Send_410WithBodyStillIncludesBody(t *testing.T) {
+	keys := validKeys(t)
+	body := `{"reason":"DeviceTokenNotForTopic"}`
+	client := NewClient(keys, ClientConfig{
+		HTTPClient: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return fakeResponseWithBody(http.StatusGone, body), nil
+		}),
+	})
+	out := client.Send(context.Background(), validSub(), Message{Title: "x", Body: "y"})
+	if !out.Deleted {
+		t.Fatal("expected Deleted=true on 410")
+	}
+	if out.Error == nil {
+		t.Fatal("expected non-nil error on 410")
+	}
+	if !contains(out.Error.Error(), "DeviceTokenNotForTopic") {
+		t.Errorf("error should include response body %q, got %q", body, out.Error.Error())
+	}
+}
+
+// TestClient_Send_TruncatesVeryLongBody guards against a misbehaving
+// push service (or a proxy in front of one) returning a megabyte of
+// HTML in an error page. The body is capped to keep the log line and
+// admin toast readable.
+func TestClient_Send_TruncatesVeryLongBody(t *testing.T) {
+	keys := validKeys(t)
+	huge := strings.Repeat("X", maxErrorBody*4)
+	client := NewClient(keys, ClientConfig{
+		HTTPClient: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return fakeResponseWithBody(http.StatusInternalServerError, huge), nil
+		}),
+	})
+	out := client.Send(context.Background(), validSub(), Message{Title: "x", Body: "y"})
+	if out.Error == nil {
+		t.Fatal("expected non-nil error on 500")
+	}
+	if len(out.Error.Error()) > maxErrorBody+64 {
+		t.Errorf("error message too long (%d bytes); expected <= ~%d. got %q",
+			len(out.Error.Error()), maxErrorBody+64, out.Error.Error())
+	}
+}
+
 func TestClient_Send_TransportError(t *testing.T) {
 	keys := validKeys(t)
 	client := NewClient(keys, ClientConfig{
@@ -209,6 +296,10 @@ func TestClient_Send_UsesVAPIDHeaders(t *testing.T) {
 
 func startsWith(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+func contains(s, sub string) bool {
+	return strings.Contains(s, sub)
 }
 
 type errFake string

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
@@ -20,9 +22,17 @@ const (
 	defaultTTL      = 24 * time.Hour
 	defaultUrgency  = webpush.UrgencyNormal
 	defaultTopic    = "stren-admin-message"
-	defaultSubject  = "mailto:admin@stren.local"
+	defaultSubject  = "mailto:chris@stren.ytsruh.com"
 	defaultHTTPTime = 30 * time.Second
 )
+
+// maxErrorBody caps the size of the push service response body that
+// the wrapper will copy into SendOutcome.Error. Apple, FCM, and
+// Mozilla each return a short JSON body on failure (typically
+// {"reason": "..."}); a few hundred bytes is plenty. Anything larger
+// is almost certainly an HTML error page from a proxy, which is not
+// useful in a log line.
+const maxErrorBody = 256
 
 // Subscription is the subset of a browser PushSubscription that the
 // server needs to deliver a message. It is intentionally narrower than
@@ -95,6 +105,14 @@ type ClientConfig struct {
 	HTTPClient webpush.HTTPClient
 	// Subscriber is the VAPID `sub` claim: a mailto: URL or
 	// https:// URL identifying the operator. Required by the spec.
+	//
+	// The value MUST resolve to a real contact. Apple
+	// (web.push.apple.com) is the strictest of the major push
+	// providers and returns HTTP 403 when the `sub` is a clearly
+	// placeholder address (e.g. a `.local` hostname). FCM and
+	// Mozilla autopush tend to accept placeholder values, which
+	// means a bad default here shows up as iOS-only 403s in
+	// production while every other platform appears to work.
 	Subscriber string
 	// Topic groups multiple messages so the push service can collapse
 	// them on the device. Default: "stren-admin-message".
@@ -189,6 +207,20 @@ func (c *Client) Send(ctx context.Context, sub Subscription, msg Message) SendOu
 	}
 	defer resp.Body.Close()
 
+	// Drain the body on every path so the underlying HTTP connection
+	// can be reused. For 2xx the body is typically empty, but reading
+	// is harmless. For non-2xx the body usually contains the push
+	// service's reason (Apple: {"reason":"BadJwt"}, FCM: NOT_FOUND,
+	// Mozilla: a plaintext code) and is the difference between
+	// knowing and guessing the next time a 403 lands in production.
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody+1))
+	truncated := ""
+	if len(body) > maxErrorBody {
+		body = body[:maxErrorBody]
+		truncated = "…"
+	}
+	bodyStr := strings.TrimSpace(string(body))
+
 	out := SendOutcome{
 		Subscription: sub,
 		Status:       resp.StatusCode,
@@ -202,10 +234,18 @@ func (c *Client) Send(ctx context.Context, sub Subscription, msg Message) SendOu
 		return out
 	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone:
 		out.Deleted = true
-		out.Error = fmt.Errorf("push: subscription gone (status %d)", resp.StatusCode)
+		if bodyStr != "" {
+			out.Error = fmt.Errorf("push: subscription gone (status %d): %s%s", resp.StatusCode, bodyStr, truncated)
+		} else {
+			out.Error = fmt.Errorf("push: subscription gone (status %d)", resp.StatusCode)
+		}
 		return out
 	default:
-		out.Error = fmt.Errorf("push: unexpected status %d from push service", resp.StatusCode)
+		if bodyStr != "" {
+			out.Error = fmt.Errorf("push: unexpected status %d from push service: %s%s", resp.StatusCode, bodyStr, truncated)
+		} else {
+			out.Error = fmt.Errorf("push: unexpected status %d from push service", resp.StatusCode)
+		}
 		return out
 	}
 }
