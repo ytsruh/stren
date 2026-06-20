@@ -55,7 +55,9 @@ templ Layout(data PageData) {
 				})();
 			</script>
 			<link rel="stylesheet" href="/css/styles.css"/>
+			<link rel="stylesheet" href="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.css"/>
 			<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+			<script src="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.js" defer></script>
 			<script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/js/all.min.js" defer></script>
 		</head>
 		<body>
@@ -160,20 +162,31 @@ templ Layout(data PageData) {
 												<span>Users</span>
 											</a>
 										</li>
-										<li>
-											<a
-												href="/admin/feedback"
-												if data.CurrentPath == "/admin/feedback" {
-													aria-current="page"
-												}
-											>
-												@components.Icon(components.IconProps{Name: "message", Size: 18})
-												<span>Feedback</span>
-											</a>
-										</li>
-									</ul>
-								</div>
-							}
+						<li>
+							<a
+								href="/admin/feedback"
+								if data.CurrentPath == "/admin/feedback" {
+									aria-current="page"
+								}
+							>
+								@components.Icon(components.IconProps{Name: "message", Size: 18})
+								<span>Feedback</span>
+							</a>
+						</li>
+						<li>
+							<a
+								href="/admin/notifications"
+								if data.CurrentPath == "/admin/notifications" {
+									aria-current="page"
+								}
+							>
+								@components.Icon(components.IconProps{Name: "bell", Size: 18})
+								<span>Notifications</span>
+							</a>
+						</li>
+					</ul>
+				</div>
+			}
 							<div>
 								<h3>Account</h3>
 								<ul>
@@ -262,23 +275,37 @@ templ Layout(data PageData) {
 					{ children... }
 				</div>
 			</main>
-			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
-				<form method="dialog">
-					<header>
-						<h3>Confirm</h3>
-						<p id="confirm-message"></p>
-					</header>
-					<footer class="flex items-center gap-3">
-						<button type="button" commandfor="confirm-dialog" command="close" class="btn-outline">Cancel</button>
-						<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
-							<span class="btn-text">Confirm</span>
-							<span id="confirm-spinner" class="htmx-indicator flex items-center justify-center animate-spin">
-								@components.Icon(components.IconProps{Name: "loader", Size: 18})
-							</span>
-						</button>
-					</footer>
-				</form>
-			</dialog>
+		<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
+			<form method="dialog">
+				<header>
+					<h3>Confirm</h3>
+					<p id="confirm-message"></p>
+				</header>
+				<footer class="flex items-center gap-3">
+					<button type="button" commandfor="confirm-dialog" command="close" class="btn-outline">Cancel</button>
+					{{/*
+						The OK button defaults to `btn-destructive`
+						because the dialog was originally built for
+						"are you sure you want to delete …?"
+						confirmations (the only htmx-confirm uses in
+						the app today). Non-destructive callers
+						(e.g. the weight export) swap the class to
+						`btn` (or another non-destructive variant)
+						right before showModal() and restore the
+						original className on the dialog's `close`
+						event — see WeightExportScript in
+						internal/views/weight/list.templ for the
+						canonical example.
+					*/}}
+					<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
+						<span class="btn-text">Confirm</span>
+						<span id="confirm-spinner" class="htmx-indicator flex items-center justify-center animate-spin">
+							@components.Icon(components.IconProps{Name: "loader", Size: 18})
+						</span>
+					</button>
+				</footer>
+			</form>
+		</dialog>
 			<script>
 				document.body.addEventListener('htmx:confirm', function(evt) {
 					if (!evt.target.hasAttribute('hx-confirm')) return;
@@ -302,14 +329,15 @@ templ Layout(data PageData) {
 					}, 500);
 				});
 			</script>
-			<script>
-				if ('serviceWorker' in navigator) {
-					navigator.serviceWorker.register('/sw.js').catch(function(err) {
-						console.error('Service worker registration failed:', err);
-					});
-				}
-			</script>
-			<div id="toaster" class="toaster"></div>
+		<script>
+			if ('serviceWorker' in navigator) {
+				navigator.serviceWorker.register('/sw.js').catch(function(err) {
+					console.error('Service worker registration failed:', err);
+				});
+			}
+		</script>
+		<script src="/js/push.js" defer></script>
+		<div id="toaster" class="toaster"></div>
 		</body>
 	</html>
 }

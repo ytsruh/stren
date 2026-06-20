@@ -6,12 +6,13 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/controllers"
-	"stren/internal/views"
+	"stren/internal/views/admin"
+	"stren/internal/views/feedback"
 )
 
 func (h *Handler) FeedbackForm(c echo.Context) error {
 	claims := GetClaims(c)
-	return render(c, views.FeedbackPage(claims.Name, true, claims.IsAdmin))
+	return render(c, feedback.FeedbackPage(claims.Name, true, claims.IsAdmin))
 }
 
 func (h *Handler) SubmitFeedback(c echo.Context) error {
@@ -22,23 +23,23 @@ func (h *Handler) SubmitFeedback(c echo.Context) error {
 	err := h.feedbackCtrl.Submit(title, message, claims.UserID)
 	if err != nil {
 		if err == controllers.ErrTitleTooShort {
-			return render(c, views.FeedbackFormError("Title must be at least 5 characters"))
+			return render(c, feedback.FeedbackFormError("Title must be at least 5 characters"))
 		}
 		if err == controllers.ErrTitleTooLong {
-			return render(c, views.FeedbackFormError("Title must be at most 100 characters"))
+			return render(c, feedback.FeedbackFormError("Title must be at most 100 characters"))
 		}
 		if err == controllers.ErrMessageTooShort {
-			return render(c, views.FeedbackFormError("Message must be at least 10 characters"))
+			return render(c, feedback.FeedbackFormError("Message must be at least 10 characters"))
 		}
 		if err == controllers.ErrMessageTooLong {
-			return render(c, views.FeedbackFormError("Message must be at most 1000 characters"))
+			return render(c, feedback.FeedbackFormError("Message must be at most 1000 characters"))
 		}
-		return render(c, views.FeedbackFormError("Failed to submit feedback: "+err.Error()))
+		return render(c, feedback.FeedbackFormError("Failed to submit feedback: "+err.Error()))
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
-		return render(c, views.FeedbackFormSuccess("Feedback submitted"))
+		return render(c, feedback.FeedbackFormSuccess("Feedback submitted"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/")
@@ -53,7 +54,7 @@ func (h *Handler) AdminListFeedback(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.AdminFeedbackList(feedback, filter, claims.Name, true, claims.IsAdmin))
+	return render(c, admin.AdminFeedbackList(feedback, filter, claims.Name, true, claims.IsAdmin))
 }
 
 func (h *Handler) AdminFeedbackDetail(c echo.Context) error {
@@ -65,7 +66,7 @@ func (h *Handler) AdminFeedbackDetail(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.AdminFeedbackDetail(feedback, claims.Name, true, claims.IsAdmin))
+	return render(c, admin.AdminFeedbackDetail(feedback, claims.Name, true, claims.IsAdmin))
 }
 
 func (h *Handler) AdminCloseFeedback(c echo.Context) error {
@@ -76,7 +77,7 @@ func (h *Handler) AdminCloseFeedback(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		return render(c, views.AdminFeedbackClosedSuccess())
+		return render(c, admin.AdminFeedbackClosedSuccess())
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/admin/feedback")

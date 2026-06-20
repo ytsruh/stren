@@ -32,6 +32,13 @@ func (w *WeightEntry) FormattedDate() string {
 	return w.CreatedAt.Format("02/01/06")
 }
 
+// FormattedDateLong returns the date in a long human-readable form
+// ("01 Jan 2026") used for image-comparison labels where space is
+// less constrained than in the table column.
+func (w *WeightEntry) FormattedDateLong() string {
+	return w.CreatedAt.Format("02 Jan 2006")
+}
+
 // HasPhoto returns true if the entry has an associated photo in R2.
 func (w *WeightEntry) HasPhoto() bool {
 	return w.PhotoKey != ""
@@ -131,6 +138,23 @@ func (r *WeightRepository) Delete(id string, userID string) error {
 		return fmt.Errorf("failed to delete weight entry: %w", err)
 	}
 	return nil
+}
+
+// GetByIDs retrieves a small set of weight entries by ID, all scoped to
+// the given user ID. The query is hard-coded to two IDs; callers needing
+// a different count should add a new sqlc query. Entries that don't
+// exist or don't belong to the user are simply omitted from the result.
+func (r *WeightRepository) GetByIDs(idA, idB, userID string) ([]WeightEntry, error) {
+	ctx := context.Background()
+	rows, err := r.queries.GetWeightEntriesByIDs(ctx, db.GetWeightEntriesByIDsParams{
+		ID:     idA,
+		ID_2:   idB,
+		UserID: userID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get weight entries by ids: %w", err)
+	}
+	return mapWeightEntryRows(rows), nil
 }
 
 // --- Mapping helpers ---

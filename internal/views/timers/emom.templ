@@ -1,17 +1,15 @@
 package timers
 
-import (
-	"stren/internal/views"
-)
+import "stren/internal/views"
 
 templ EMOMPage(data views.PageData) {
 	@TimersLayout(data, "emom") {
 		<div class="w-full max-w-md">
 			<div id="emom-presets" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+				<button type="button" class="btn text-center" onclick="startPresetEMOM(3)">3 Rounds</button>
 				<button type="button" class="btn text-center" onclick="startPresetEMOM(5)">5 Rounds</button>
+				<button type="button" class="btn text-center" onclick="startPresetEMOM(7)">7 Rounds</button>
 				<button type="button" class="btn text-center" onclick="startPresetEMOM(10)">10 Rounds</button>
-				<button type="button" class="btn text-center" onclick="startPresetEMOM(15)">15 Rounds</button>
-				<button type="button" class="btn text-center" onclick="startPresetEMOM(20)">20 Rounds</button>
 			</div>
 			<div id="custom-rounds-section" class="flex flex-col items-center gap-6">
 				<label for="custom-rounds" class="text-sm text-muted-foreground">Custom rounds (max 15)</label>

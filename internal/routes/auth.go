@@ -8,14 +8,14 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/controllers"
-	"stren/internal/views"
+	"stren/internal/views/auth"
 )
 
 // --- Auth Handlers ---
 
 // LoginForm renders the login page.
 func (h *Handler) LoginForm(c echo.Context) error {
-	return render(c, views.LoginPage(""))
+	return render(c, auth.LoginPage(""))
 }
 
 // loginInput represents the validated login form data.
@@ -32,29 +32,29 @@ func (h *Handler) Login(c echo.Context) error {
 	}
 
 	if err := h.validator.ValidateStruct(&input); err != nil {
-		return render(c, views.LoginPageError(err.Error()))
+		return render(c, auth.LoginPageError(err.Error()))
 	}
 
 	_, token, err := h.authCtrl.Login(input.Email, input.Password)
 	if err != nil {
 		if errors.Is(err, controllers.ErrInvalidCredentials) {
-			return render(c, views.LoginPageError("Invalid email or password"))
+			return render(c, auth.LoginPageError("Invalid email or password"))
 		}
-		return render(c, views.LoginPageError("Failed to create session"))
+		return render(c, auth.LoginPageError("Failed to create session"))
 	}
 
 	setAuthCookie(c, token)
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
-		return render(c, views.LoginSuccessToast())
+		return render(c, auth.LoginSuccessToast())
 	}
 	return c.Redirect(http.StatusSeeOther, "/")
 }
 
 // RegisterForm renders the registration page.
 func (h *Handler) RegisterForm(c echo.Context) error {
-	return render(c, views.RegisterPage(""))
+	return render(c, auth.RegisterPage(""))
 }
 
 // registerInput represents the validated registration form data.
@@ -73,19 +73,19 @@ func (h *Handler) Register(c echo.Context) error {
 	}
 
 	if err := h.validator.ValidateStruct(&input); err != nil {
-		return render(c, views.RegisterPageError(err.Error()))
+		return render(c, auth.RegisterPageError(err.Error()))
 	}
 
 	_, token, err := h.authCtrl.Register(input.Name, input.Email, input.Password)
 	if err != nil {
-		return render(c, views.RegisterPageError(err.Error()))
+		return render(c, auth.RegisterPageError(err.Error()))
 	}
 
 	setAuthCookie(c, token)
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
-		return render(c, views.RegisterSuccessToast())
+		return render(c, auth.RegisterSuccessToast())
 	}
 	return c.Redirect(http.StatusSeeOther, "/")
 }
@@ -96,7 +96,7 @@ func (h *Handler) Logout(c echo.Context) error {
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/login"}`)
-		return render(c, views.LogoutSuccessToast())
+		return render(c, auth.LogoutSuccessToast())
 	}
 	return c.Redirect(http.StatusSeeOther, "/login")
 }

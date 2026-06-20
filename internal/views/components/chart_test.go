@@ -60,9 +60,11 @@ func TestChartRenders(t *testing.T) {
 	var parsed struct {
 		Labels   []string `json:"labels"`
 		Datasets []struct {
-			Label  string    `json:"label"`
-			Values []float64 `json:"values"`
-			Color  string    `json:"color"`
+			Label          string    `json:"label"`
+			Values         []float64 `json:"values"`
+			Color          string    `json:"color"`
+			Dashed         bool      `json:"dashed"`
+			HiddenInLegend bool      `json:"hiddenInLegend"`
 		} `json:"datasets"`
 		HideAxes bool `json:"hideAxes"`
 	}
@@ -168,5 +170,156 @@ func TestChartHideAxes(t *testing.T) {
 	// is written as a ternary whose result is only known at JS runtime.)
 	if got := bytes.Count([]byte(out), []byte("data.hideAxes")); got != 2 {
 		t.Errorf("expected data.hideAxes to be referenced on both axes, got %d occurrences", got)
+	}
+}
+
+func TestChartDatasetDefaultsAreOff(t *testing.T) {
+	// The two new opt-in flags must default to false in the JSON payload so
+	// the other two chart callers (exercise_history, exercise_chart) are
+	// unaffected. This guards the no-impact guarantee.
+	props := ChartProps{
+		ID:       "history-chart",
+		Labels:   []string{"10 Jun", "11 Jun"},
+		Datasets: []ChartDataset{{Label: "Squat (kg)", Values: []float64{80, 85}}},
+	}
+	var buf bytes.Buffer
+	if err := Chart(props).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	out := buf.String()
+	re := regexp.MustCompile(`<script id="history-chart-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(out)
+	if len(m) < 2 {
+		t.Fatal("could not find data script block")
+	}
+	var parsed struct {
+		Datasets []struct {
+			Label          string    `json:"label"`
+			Values         []float64 `json:"values"`
+			Color          string    `json:"color"`
+			Dashed         bool      `json:"dashed"`
+			HiddenInLegend bool      `json:"hiddenInLegend"`
+		} `json:"datasets"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v\ncontent: %s", err, m[1])
+	}
+	if len(parsed.Datasets) != 1 {
+		t.Fatalf("expected 1 dataset, got %d", len(parsed.Datasets))
+	}
+	if parsed.Datasets[0].Dashed {
+		t.Error("expected default dashed=false so existing call sites render as filled area")
+	}
+	if parsed.Datasets[0].HiddenInLegend {
+		t.Error("expected default hiddenInLegend=false so existing call sites show in legend")
+	}
+}
+
+func TestChartDashedDatasetRendersUnfilled(t *testing.T) {
+	// A dataset with Dashed=true should produce a Chart.js config branch
+	// that turns off fill, sets borderDash, and hides point markers.
+	props := ChartProps{
+		ID:     "weight-chart",
+		Labels: []string{"10 Jun", "11 Jun"},
+		Datasets: []ChartDataset{
+			{Label: "Weight (kg)", Values: []float64{82.4, 82.1}},
+			{Label: "Trend", Values: []float64{82.5, 82.0}, Dashed: true},
+		},
+	}
+	var buf bytes.Buffer
+	if err := Chart(props).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	out := buf.String()
+
+	// Payload must carry the dashed flag on the second dataset.
+	re := regexp.MustCompile(`<script id="weight-chart-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(out)
+	if len(m) < 2 {
+		t.Fatal("could not find data script block")
+	}
+	var parsed struct {
+		Datasets []struct {
+			Label  string    `json:"label"`
+			Values []float64 `json:"values"`
+			Dashed bool      `json:"dashed"`
+		} `json:"datasets"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v", err)
+	}
+	if len(parsed.Datasets) != 2 {
+		t.Fatalf("expected 2 datasets, got %d", len(parsed.Datasets))
+	}
+	if parsed.Datasets[0].Dashed {
+		t.Error("first dataset should not be dashed")
+	}
+	if !parsed.Datasets[1].Dashed {
+		t.Error("second dataset should be dashed=true in payload")
+	}
+
+	// Inline script must reference d.dashed and apply dashed styling.
+	if !bytes.Contains([]byte(out), []byte("d.dashed")) {
+		t.Error("expected inline script to branch on d.dashed")
+	}
+	if !bytes.Contains([]byte(out), []byte("borderDash")) {
+		t.Error("expected dashed datasets to use Chart.js borderDash")
+	}
+	if !bytes.Contains([]byte(out), []byte("fill: false")) {
+		t.Error("expected dashed datasets to set fill: false")
+	}
+}
+
+func TestChartHiddenInLegendInPayloadAndFilter(t *testing.T) {
+	props := ChartProps{
+		ID:     "weight-chart",
+		Labels: []string{"10 Jun", "11 Jun"},
+		Datasets: []ChartDataset{
+			{Label: "Weight (kg)", Values: []float64{82.4, 82.1}},
+			{Label: "Trend", Values: []float64{82.5, 82.0}, Dashed: true, HiddenInLegend: true},
+		},
+	}
+	var buf bytes.Buffer
+	if err := Chart(props).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	out := buf.String()
+
+	// Payload round-trip.
+	re := regexp.MustCompile(`<script id="weight-chart-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(out)
+	if len(m) < 2 {
+		t.Fatal("could not find data script block")
+	}
+	var parsed struct {
+		Datasets []struct {
+			Label          string `json:"label"`
+			HiddenInLegend bool   `json:"hiddenInLegend"`
+		} `json:"datasets"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("data block is not valid JSON: %v", err)
+	}
+	if parsed.Datasets[1].HiddenInLegend != true {
+		t.Errorf("expected second dataset hiddenInLegend=true, got %v", parsed.Datasets[1].HiddenInLegend)
+	}
+	if parsed.Datasets[0].HiddenInLegend {
+		t.Error("expected first dataset hiddenInLegend=false")
+	}
+
+	// Inline script must define a legend filter that drops hiddenInLegend
+	// datasets from the legend while leaving the line on the chart.
+	if !bytes.Contains([]byte(out), []byte("hiddenInLegend")) {
+		t.Error("expected inline script to reference hiddenInLegend for legend filtering")
+	}
+	if !bytes.Contains([]byte(out), []byte("filter:")) {
+		t.Error("expected legend labels.filter callback to be defined")
+	}
+	// The filter callback signature in Chart.js 4 is (legendItem, data) —
+	// the second arg is `data`, not `chart`. Using `chart.data.datasets`
+	// throws on the first legend render and breaks chart init. Locking
+	// the param name in to prevent that regression.
+	if !bytes.Contains([]byte(out), []byte("data.datasets[item.datasetIndex]")) {
+		t.Error("expected legend filter to read from the `data` arg, not from a `chart` arg")
 	}
 }

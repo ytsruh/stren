@@ -1,0 +1,228 @@
+package weight
+
+import "stren/internal/views/components"
+
+// CompareModal renders the image-comparison modal fragment. The htmx
+// target container is #weight-compare-modal-container on the weight list
+// page; this component populates that container with a <dialog> that
+// auto-opens via showModal() on mount.
+//
+// The dialog wraps an [image-compare-viewer] container. The two <img>
+// tags inside are the "before" and "after" photos (already sorted by
+// the server). Labels for each side are passed in as data attributes so
+// the inline script can configure the library's labelOptions without
+// re-rendering the dialog.
+//
+// On close, the dialog's content is removed from the DOM so the next
+// time the user clicks "Compare" the modal starts from a clean state
+// and the JS doesn't leak previous ImageCompare instances.
+//
+// [image-compare-viewer]: https://image-compare-viewer.netlify.app/
+templ CompareModal(
+	beforeLabel string,
+	beforeWeight string,
+	beforeURL string,
+	afterLabel string,
+	afterWeight string,
+	afterURL string,
+	deltaText string,
+) {
+	<dialog
+		id="weight-compare-dialog"
+		class="dialog"
+		aria-label="Compare weight photos"
+		data-compare
+		data-photo-a={ beforeURL }
+		data-photo-b={ afterURL }
+		data-label-a={ beforeLabel + " · " + beforeWeight }
+		data-label-b={ afterLabel + " · " + afterWeight }
+		data-vertical-breakpoint="768"
+		onclick="if(event.target===this)this.close()"
+	>
+		<div class="sm:max-w-3xl max-h-[90vh]">
+			<header>
+				<h3 class="text-lg font-semibold">Compare photos</h3>
+				<p class="text-sm text-muted-foreground">
+					{ beforeLabel }
+					→
+					{ afterLabel }
+					if deltaText != "" {
+						· { deltaText }
+					}
+				</p>
+			</header>
+			<div
+				id="weight-compare-slider"
+				class="image-compare w-full rounded-md border bg-muted"
+				style="max-height: 70vh"
+			>
+				<img src={ beforeURL } alt={ "Weight photo from " + beforeLabel }/>
+				<img src={ afterURL } alt={ "Weight photo from " + afterLabel }/>
+			</div>
+			<footer class="flex justify-end">
+				<button
+					type="button"
+					class="btn-outline"
+					onclick="document.getElementById('weight-compare-dialog').close()"
+				>
+					Close
+				</button>
+			</footer>
+		</div>
+	</dialog>
+	<script>
+		(function() {
+			var dialog = document.getElementById('weight-compare-dialog');
+			var slider = document.getElementById('weight-compare-slider');
+			if (!dialog || !slider) return;
+
+			// image-compare-viewer is loaded once globally in layout.templ;
+			// bail out gracefully if it failed to load.
+			if (typeof window.ImageCompare !== 'function') {
+				console.error('image-compare-viewer library not loaded');
+				return;
+			}
+
+			var beforeURL = slider.previousElementSibling && slider.previousElementSibling.tagName === 'IMG'
+				? slider.querySelector('img:nth-of-type(1)').getAttribute('src')
+				: null;
+
+			var labelA = dialog.getAttribute('data-label-a') || 'Before';
+			var labelB = dialog.getAttribute('data-label-b') || 'After';
+			var breakpoint = parseInt(dialog.getAttribute('data-vertical-breakpoint') || '768', 10);
+
+			var currentInstance = null;
+
+			function isVertical() {
+				return window.innerWidth < breakpoint;
+			}
+
+			function buildOptions() {
+				return {
+				 	controlColor: "#f54900",
+				  controlShadow: true,
+				  addCircle: false,
+				  addCircleBlur: true,
+					//controlColor: '#73c781',
+					//controlShadow: true,
+					//addCircle: true,
+					//addCircleBlur: true,
+					showLabels: true,
+					labelOptions: { before: labelA, after: labelB, onHover: false },
+					smoothing: true,
+					smoothingAmount: 100,
+					hoverStart: false,
+					verticalMode: isVertical(),
+					startingPoint: 50,
+					fluidMode: false
+				};
+			}
+
+			function mount() {
+				// Tear down any previous instance to avoid duplicate listeners
+				// (e.g. when the modal fragment is re-fetched by htmx).
+				if (currentInstance && typeof currentInstance.unmount === 'function') {
+					currentInstance.unmount();
+				}
+				currentInstance = new window.ImageCompare(slider, buildOptions()).mount();
+			}
+
+			// Re-mount when the viewport crosses the breakpoint so the
+			// slider switches between horizontal and vertical layouts.
+			var mq = window.matchMedia('(max-width: ' + (breakpoint - 1) + 'px)');
+			function onMqChange() { mount(); }
+			if (mq.addEventListener) {
+				mq.addEventListener('change', onMqChange);
+			} else if (mq.addListener) {
+				mq.addListener(onMqChange);
+			}
+
+			mount();
+			if (typeof dialog.showModal === 'function') {
+				dialog.showModal();
+			} else {
+				dialog.setAttribute('open', '');
+			}
+
+			// Clean up the modal fragment when the dialog closes so the
+			// container is empty and ready for the next "Compare" click.
+			function onClose() {
+				if (currentInstance && typeof currentInstance.unmount === 'function') {
+					currentInstance.unmount();
+					currentInstance = null;
+				}
+				var container = document.getElementById('weight-compare-modal-container');
+				if (container) container.innerHTML = '';
+				if (mq.removeEventListener) {
+					mq.removeEventListener('change', onMqChange);
+				} else if (mq.removeListener) {
+					mq.removeListener(onMqChange);
+				}
+			}
+			dialog.addEventListener('close', onClose);
+
+			// Also tear down on backdrop click — showModal()'s native
+			// backdrop click closes the dialog, which fires `close`.
+		})();
+	</script>
+}
+
+// CompareBar renders the inline card that becomes visible on the weight
+// list page once the user starts selecting weight entries for
+// comparison. The bar is hidden by default; the inline script in
+// weight/list.templ toggles its visibility, updates the selection
+// count, and writes the two selected entry IDs into the hidden inputs
+// that the "Compare" button submits via hx-include.
+//
+// Rendered in the normal page flow (above the weight table) so the
+// sidebar never obscures it and mobile users see it in context with
+// the table. The bar collapses back into the page when no entries are
+// selected, and the table shifts up to take its place.
+//
+// The button is disabled until exactly 2 entries are selected. The
+// helper text switches between "Select one more" and "Ready to
+// compare" accordingly.
+templ CompareBar() {
+	<div
+		id="weight-compare-bar"
+		class="hidden card p-3 mb-4 flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+		role="region"
+		aria-label="Compare weight photos"
+	>
+		<input type="hidden" name="a" id="weight-compare-id-a" data-compare-ids value=""/>
+		<input type="hidden" name="b" id="weight-compare-id-b" data-compare-ids value=""/>
+		<div class="text-sm">
+			<span class="font-medium" data-compare-count>0</span>
+			<span class="text-muted-foreground">of 2 selected</span>
+			<span class="ml-2 text-muted-foreground" data-compare-hint>Select two entries to compare</span>
+		</div>
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				id="weight-compare-clear"
+				class="btn-outline"
+			>
+				Clear
+			</button>
+			<button
+				type="button"
+				id="weight-compare-go"
+				class="btn relative inline-flex"
+				disabled
+				hx-get="/weight/compare-modal"
+				hx-target="#weight-compare-modal-container"
+				hx-swap="innerHTML"
+				hx-include="#weight-compare-bar [data-compare-ids]"
+				hx-indicator="#weight-compare-spinner"
+			>
+				<span class="btn-text flex items-center gap-2">
+					@components.Icon(components.IconProps{Name: "check", Size: 16})
+					Compare
+				</span>
+				<span id="weight-compare-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+					@components.Icon(components.IconProps{Name: "loader", Size: 16})
+				</span>
+			</button>
+		</div>
+	</div>
+}

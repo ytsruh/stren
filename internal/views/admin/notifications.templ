@@ -1,0 +1,128 @@
+package admin
+
+import (
+	"stren/internal/push"
+	"stren/internal/views"
+	"stren/internal/views/components"
+)
+
+// AdminNotificationsPage renders the admin "Notifications" page. It
+// has a single "Send" form (HTMX posting to /admin/notifications/send)
+// and a result panel that the HTMX response swaps into. The initial
+// state shows a placeholder; the result state summarises the broadcast.
+templ AdminNotificationsPage(userName string, isAdmin bool) {
+	@views.Layout(views.PageData{Title: "Notifications", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/admin/notifications"}) {
+		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Notifications"})
+		<p class="text-sm text-muted-foreground my-4">Send a push notification to every subscribed device. Use sparingly — a notification goes to every active subscription in the system.</p>
+		<form
+			id="admin-notifications-form"
+			hx-post="/admin/notifications/send"
+			hx-target="#send-result"
+			hx-swap="innerHTML"
+			hx-indicator="#send-spinner"
+			hx-on:admin-notification-sent="this.reset()"
+			class="form grid gap-6 max-w-full"
+		>
+			<div class="grid gap-2">
+				<label for="title">Title</label>
+				<input class="input" type="text" id="title" name="title" placeholder="Notification title" required maxlength="80"/>
+			</div>
+			<div class="grid gap-2">
+				<label for="body">Message</label>
+				<textarea class="textarea" id="body" name="body" placeholder="What do you want to tell your users?" required maxlength="500" rows="4"></textarea>
+				<p class="text-sm text-muted-foreground">Up to 500 characters. The body becomes the notification text on the user's device.</p>
+			</div>
+			<div class="grid gap-2">
+				<label for="url">URL (optional)</label>
+				<input class="input" type="text" id="url" name="url" placeholder="/"/>
+				<p class="text-sm text-muted-foreground">If set, tapping the notification opens this URL on the app. Defaults to the dashboard.</p>
+			</div>
+			<button type="submit" class="btn-primary relative inline-flex">
+				<span class="btn-text flex items-center gap-2">
+					@components.Icon(components.IconProps{Name: "send", Size: 18})
+					Send to all subscribers
+				</span>
+				<span id="send-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+					@components.Icon(components.IconProps{Name: "loader", Size: 18})
+				</span>
+			</button>
+		</form>
+		<div id="send-result" class="mt-6">
+			@components.Card(components.CardProps{}) {
+				@components.CardSection(components.CardSectionProps{}) {
+					<p class="text-sm text-muted-foreground">Use the form above to send a notification. Results will appear here.</p>
+				}
+			}
+		</div>
+	}
+}
+
+// AdminNotificationResult renders the result card after a broadcast.
+// Rendered server-side and swapped into #send-result by HTMX.
+templ AdminNotificationResult(result push.BroadcastResult) {
+	@components.Card(components.CardProps{}) {
+		@components.CardSection(components.CardSectionProps{}) {
+			<h3 class="mb-2">Send complete</h3>
+			<dl class="grid grid-cols-2 gap-2 text-sm">
+				<dt class="text-muted-foreground">Subscribers reached:</dt>
+				<dd>{ itoa(result.Sent) }</dd>
+				if result.Deleted > 0 {
+					<dt class="text-muted-foreground">Dead subscriptions pruned:</dt>
+					<dd>{ itoa(result.Deleted) }</dd>
+				}
+				if result.Failed > 0 {
+					<dt class="text-destructive">Failed:</dt>
+					<dd class="text-destructive">{ itoa(result.Failed) }</dd>
+				}
+				<dt class="text-muted-foreground">Total attempted:</dt>
+				<dd>{ itoa(result.Total) }</dd>
+			</dl>
+			if len(result.Errors) > 0 {
+				<details class="mt-4">
+					<summary class="text-sm text-muted-foreground cursor-pointer">Show error details ({ itoa(len(result.Errors)) })</summary>
+					<ul class="mt-2 text-sm space-y-1">
+						for _, msg := range result.Errors {
+							<li class="text-destructive">{ msg }</li>
+						}
+					</ul>
+				</details>
+			}
+		}
+	}
+}
+
+// AdminNotificationNoSubscribers renders a result card for the
+// edge case where the broadcast has nothing to send to.
+templ AdminNotificationNoSubscribers() {
+	@components.Card(components.CardProps{}) {
+		@components.CardSection(components.CardSectionProps{}) {
+			<p>No subscribers yet. Once users enable push from their profile page they'll appear here.</p>
+		}
+	}
+}
+
+// AdminNotificationError renders an error card when validation or
+// the underlying send failed before the broadcast could run.
+templ AdminNotificationError(message string) {
+	@components.Card(components.CardProps{}) {
+		@components.CardSection(components.CardSectionProps{}) {
+			<p class="text-destructive">{ message }</p>
+		}
+	}
+}
+
+// itoa is a tiny helper so the templ can render int fields without
+// importing strconv into the generated file. Negative numbers are not
+// expected (counters are non-negative) so we keep the implementation
+// minimal.
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	digits := []byte{}
+	for n > 0 {
+		digits = append([]byte{byte('0' + n%10)}, digits...)
+		n /= 10
+	}
+	return string(digits)
+}

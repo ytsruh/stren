@@ -13,6 +13,8 @@ CREATE TABLE users (
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     is_admin INTEGER NOT NULL DEFAULT 0,
+    target_weight REAL,
+    weight_unit TEXT NOT NULL DEFAULT 'kg',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -57,5 +59,16 @@ CREATE TABLE weight_entries (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_weight_entries_user ON weight_entries(user_id);
+CREATE INDEX idx_weight_entries_user    ON weight_entries(user_id);
 CREATE INDEX idx_weight_entries_created ON weight_entries(created_at);
+
+CREATE TABLE push_subscriptions (
+    id           TEXT     PRIMARY KEY,
+    user_id      TEXT     NOT NULL REFERENCES users(id),
+    endpoint     TEXT     UNIQUE NOT NULL,
+    p256dh       TEXT     NOT NULL,
+    auth         TEXT     NOT NULL,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_push_subs_user ON push_subscriptions(user_id);

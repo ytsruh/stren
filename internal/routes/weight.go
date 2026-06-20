@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"stren/internal/models"
 	"stren/internal/utils"
 	"stren/internal/views"
+	"stren/internal/views/weight"
 )
 
 // weightFormInput represents the parsed and validated form data for a weight entry.
@@ -52,31 +55,42 @@ func (h *Handler) WeightPage(c echo.Context) error {
 		return err
 	}
 
-	return render(c, views.WeightPage(entries, claims.Name, true, claims.IsAdmin))
+	// Look up the user's body-weight goal (if any) to drive the progress
+	// widget. A failed load is logged and treated as "no goal" so the page
+	// still renders.
+	var target *float64
+	user, err := h.userRepo.GetUserByID(claims.UserID)
+	if err != nil {
+		c.Logger().Errorf("failed to load user for weight page: %v", err)
+	} else if user != nil {
+		target = user.TargetWeight
+	}
+
+	return render(c, weight.WeightPage(entries, claims.Name, true, claims.IsAdmin, target))
 }
 
 // NewWeightForm renders the form for creating a new weight entry.
 func (h *Handler) NewWeightForm(c echo.Context) error {
 	claims := GetClaims(c)
-	return render(c, views.WeightForm(claims.Name, true, claims.IsAdmin))
+	return render(c, weight.WeightForm(claims.Name, true, claims.IsAdmin))
 }
 
 // CreateWeight handles the creation of a new weight entry.
 func (h *Handler) CreateWeight(c echo.Context) error {
 	entry, err := parseWeightForm(c, h.validator)
 	if err != nil {
-		return render(c, views.WeightFormError(friendlyError(err)))
+		return render(c, weight.WeightFormError(friendlyError(err)))
 	}
 
 	claims := GetClaims(c)
 	_, err = h.weightCtrl.CreateWeightEntry(claims.UserID, entry.Weight, entry.Notes, entry.PhotoKey)
 	if err != nil {
-		return render(c, views.WeightFormError("Failed to save weight entry: "+err.Error()))
+		return render(c, weight.WeightFormError("Failed to save weight entry: "+err.Error()))
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/weight"}`)
-		return render(c, views.WeightFormSuccessToast("Weight saved!"))
+		return render(c, weight.WeightFormSuccessToast("Weight saved!"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/weight")
@@ -95,7 +109,7 @@ func (h *Handler) EditWeightForm(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Weight entry not found")
 	}
 
-	return render(c, views.EditWeightForm(entry, claims.Name, true, claims.IsAdmin))
+	return render(c, weight.EditWeightForm(entry, claims.Name, true, claims.IsAdmin))
 }
 
 // UpdateWeight handles updating an existing weight entry.
@@ -114,14 +128,14 @@ func (h *Handler) UpdateWeight(c echo.Context) error {
 
 	entry, err := parseWeightForm(c, h.validator)
 	if err != nil {
-		return render(c, views.WeightFormError(friendlyError(err)))
+		return render(c, weight.WeightFormError(friendlyError(err)))
 	}
 
 	createdAt := existing.CreatedAt
 	if dateStr := c.FormValue("created_at"); dateStr != "" {
 		createdAt, err = time.Parse("2006-01-02T15:04", dateStr)
 		if err != nil {
-			return render(c, views.WeightFormError("Invalid date format"))
+			return render(c, weight.WeightFormError("Invalid date format"))
 		}
 	}
 
@@ -145,12 +159,12 @@ func (h *Handler) UpdateWeight(c echo.Context) error {
 
 	_, err = h.weightCtrl.UpdateWeightEntry(id, claims.UserID, entry.Weight, entry.Notes, photoKey, createdAt)
 	if err != nil {
-		return render(c, views.WeightFormError("Failed to update weight entry: "+err.Error()))
+		return render(c, weight.WeightFormError("Failed to update weight entry: "+err.Error()))
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/weight"}`)
-		return render(c, views.WeightFormSuccessToast("Weight entry updated!"))
+		return render(c, weight.WeightFormSuccessToast("Weight entry updated!"))
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/weight")
@@ -167,8 +181,79 @@ func (h *Handler) DeleteWeight(c echo.Context) error {
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/weight"}`)
-		return render(c, views.WeightDeleteSuccess())
+		return render(c, weight.WeightDeleteSuccess())
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/weight")
+}
+
+// CompareWeightModal returns the modal fragment used by the image-comparison
+// feature on the weight list page. It is fetched by htmx in response to the
+// "Compare" button on the table and is swapped into a container element
+// next to the table. On any error the response is a Basecoat error toast
+// (still in the same container) so the page can show feedback without
+// reloading.
+func (h *Handler) CompareWeightModal(c echo.Context) error {
+	idA := c.QueryParam("a")
+	idB := c.QueryParam("b")
+
+	claims := GetClaims(c)
+	entries, err := h.weightCtrl.GetWeightEntriesForCompare(idA, idB, claims.UserID)
+	if err != nil {
+		return render(c, views.Toast("error", "Cannot compare photos", err.Error()))
+	}
+
+	before := entries[0]
+	after := entries[1]
+	delta := after.Weight - before.Weight
+	deltaStr := formatWeightDelta(delta)
+
+	return render(c, weight.CompareModal(
+		before.FormattedDateLong(), before.FormattedWeight(), before.PhotoURL(),
+		after.FormattedDateLong(), after.FormattedWeight(), after.PhotoURL(),
+		deltaStr,
+	))
+}
+
+// formatWeightDelta produces a short human-readable summary of the
+// weight change between two entries. Positive deltas are prefixed with
+// "+", negative with "−" (U+2212), and deltas within ±0.05 kg return
+// an empty string so the caller can omit the change indicator entirely
+// (avoids the awkward "· no change" label).
+func formatWeightDelta(delta float64) string {
+	switch {
+	case delta > 0.05:
+		return fmt.Sprintf("+%.1f kg", delta)
+	case delta < -0.05:
+		return fmt.Sprintf("−%.1f kg", -delta)
+	default:
+		return ""
+	}
+}
+
+// ExportWeightZip streams a zip archive of the authenticated user's
+// weight entries (and any photos that can be fetched from R2) as the
+// response body. Content-Disposition forces a download with a
+// date-stamped filename. The zip is built in a background goroutine
+// (see controllers.WeightController.ExportWeightZip) so the response
+// streams end-to-end.
+func (h *Handler) ExportWeightZip(c echo.Context) error {
+	claims := GetClaims(c)
+
+	reader, filename, err := h.weightCtrl.ExportWeightZip(c.Request().Context(), claims.UserID)
+	if err != nil {
+		return err
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, "application/zip")
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Response().WriteHeader(http.StatusOK)
+	if _, err := io.Copy(c.Response().Writer, reader); err != nil {
+		// We've already sent headers, so we can't return a
+		// proper error response. Log it and abort the
+		// connection so the client doesn't see a truncated
+		// zip labelled "OK".
+		c.Logger().Errorf("weight export stream failed: %v", err)
+	}
+	return nil
 }

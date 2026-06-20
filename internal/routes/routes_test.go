@@ -1,10 +1,14 @@
 package routes
 
 import (
+	"archive/zip"
+	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -586,6 +590,96 @@ func (m *mockWeightRepository) Delete(id string, userID string) error {
 	return nil
 }
 
+func (m *mockWeightRepository) GetByIDs(idA, idB, userID string) ([]models.WeightEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []models.WeightEntry
+	for _, e := range m.entries {
+		if e.UserID != userID {
+			continue
+		}
+		if e.ID == idA || e.ID == idB {
+			result = append(result, e)
+		}
+	}
+	return result, nil
+}
+
+// mockPushSubscriptionRepository satisfies the models.PushSubscriptionRepo
+// interface for the route tests. The push routes only use a subset of
+// the methods, but every method on the interface is implemented so
+// the compile-time check holds.
+type mockPushSubscriptionRepository struct {
+	mu    sync.Mutex
+	rows  map[string]models.PushSubscription
+	errOp error
+}
+
+func newMockPushSubscriptionRepository() *mockPushSubscriptionRepository {
+	return &mockPushSubscriptionRepository{rows: map[string]models.PushSubscription{}}
+}
+
+func (m *mockPushSubscriptionRepository) UpsertForUser(_ context.Context, userID string, sub models.PushSubscription) (*models.PushSubscription, error) {
+	if m.errOp != nil {
+		return nil, m.errOp
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if existing, ok := m.rows[sub.Endpoint]; ok {
+		existing.P256dh = sub.P256dh
+		existing.Auth = sub.Auth
+		m.rows[sub.Endpoint] = existing
+		out := existing
+		return &out, nil
+	}
+	row := sub
+	row.UserID = userID
+	m.rows[sub.Endpoint] = row
+	out := row
+	return &out, nil
+}
+
+func (m *mockPushSubscriptionRepository) ListForUser(_ context.Context, userID string) ([]models.PushSubscription, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []models.PushSubscription{}
+	for _, r := range m.rows {
+		if r.UserID == userID {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func (m *mockPushSubscriptionRepository) ListAll(_ context.Context) ([]models.PushSubscription, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]models.PushSubscription, 0, len(m.rows))
+	for _, r := range m.rows {
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func (m *mockPushSubscriptionRepository) DeleteByEndpoint(_ context.Context, endpoint string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.rows, endpoint)
+	return nil
+}
+
+func (m *mockPushSubscriptionRepository) CountForUser(_ context.Context, userID string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var n int64
+	for _, r := range m.rows {
+		if r.UserID == userID {
+			n++
+		}
+	}
+	return n, nil
+}
+
 func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository, *echo.Echo) {
 	t.Helper()
 	e := echo.New()
@@ -594,6 +688,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	mockAdminUser := newMockAdminUserRepository()
 	mockFeedback := newMockFeedbackRepository()
 	mockWeight := newMockWeightRepository()
+	mockPush := newMockPushSubscriptionRepository()
 	jwtService := utils.NewJWTService("test-secret")
 	mock.exercises = []models.Exercise{
 		{ID: "ex-1", Name: "Squat"},
@@ -605,9 +700,17 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	timersCtrl := controllers.NewTimersController()
-	weightCtrl := controllers.NewWeightController(mockWeight)
+	weightCtrl := controllers.NewWeightController(mockWeight, nil)
+	pushCtrl := controllers.NewPushController(mockPush)
+	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil)
 	validator := utils.NewValidator()
-	h := NewHandler(authCtrl, entryCtrl, adminCtrl, adminUserCtrl, feedbackCtrl, timersCtrl, weightCtrl, mockUser, jwtService, validator)
+	h := NewHandler(
+		authCtrl, entryCtrl, adminCtrl, adminUserCtrl,
+		feedbackCtrl, timersCtrl, weightCtrl,
+		pushCtrl, adminNotificationsCtrl,
+		mockPush, "", false,
+		mockUser, jwtService, validator,
+	)
 	return h, mock, mockUser, e
 }
 
@@ -2673,4 +2776,110 @@ func TestEMOMRoundToast(t *testing.T) {
 	if !strings.Contains(body, "Round 3 Complete") {
 		t.Fatalf("expected toast with round number, got %q", body)
 	}
+}
+
+// stubPhotoGetter is an export.PhotoGetter backed by an in-memory map.
+// The route test uses it to assert end-to-end zip streaming without
+// pulling in R2.
+type stubPhotoGetter struct {
+	mu   sync.Mutex
+	data map[string][]byte
+}
+
+func (s *stubPhotoGetter) Get(_ context.Context, key string) (io.ReadCloser, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if b, ok := s.data[key]; ok {
+		return io.NopCloser(bytes.NewReader(b)), nil
+	}
+	return nil, errors.New("stub: not found: " + key)
+}
+
+// TestExportWeightZip_StreamsZip confirms GET /weight/export responds
+// with a valid zip containing the user's entries. The route runs the
+// export in a background goroutine, so we have to read the whole body
+// before asserting on the zip — the in-memory httptest.ResponseRecorder
+// does that for us.
+func TestExportWeightZip_StreamsZip(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	// Need to inject a stub photo getter. The shared setupHandler
+	// passes nil, so rebuild the weight controller with one for this
+	// test only.
+	stub := &stubPhotoGetter{data: map[string][]byte{
+		"weight/u1/photo.jpg": {0xFF, 0xD8, 0xFF, 0xE0}, // jpeg magic
+	}}
+	mockWeight := newMockWeightRepository()
+	mockWeight.entries = []models.WeightEntry{
+		{ID: "w1", UserID: "u1", Weight: 80, Notes: "morning", PhotoKey: "weight/u1/photo.jpg", CreatedAt: time.Date(2026, 1, 9, 8, 0, 0, 0, time.UTC)},
+		{ID: "w2", UserID: "u1", Weight: 79, Notes: "evening", PhotoKey: "", CreatedAt: time.Date(2026, 1, 10, 8, 0, 0, 0, time.UTC)},
+	}
+	h.weightCtrl = controllers.NewWeightController(mockWeight, stub)
+
+	req := httptest.NewRequest(http.MethodGet, "/weight/export", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "u1", "test@example.com", "Test User", false)
+
+	if err := h.ExportWeightZip(c); err != nil {
+		t.Fatalf("ExportWeightZip failed: %v", err)
+	}
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if got := rec.Header().Get(echo.HeaderContentType); got != "application/zip" {
+		t.Errorf("Content-Type = %q, want application/zip", got)
+	}
+	cd := rec.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, "attachment") || !strings.Contains(cd, "stren-weight-export-") {
+		t.Errorf("Content-Disposition = %q, want attachment with stren-weight-export-*", cd)
+	}
+
+	// Validate the body is a real zip with the expected files.
+	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatalf("body is not a valid zip: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range zr.File {
+		got[f.Name] = true
+	}
+	for _, want := range []string{"weight.csv", "manifest.json", "photos/2026-01-09_w1.jpg"} {
+		if !got[want] {
+			t.Errorf("expected %q in zip, got files: %v", want, keys(got))
+		}
+	}
+}
+
+func keys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// TestExportWeightZip_Unauthenticated asserts the route requires a
+// valid auth context. Echo's auth middleware is responsible for
+// redirecting unauthenticated requests before they reach the handler,
+// so here we just confirm that the handler relies on GetClaims (the
+// production middleware layer would have already gated this).
+func TestExportWeightZip_RequiresAuthContext(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/weight/export", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// No setAuthContext call. The handler dereferences
+	// claims.UserID, so a missing claim should surface as a panic
+	// — production traffic always has one (the middleware sets
+	// it). This test pins that contract: callers must wire up
+	// auth before invoking the handler.
+	defer func() {
+		if recover() == nil {
+			t.Errorf("expected panic when auth context is missing")
+		}
+	}()
+	_ = h.ExportWeightZip(c)
 }

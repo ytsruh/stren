@@ -71,13 +71,17 @@ func (r *UserRepository) GetUserByID(id string) (*User, error) {
 	return mapUser(row), nil
 }
 
-// UpdateUser updates an existing user's name.
+// UpdateUser updates an existing user's name, target weight, and weight unit.
+// The target weight is written as NULL when the user has cleared their goal,
+// so the form can be reset by submitting an empty input.
 func (r *UserRepository) UpdateUser(user *User) error {
 	ctx := context.Background()
 	err := r.queries.UpdateUser(ctx, db.UpdateUserParams{
-		Name:      user.Name,
-		UpdatedAt: sql.NullTime{Time: time.Now(), Valid: true},
-		ID:        user.ID,
+		Name:         user.Name,
+		TargetWeight: ptrToNullFloat64(user.TargetWeight),
+		WeightUnit:   user.WeightUnit,
+		UpdatedAt:    sql.NullTime{Time: time.Now(), Valid: true},
+		ID:           user.ID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
@@ -93,7 +97,28 @@ func mapUser(row db.User) *User {
 		Email:        row.Email,
 		PasswordHash: row.PasswordHash,
 		IsAdmin:      isAdmin,
+		TargetWeight: nullFloat64ToPtr(row.TargetWeight),
+		WeightUnit:   row.WeightUnit,
 		CreatedAt:    nullTimeToTime(row.CreatedAt),
 		UpdatedAt:    nullTimeToTime(row.UpdatedAt),
 	}
+}
+
+// nullFloat64ToPtr converts a sql.NullFloat64 to a *float64. nil for SQL NULL,
+// &value otherwise. Lets the rest of the app distinguish "no goal" from "0".
+func nullFloat64ToPtr(nf sql.NullFloat64) *float64 {
+	if !nf.Valid {
+		return nil
+	}
+	v := nf.Float64
+	return &v
+}
+
+// ptrToNullFloat64 converts a *float64 to a sql.NullFloat64. nil becomes
+// SQL NULL, &value becomes Valid: true.
+func ptrToNullFloat64(p *float64) sql.NullFloat64 {
+	if p == nil {
+		return sql.NullFloat64{}
+	}
+	return sql.NullFloat64{Float64: *p, Valid: true}
 }

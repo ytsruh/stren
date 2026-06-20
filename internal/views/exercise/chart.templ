@@ -1,10 +1,10 @@
-package views
+package exercise
 
 import (
 	"fmt"
-	"sort"
 
 	"stren/internal/models"
+	"stren/internal/views"
 	"stren/internal/views/components"
 )
 
@@ -79,7 +79,7 @@ templ ExerciseNav(exerciseID string, active string) {
 // When there are fewer than 2 unique days, a friendly empty-state
 // message is rendered in place of the chart.
 templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@ExerciseNav(exercise.ID, exerciseNavActiveChart)
 		<header class="mb-4">
 			<h1 class="text-xl font-semibold">{ exercise.Name } Progression</h1>
@@ -112,7 +112,7 @@ templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEnt
 // fewer than 2 entries the view shows a short empty-state message
 // instead of a chart.
 templ ExerciseChartAdvanced(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@ExerciseNav(exercise.ID, exerciseNavActiveAdvanced)
 		<header class="mb-4">
 			<h1 class="text-xl font-semibold">{ exercise.Name } Volume</h1>
@@ -159,7 +159,7 @@ func chartScatterHasEnoughData(entries []models.ExerciseEntry) bool {
 // ascending so the line runs left-to-right.
 //
 // Unlike the small chart on the History view (see chartDataForExercise
-// in exercise_history.templ), this helper:
+// in history.templ), this helper:
 //   - is fed the full entry set, not a 30-entry slice
 //   - uses a distinct canvas id (`exercise-chart`) so the History view's
 //     smaller chart and the full-width chart can never collide if both
@@ -167,27 +167,8 @@ func chartScatterHasEnoughData(entries []models.ExerciseEntry) bool {
 //   - does NOT hide the axis tick labels — the full-width layout has
 //     room to render them legibly
 func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName string, chartTitle string) components.ChartProps {
-	byDay := make(map[string]chartDay)
-	for _, e := range entries {
-		key := e.CreatedAt.Format("2006-01-02")
-		existing, ok := byDay[key]
-		if !ok || e.Weight > existing.weight {
-			byDay[key] = chartDay{date: e.CreatedAt, weight: e.Weight}
-		}
-	}
-	days := make([]chartDay, 0, len(byDay))
-	for _, d := range byDay {
-		days = append(days, d)
-	}
-	sort.Slice(days, func(i, j int) bool {
-		return days[i].date.Before(days[j].date)
-	})
-	labels := make([]string, len(days))
-	values := make([]float64, len(days))
-	for i, d := range days {
-		labels[i] = d.date.Format("02 Jan")
-		values[i] = d.weight
-	}
+	days := aggregateEntriesByDay(entries)
+	labels, values := dayLabelsAndValues(days, "02 Jan")
 	return components.ChartProps{
 		ID:     "exercise-chart",
 		Title:  chartTitle,

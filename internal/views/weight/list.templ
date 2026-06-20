@@ -1,0 +1,431 @@
+package weight
+
+import (
+	"fmt"
+	"sort"
+	"stren/internal/models"
+	"stren/internal/views"
+	"stren/internal/views/components"
+)
+
+// WeightPage renders the weight entries list page. targetWeight is the
+// user's body-weight goal; when non-nil, a progress widget is rendered
+// alongside the chart.
+templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool, targetWeight *float64) {
+	{{
+		// Lift the "what's the latest reading" computation up out of
+		// the progress card so the card stays a pure render. The card
+		// is hidden when there's no target or no entries, so the
+		// pre-computed values are only consumed in that case.
+		current := latestWeight(entries)
+		var pct float64
+		if targetWeight != nil {
+			pct = weightProgress(current, *targetWeight)
+		}
+	}}
+	@views.Layout(views.PageData{Title: "Weight", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		<div class="flex justify-between items-center mb-6">
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Body Weight"})
+			<div class="flex items-center gap-2">
+				if len(entries) > 0 {
+					<a
+						href="/weight/export"
+						id="weight-export-link"
+						download
+						class="btn-outline"
+						title="Download all weight entries and photos as a ZIP"
+					>
+						@components.Icon(components.IconProps{Name: "download", Size: 18})
+						Export
+					</a>
+				}
+				<a href="/weight/new" class="btn">
+					@components.Icon(components.IconProps{Name: "plus", Size: 18})
+					Log Weight
+				</a>
+			</div>
+		</div>
+		<div class="flex flex-col sm:flex-row gap-4">
+			<div
+				class={ templ.Classes(
+				"w-full",
+				"h-32 sm:h-40",
+				"card p-2",
+				map[string]bool{"sm:w-3/4": targetWeight != nil && len(entries) > 0},
+			) }
+			>
+				@components.Chart(chartDataForWeight(entries))
+			</div>
+			if targetWeight != nil && len(entries) > 0 {
+				<div class="w-full sm:w-1/4 sm:h-40">
+					@WeightProgressCard(current, *targetWeight, pct)
+				</div>
+			}
+		</div>
+		if len(entries) == 0 {
+			@WeightEmptyState()
+		} else {
+			<div class="py-2 flex flex-col gap-2">
+				@WeightList(entries)
+				@CompareBar()
+			</div>
+		}
+		<div id="weight-compare-modal-container"></div>
+		@WeightCompareScript()
+		@WeightExportScript()
+	}
+}
+
+// chartDataForWeight converts a list of weight entries into the generic Chart
+// props expected by components.Chart. Entries are sorted ascending by date so
+// the line runs left-to-right. Labels are short dates ("10 Jun"). A second
+// dataset containing a least-squares regression line is appended so the
+// user can see the overall trend at a glance. The trendline is rendered
+// dashed and hidden from the legend via opt-in flags on ChartDataset. The
+// chart renders nothing when fewer than 2 entries are provided (handled
+// inside Chart).
+func chartDataForWeight(entries []models.WeightEntry) components.ChartProps {
+	sorted := make([]models.WeightEntry, len(entries))
+	copy(sorted, entries)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
+	})
+	labels := make([]string, len(sorted))
+	values := make([]float64, len(sorted))
+	for i, e := range sorted {
+		labels[i] = e.CreatedAt.Format("02 Jan")
+		values[i] = e.Weight
+	}
+	datasets := []components.ChartDataset{
+		{Label: "Weight (kg)", Values: values},
+	}
+	if len(values) >= 2 {
+		datasets = append(datasets, components.ChartDataset{
+			Label:          "Trend",
+			Values:         components.LinearRegression(values),
+			Dashed:         true,
+			HiddenInLegend: true,
+		})
+	}
+	return components.ChartProps{
+		ID:       "weight-chart",
+		Title:    "",
+		Labels:   labels,
+		Datasets: datasets,
+	}
+}
+
+// latestWeight returns the weight from the most recent entry. The slice
+// is sorted defensively to match the order used by the chart, so the
+// caller can pass the entries in any order. Returns 0 for an empty slice.
+func latestWeight(entries []models.WeightEntry) float64 {
+	if len(entries) == 0 {
+		return 0
+	}
+	sorted := append([]models.WeightEntry(nil), entries...)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
+	})
+	return sorted[len(sorted)-1].Weight
+}
+
+// WeightList renders a table of weight entries
+templ WeightList(entries []models.WeightEntry) {
+	<table class="table w-full">
+		<thead>
+			<tr>
+				<th class="w-10">
+					<span class="sr-only">Select for compare</span>
+				</th>
+				<th>Date</th>
+				<th>Weight</th>
+				<th class="hidden lg:table-cell">Photo</th>
+				<th class="hidden lg:table-cell">Notes</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tbody id="weight-table">
+			for _, entry := range entries {
+				@WeightRow(entry)
+			}
+		</tbody>
+	</table>
+}
+
+// WeightRow renders a single weight entry row
+templ WeightRow(entry models.WeightEntry) {
+	<tr id={ fmt.Sprintf("weight-%s", entry.ID) }>
+		<td>
+			if entry.HasPhoto() {
+				<input
+					type="checkbox"
+					class="input"
+					aria-label={ fmt.Sprintf("Select weight entry from %s for comparison", entry.FormattedDate()) }
+					data-compare-pick
+					data-entry-id={ entry.ID }
+					data-entry-date={ entry.FormattedDate() }
+					data-entry-weight={ entry.FormattedWeight() }
+				/>
+			}
+		</td>
+		<td>{ entry.FormattedDate() }</td>
+		<td>{ entry.FormattedWeight() }</td>
+		<td class="hidden lg:table-cell">
+			if entry.HasPhoto() {
+				<img
+					src={ templ.SafeURL(entry.PhotoURL()) }
+					alt="Weight photo"
+					class="size-12 rounded object-cover border"
+				/>
+			}
+		</td>
+		<td class="hidden lg:table-cell">{ entry.Notes }</td>
+		<td>
+			<div class="flex gap-2">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/weight/%s/edit", entry.ID)) }
+					class="btn-outline p-2"
+					title="Edit"
+				>
+					@components.Icon(components.IconProps{Name: "edit", Size: 16})
+				</a>
+			</div>
+		</td>
+	</tr>
+}
+
+// WeightEmptyState shows when no weight entries exist
+templ WeightEmptyState() {
+	<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
+		<header class="flex max-w-sm flex-col items-center gap-3 text-center">
+			<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
+				@components.Icon(components.IconProps{Name: "scale", Size: 24})
+			</div>
+			<h3 class="text-lg font-semibold">No weight entries yet</h3>
+			<p class="text-muted-foreground text-sm">Start tracking your body weight by logging your first entry.</p>
+		</header>
+		<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
+			<a href="/weight/new" class="btn">
+				@components.Icon(components.IconProps{Name: "plus", Size: 18})
+				Log Your First Weight
+			</a>
+		</section>
+	</div>
+}
+
+// WeightProgressCard renders a small card summarising progress towards the
+// user's body-weight goal. The caller is responsible for pre-computing
+// the current weight and the clamped percent (typically via
+// latestWeight and weightProgress), so this template stays a pure
+// render. The card is hidden by the caller when targetWeight is nil or
+// there are no entries.
+templ WeightProgressCard(current, target, pct float64) {
+	<div class="card p-4 h-full flex flex-col gap-3 justify-center">
+		<div>
+			<p class="text-base text-muted-foreground">Progress</p>
+			<p class="text-3xl font-semibold">{ fmt.Sprintf("%.0f%%", pct) }</p>
+		</div>
+		<dl class="grid grid-cols-2 gap-2 text-xs">
+			<div>
+				<dt class="text-muted-foreground">Current</dt>
+				<dd class="text-base">{ fmt.Sprintf("%.1f kg", current) }</dd>
+			</div>
+			<div>
+				<dt class="text-muted-foreground">Target</dt>
+				<dd class="text-base">{ fmt.Sprintf("%.1f kg", target) }</dd>
+			</div>
+		</dl>
+	</div>
+}
+
+// weightProgress returns the current weight as a percentage of the
+// target, clamped to [0, 100]. A zero target yields 0 (no goal set).
+//   - 67.6 / 70 * 100 = 96.6%
+//   - 95 / 90 * 100   = 105.5% → clamped to 100% (overshot)
+func weightProgress(current, target float64) float64 {
+	if target == 0 {
+		return 0
+	}
+	pct := current / target * 100
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	return pct
+}
+
+// WeightCompareScript renders the inline JavaScript that wires up the
+// "compare" selection on the weight table. It enforces a maximum of
+// two selected entries, updates the sticky CompareBar's count and
+// button state, and writes the selected entry IDs into the bar's
+// hidden inputs so the htmx-powered "Compare" button can submit them.
+//
+// The script is mounted once on the weight list page; it is
+// self-contained (no global state, no other JS dependencies).
+templ WeightCompareScript() {
+	<script>
+		(function() {
+			var bar = document.getElementById('weight-compare-bar');
+			var goBtn = document.getElementById('weight-compare-go');
+			var clearBtn = document.getElementById('weight-compare-clear');
+			var countEl = bar ? bar.querySelector('[data-compare-count]') : null;
+			var hintEl = bar ? bar.querySelector('[data-compare-hint]') : null;
+			var hiddenA = document.getElementById('weight-compare-id-a');
+			var hiddenB = document.getElementById('weight-compare-id-b');
+			if (!bar || !goBtn || !clearBtn || !countEl || !hintEl || !hiddenA || !hiddenB) return;
+
+			// Basecoat toast helper, mirrors the one in photo_upload.templ
+			// (kept in sync intentionally so error feedback is consistent).
+			var TOAST_ICONS = {
+				warning: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>'
+			};
+
+			function showToast(category, title, message) {
+				var toaster = document.getElementById('toaster');
+				if (!toaster) return;
+				var cat = TOAST_ICONS[category] ? category : 'warning';
+				var icon = TOAST_ICONS[cat] || TOAST_ICONS.warning;
+				var descHTML = message ? '<p>' + message + '</p>' : '';
+				var el = document.createElement('div');
+				el.className = 'toast';
+				el.setAttribute('role', 'status');
+				el.setAttribute('aria-atomic', 'true');
+				el.setAttribute('aria-hidden', 'false');
+				el.setAttribute('data-category', cat);
+				el.innerHTML = '<div class="toast-content">' + icon + '<section><h2>' + title + '</h2>' + descHTML + '</section></div>';
+				toaster.appendChild(el);
+			}
+
+			function selected() {
+				return Array.from(document.querySelectorAll('[data-compare-pick]:checked'));
+			}
+
+			function render() {
+				var picks = selected();
+				var n = picks.length;
+				countEl.textContent = String(n);
+				if (n === 0) {
+					bar.classList.add('hidden');
+					goBtn.disabled = true;
+					hintEl.textContent = 'Select two entries to compare';
+				} else {
+					bar.classList.remove('hidden');
+					if (n === 1) {
+						goBtn.disabled = true;
+						hintEl.textContent = 'Select one more';
+					} else {
+						goBtn.disabled = false;
+						hintEl.textContent = 'Ready to compare';
+					}
+				}
+				hiddenA.value = picks[0] ? picks[0].getAttribute('data-entry-id') : '';
+				hiddenB.value = picks[1] ? picks[1].getAttribute('data-entry-id') : '';
+			}
+
+			document.querySelectorAll('[data-compare-pick]').forEach(function(cb) {
+				cb.addEventListener('change', function() {
+					if (cb.checked) {
+						var picks = selected();
+						if (picks.length > 2) {
+							// Reject the third selection so the user can only
+							// ever compare two at a time.
+							cb.checked = false;
+							showToast('warning', 'Only 2 at a time', 'Uncheck one entry to choose a different one.');
+							return;
+						}
+					}
+					render();
+				});
+			});
+
+			clearBtn.addEventListener('click', function() {
+				document.querySelectorAll('[data-compare-pick]:checked').forEach(function(cb) {
+					cb.checked = false;
+				});
+				render();
+			});
+		})();
+	</script>
+}
+
+// WeightExportScript wires up the "Export" button on the weight list
+// page so it shows the global confirmation dialog (defined in
+// layout.templ) before kicking off the download. The download itself
+// is a plain <a href download> navigation — we don't use htmx for it
+// because htmx-swapped binary content doesn't trigger a browser save.
+//
+// The confirm dialog already has htmx:confirm plumbing, but that path
+// is only triggered by elements with hx-confirm. Since our <a> doesn't
+// go through htmx we wire the click directly: open the dialog,
+// populate its message and OK-button handler, and on confirm navigate
+// the browser to the export URL.
+templ WeightExportScript() {
+	<script>
+		(function() {
+			var link = document.getElementById('weight-export-link');
+			if (!link) return;
+
+			link.addEventListener('click', function(evt) {
+				// Honour cmd/ctrl-click, middle-click etc. — those
+				// are deliberate "open in new tab" gestures and
+				// shouldn't be intercepted by the confirm dialog.
+				if (evt.metaKey || evt.ctrlKey || evt.shiftKey || evt.altKey || evt.button !== 0) {
+					return;
+				}
+				evt.preventDefault();
+
+				var dialog = document.getElementById('confirm-dialog');
+				if (!dialog || typeof dialog.showModal !== 'function') {
+					// No dialog available — fall back to a plain
+					// browser confirm. Better than silently
+					// downloading.
+					if (window.confirm('Download a ZIP containing all your weight entries and photos?')) {
+						window.location.href = link.href;
+					}
+					return;
+				}
+
+				var message = document.getElementById('confirm-message');
+				var ok = document.getElementById('confirm-ok');
+				if (message) {
+					message.textContent = 'Download a ZIP containing all your weight entries and photos?';
+				}
+
+				// The shared #confirm-dialog has btn-destructive
+				// on its OK button by default — that's the right
+				// look for delete-style htmx confirmations but
+				// wrong for a non-destructive download. We swap
+				// the class to btn (the primary brand variant) for
+				// the duration of this dialog, then restore the
+				// original class on close so any future
+				// destructive confirmation (e.g. a delete
+				// confirmation) opens the dialog with its default
+				// styling again.
+				//
+				// The native <dialog> is showModal()-blocked so
+				// only one instance can be open at a time — that
+				// removes any race risk between the swap and
+				// restore, even with concurrent triggers from
+				// different parts of the page.
+				if (ok) {
+					var originalOkClass = ok.className;
+					ok.className = ok.className.replace(/\bbtn-destructive\b/, 'btn');
+					ok.onclick = function() {
+						dialog.close();
+						window.location.href = link.href;
+					};
+					// `{ once: true }` so the listener detaches
+					// itself after firing — important because
+					// the dialog can be closed and re-opened
+					// many times in one page lifetime.
+					dialog.addEventListener('close', function restoreOkClass() {
+						ok.className = originalOkClass;
+					}, { once: true });
+				}
+				dialog.showModal();
+			});
+		})();
+	</script>
+}

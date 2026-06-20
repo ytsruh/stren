@@ -1,0 +1,239 @@
+package profile
+
+import (
+	"fmt"
+
+	"stren/internal/views"
+	"stren/internal/views/components"
+)
+
+// ProfilePage renders the user profile page. The push-related
+// parameters drive the @PushBanner child: pushConfigured is true
+// when the server has a VAPID keypair loaded, pushHasSubscription
+// tells the server's best guess at the user's subscription state for
+// first paint (the JS reconciles it on load), and vapidPublicKey is
+// injected into a data attribute the JS reads.
+//
+// targetWeight is the user's body-weight goal; nil means no goal has
+// been set, in which case the form input is empty. weightUnit is the
+// user's preferred unit ("kg" / "lbs") and drives the <select>'s
+// initial selection.
+templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *float64, weightUnit string, pushConfigured bool, pushHasSubscription bool, vapidPublicKey string) {
+	@views.Layout(views.PageData{Title: "Profile", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/profile"}) {
+		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Profile"})
+		<form
+			hx-post="/profile"
+			hx-target="#toaster"
+			hx-swap="beforeend"
+			class="form grid gap-4 my-5"
+		>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 ">
+				<div class="grid gap-2">
+					<label for="email">Email</label>
+					<input class="input bg-muted" type="email" id="email" name="email" value={ email } disabled/>
+				</div>
+				<div class="grid gap-2">
+					<label for="role">Role</label>
+					<input
+						class="input bg-muted"
+						type="text"
+						id="role"
+						name="role"
+						value={ roleLabel(isAdmin) }
+						disabled
+					/>
+				</div>
+			</div>
+			<div class="grid gap-2">
+				<label for="name">Name</label>
+				<input class="input" type="text" id="name" name="name" value={ userName } required/>
+			</div>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+				<div class="grid gap-2">
+					<label for="target_weight">Target weight</label>
+					<input
+						class="input"
+						type="number"
+						id="target_weight"
+						name="target_weight"
+						step="0.1"
+						min="0"
+						max="1000"
+						placeholder="e.g. 75.0"
+						if targetWeight != nil {
+							value={ fmt.Sprintf("%.1f", *targetWeight) }
+						}
+					/>
+				</div>
+				<div class="grid gap-2">
+					<label for="weight_unit">Preferred weight unit</label>
+					<select class="input w-full" id="weight_unit" name="weight_unit">
+						<option value="kg" selected?={ weightUnit == "kg" }>kg</option>
+						<option value="lbs" selected?={ weightUnit == "lbs" }>lbs</option>
+					</select>
+				</div>
+			</div>
+			<button type="submit" class="btn-primary">
+				<span class="btn-spinner hidden absolute animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent"></span>
+				Save
+			</button>
+		</form>
+		<div class="w-full flex flex-col gap-5">
+			@PushBanner(pushHasSubscription, vapidPublicKey, pushConfigured)
+			<div role="group" class="field" data-orientation="horizontal">
+				<section class="w-1/2">
+					<label for="light-dark-mode">Appearance</label>
+					<p>Switch between light and dark mode.</p>
+				</section>
+				<div id="light-dark-mode" class="w-1/2 flex justify-end">
+					<button
+						type="button"
+						aria-label="Toggle dark mode"
+						onclick="document.dispatchEvent(new CustomEvent('basecoat:theme'))"
+						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block dark:hidden"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+						<span class="hidden dark:inline">Light Mode</span>
+						<span class="inline dark:hidden">Dark Mode</span>
+					</button>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// roleLabel returns a human-readable role label.
+func roleLabel(isAdmin bool) string {
+	if isAdmin {
+		return "Administrator"
+	}
+	return "User"
+}
+
+// ProfileUpdateSuccess renders a success toast for HTMX responses.
+templ ProfileUpdateSuccess() {
+	@views.Toast("success", "Profile updated", "")
+}
+
+// ProfileUpdateError renders an error toast for HTMX responses.
+templ ProfileUpdateError(message string) {
+	@views.Toast("error", "Error", message)
+}
+
+// PushBanner renders the "Notifications" card on the user's profile
+// page using the Basecoat Field pattern. Behaviour is in /js/push.js;
+// this template just provides the markup and a few data attributes
+// the JS reads to bootstrap itself.
+//
+// Two siblings the JS toggles between (via the `hidden` attribute)
+// using the wrapper's data-state:
+//
+//   - "disabled" | "enabled":  the #push-content row (label + status
+//                             on the left, switch + spinner on the
+//                             right)
+//   - "unsupported":          the #push-unsupported row (reason on
+//                             the left, Re-check button on the right)
+//
+// `configured` is false when the server has no VAPID keypair (which
+// shouldn't happen in production — LoadOrGenerate creates them on
+// first boot — but keeps the UI honest in tests and on a freshly
+// wiped /data volume). When unconfigured the entire card is hidden.
+templ PushBanner(hasSubscription bool, vapidPublicKey string, configured bool) {
+	if configured {
+		<div
+			id="push-banner"
+			data-state={ initialPushState(hasSubscription) }
+			data-vapid-key={ vapidPublicKey }
+		>
+			<div
+				id="push-content"
+				role="group"
+				class="field"
+				data-orientation="horizontal"
+			>
+				<section class="w-3/4">
+					<label for="push-toggle">Notifications</label>
+					<p id="push-description">Get notified when the admin sends an announcement.</p>
+					<p
+						id="push-status"
+						class="text-muted-foreground text-xs"
+					>Status: { pushStatusLabel(hasSubscription) }</p>
+				</section>
+				<div class="w-1/4 flex justify-end">
+					<span
+						id="push-spinner"
+						class=""
+						aria-hidden="true"
+						hidden
+					>
+						@components.Icon(components.IconProps{Name: "loader", Size: 18})
+					</span>
+					<input
+						type="checkbox"
+						id="push-toggle"
+						role="switch"
+						aria-describedby="push-description"
+						if hasSubscription {
+							checked
+						}
+					/>
+				</div>
+			</div>
+			<div
+				id="push-unsupported"
+				role="group"
+				class="field"
+				data-orientation="vertical"
+				hidden
+			>
+				<section>
+					<p class="text-sm font-medium">Push notifications unavailable</p>
+					<p
+						id="push-unsupported-reason"
+						class="text-muted-foreground text-sm"
+					>This browser does not support web push.</p>
+				</section>
+				<button id="push-recheck" type="button" class="btn-outline">Re-check support</button>
+			</div>
+		</div>
+	}
+}
+
+// initialPushState returns the data-state value used for first paint.
+// The server's best guess: at least one stored subscription means
+// "enabled", otherwise "disabled". The JS reconciles with the
+// browser's actual pushManager state on load and updates if needed.
+func initialPushState(hasSubscription bool) string {
+	if hasSubscription {
+		return "enabled"
+	}
+	return "disabled"
+}
+
+// pushStatusLabel returns the human-readable status text shown under
+// the description.
+func pushStatusLabel(hasSubscription bool) string {
+	if hasSubscription {
+		return "Enabled"
+	}
+	return "Disabled"
+}
+
+// PushSubscribeSuccess renders a success toast for HTMX responses
+// after a successful subscription.
+templ PushSubscribeSuccess() {
+	@views.Toast("success", "Notifications enabled", "You'll receive admin messages.")
+}
+
+// PushUnsubscribeSuccess renders a success toast for HTMX responses
+// after a successful unsubscribe.
+templ PushUnsubscribeSuccess() {
+	@views.Toast("success", "Notifications disabled", "")
+}
+
+// PushSubscribeError renders an error toast for HTMX responses
+// related to a subscribe or unsubscribe attempt.
+templ PushSubscribeError(message string) {
+	@views.Toast("error", "Notifications", message)
+}

@@ -1,16 +1,17 @@
-package views
+package exercise
 
 import (
 	"fmt"
 	"strings"
 
 	"stren/internal/models"
+	"stren/internal/views"
 	"stren/internal/views/components"
 )
 
 // ExercisesList renders a page listing all exercises.
 templ ExercisesList(exercises []models.Exercise, userName string, isAuthenticated bool, isAdmin bool) {
-	@Layout(PageData{Title: "Exercises", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+	@views.Layout(views.PageData{Title: "Exercises", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Exercises"})
 		</div>
