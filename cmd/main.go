@@ -64,8 +64,14 @@ func main() {
 
 	// Wire the push client + fan-out service. A bounded HTTP client
 	// timeout (30s) is applied via the package default; no need to
-	// expose it.
-	pushClient := push.NewClient(keys, push.ClientConfig{})
+	// expose it. The Logger hook is on so the VAPID Authorization
+	// header is recorded on every outbound send — needed to
+	// diagnose Apple's BadJwtToken rejections, where the push
+	// service's 403 body alone doesn't tell us which JWT claim is
+	// wrong. Remove Logger: log.Printf once the diagnosis is done.
+	pushClient := push.NewClient(keys, push.ClientConfig{
+		Logger: log.Printf,
+	})
 	pushService := push.NewService(pushClient, push.NewStoreAdapter(pushRepo), push.ServiceConfig{})
 
 	// Initialize controllers

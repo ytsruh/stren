@@ -1,15 +1,18 @@
 package push
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -305,3 +308,127 @@ func contains(s, sub string) bool {
 type errFake string
 
 func (e errFake) Error() string { return string(e) }
+
+// safeBuffer is a bytes.Buffer guarded by a mutex. ClientConfig.Logger
+// is called from the Send path; the test goroutine reads the buffer
+// afterwards. Without the lock the race detector would flag the
+// access even though Send is synchronous today, because future
+// changes could move the log call to a worker goroutine.
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *safeBuffer) WriteByte(c byte) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.WriteByte(c)
+}
+
+// TestClient_Send_LoggerCapturesVAPIDHeader makes sure that when
+// ClientConfig.Logger is set, the wrapper around the HTTPClient
+// records the VAPID Authorization header on every outbound push.
+// This is the diagnostic hook that surfaces Apple's BadJwtToken
+// rejections: the JWT in the log line can be split on '.' and
+// base64url-decoded to see alg/aud/exp/sub, none of which the
+// push service's 403 body tells us.
+func TestClient_Send_LoggerCapturesVAPIDHeader(t *testing.T) {
+	keys := validKeys(t)
+
+	var logBuf safeBuffer
+	logger := func(format string, args ...any) {
+		// Mirror log.Printf semantics so the captured string is
+		// the same one an operator would see in production.
+		fmt.Fprintf(&logBuf, format, args...)
+		logBuf.WriteByte('\n')
+	}
+
+	// Use a real httptest server so webpush-go builds a real JWT
+	// (its encryption + VAPID signing paths only run when there is
+	// a real network round-trip). The server returns 403 with the
+	// body that mimics Apple's BadJwtToken response.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"reason":"BadJwtToken"}`))
+	}))
+	defer srv.Close()
+
+	client := NewClient(keys, ClientConfig{
+		HTTPClient: srv.Client(),
+		Subscriber: "mailto:test@example.com",
+		Logger:     logger,
+	})
+
+	sub := validSub()
+	sub.Endpoint = srv.URL + "/push/abc"
+
+	out := client.Send(context.Background(), sub, Message{Title: "x", Body: "y"})
+	if out.Error == nil {
+		t.Fatal("expected error from 403 response")
+	}
+	if !contains(out.Error.Error(), "BadJwtToken") {
+		t.Errorf("error should include response body, got %q", out.Error.Error())
+	}
+
+	logged := logBuf.String()
+	if logged == "" {
+		t.Fatal("Logger was never called; expected the VAPID Authorization header to be recorded")
+	}
+	if !contains(logged, "vapid t=") {
+		t.Errorf("log line should contain the VAPID JWT prefix; got %q", logged)
+	}
+	if !contains(logged, "k=") {
+		t.Errorf("log line should contain the VAPID public key segment; got %q", logged)
+	}
+	if !contains(logged, srv.URL) {
+		t.Errorf("log line should mention the push service URL; got %q", logged)
+	}
+	if !contains(logged, "POST") {
+		t.Errorf("log line should mention the HTTP method; got %q", logged)
+	}
+}
+
+// TestClient_Send_NoLoggerNoLog makes sure the default
+// configuration (no Logger) is completely silent on the wire.
+// This locks in the "zero cost when not configured" promise of
+// the ClientConfig.Logger field.
+func TestClient_Send_NoLoggerNoLog(t *testing.T) {
+	keys := validKeys(t)
+
+	var logBuf safeBuffer
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	// Note: no Logger set on ClientConfig.
+	client := NewClient(keys, ClientConfig{
+		HTTPClient: srv.Client(),
+		Subscriber: "mailto:test@example.com",
+	})
+
+	sub := validSub()
+	sub.Endpoint = srv.URL + "/push/abc"
+	if out := client.Send(context.Background(), sub, Message{Title: "x", Body: "y"}); out.Error != nil {
+		t.Fatalf("send failed: %v", out.Error)
+	}
+
+	if logBuf.String() != "" {
+		t.Errorf("expected silent log buffer, got %q", logBuf.String())
+	}
+}

@@ -39,35 +39,34 @@ templ CompareModal(
 		data-vertical-breakpoint="768"
 		onclick="if(event.target===this)this.close()"
 	>
-		<div class="sm:max-w-3xl max-h-[90vh]">
-			<header>
-				<h3 class="text-lg font-semibold">Compare photos</h3>
-				<p class="text-sm text-muted-foreground">
-					{ beforeLabel }
-					→
-					{ afterLabel }
-					if deltaText != "" {
-						· { deltaText }
-					}
-				</p>
-			</header>
+		<div>
+			// <header>
+			// 	<h3 class="text-lg font-semibold">Compare photos</h3>
+			// 	<p class="text-sm text-muted-foreground">
+			// 		{ beforeLabel }
+			// 		→
+			// 		{ afterLabel }
+			// 		if deltaText != "" {
+			// 			· { deltaText }
+			// 		}
+			// 	</p>
+			// </header>
 			<div
 				id="weight-compare-slider"
-				class="image-compare w-full rounded-md border bg-muted"
-				style="max-height: 70vh"
+				class="image-compare"
 			>
-				<img src={ beforeURL } alt={ "Weight photo from " + beforeLabel }/>
-				<img src={ afterURL } alt={ "Weight photo from " + afterLabel }/>
+				<img src={ beforeURL } alt={ "Weight photo from " + beforeLabel } class="object-cover"/>
+				<img src={ afterURL } alt={ "Weight photo from " + afterLabel } class="object-cover"/>
 			</div>
-			<footer class="flex justify-end">
-				<button
-					type="button"
-					class="btn-outline"
-					onclick="document.getElementById('weight-compare-dialog').close()"
-				>
-					Close
-				</button>
-			</footer>
+			// <footer class="flex justify-end">
+			// 	<button
+			// 		type="button"
+			// 		class="btn-outline"
+			// 		onclick="document.getElementById('weight-compare-dialog').close()"
+			// 	>
+			// 		Close
+			// 	</button>
+			// </footer>
 		</div>
 	</dialog>
 	<script>
