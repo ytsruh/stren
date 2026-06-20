@@ -39,7 +39,7 @@ templ CompareModal(
 		data-vertical-breakpoint="768"
 		onclick="if(event.target===this)this.close()"
 	>
-		<div class="">
+		<div class="sm:max-w-3xl max-h-[90vh]">
 			<header>
 				<h3 class="text-lg font-semibold">Compare photos</h3>
 				<p class="text-sm text-muted-foreground">
@@ -53,7 +53,8 @@ templ CompareModal(
 			</header>
 			<div
 				id="weight-compare-slider"
-				class="image-compare rounded-md border bg-muted"
+				class="image-compare w-full rounded-md border bg-muted"
+				style="max-height: 70vh"
 			>
 				<img src={ beforeURL } alt={ "Weight photo from " + beforeLabel }/>
 				<img src={ afterURL } alt={ "Weight photo from " + afterLabel }/>
