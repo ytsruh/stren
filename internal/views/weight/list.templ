@@ -2,7 +2,6 @@ package weight
 
 import (
 	"fmt"
-	"math"
 	"sort"
 	"stren/internal/models"
 	"stren/internal/views"
@@ -13,6 +12,17 @@ import (
 // user's body-weight goal; when non-nil, a progress widget is rendered
 // alongside the chart.
 templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool, targetWeight *float64) {
+	{{
+		// Lift the "what's the latest reading" computation up out of
+		// the progress card so the card stays a pure render. The card
+		// is hidden when there's no target or no entries, so the
+		// pre-computed values are only consumed in that case.
+		current := latestWeight(entries)
+		var pct float64
+		if targetWeight != nil {
+			pct = weightProgress(current, *targetWeight)
+		}
+	}}
 	@views.Layout(views.PageData{Title: "Weight", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Body Weight"})
@@ -48,7 +58,7 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 			</div>
 			if targetWeight != nil && len(entries) > 0 {
 				<div class="w-full sm:w-1/4 sm:h-40">
-					@WeightProgressCard(entries, *targetWeight)
+					@WeightProgressCard(current, *targetWeight, pct)
 				</div>
 			}
 		</div>
@@ -103,6 +113,20 @@ func chartDataForWeight(entries []models.WeightEntry) components.ChartProps {
 		Labels:   labels,
 		Datasets: datasets,
 	}
+}
+
+// latestWeight returns the weight from the most recent entry. The slice
+// is sorted defensively to match the order used by the chart, so the
+// caller can pass the entries in any order. Returns 0 for an empty slice.
+func latestWeight(entries []models.WeightEntry) float64 {
+	if len(entries) == 0 {
+		return 0
+	}
+	sorted := append([]models.WeightEntry(nil), entries...)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
+	})
+	return sorted[len(sorted)-1].Weight
 }
 
 // WeightList renders a table of weight entries
@@ -190,74 +214,37 @@ templ WeightEmptyState() {
 }
 
 // WeightProgressCard renders a small card summarising progress towards the
-// user's body-weight goal. entries must be non-empty; the caller is
-// responsible for not invoking this with a nil/empty slice — the chart row
-// guards that with `len(entries) > 0`. The card is hidden by the caller
-// when targetWeight is nil.
-templ WeightProgressCard(entries []models.WeightEntry, target float64) {
-	{{
-		// Sort ascending by date so the first/last weight reads as
-		// "the user's starting point" and "their latest reading".
-		sorted := make([]models.WeightEntry, len(entries))
-		copy(sorted, entries)
-		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
-		})
-		start := sorted[0].Weight
-		current := sorted[len(sorted)-1].Weight
-		pct, label := weightProgress(start, current, target)
-	}}
+// user's body-weight goal. The caller is responsible for pre-computing
+// the current weight and the clamped percent (typically via
+// latestWeight and weightProgress), so this template stays a pure
+// render. The card is hidden by the caller when targetWeight is nil or
+// there are no entries.
+templ WeightProgressCard(current, target, pct float64) {
 	<div class="card p-4 h-full flex flex-col gap-3 justify-center">
 		<div>
-			<p class="text-sm text-muted-foreground">Goal progress</p>
-			<p class="text-2xl font-semibold">{ fmt.Sprintf("%.0f%%", pct) }</p>
+			<p class="text-base text-muted-foreground">Progress</p>
+			<p class="text-3xl font-semibold">{ fmt.Sprintf("%.0f%%", pct) }</p>
 		</div>
-		<div
-			class="h-2 w-full rounded-full bg-muted overflow-hidden"
-			role="progressbar"
-			aria-valuenow={ fmt.Sprintf("%.0f", pct) }
-			aria-valuemin="0"
-			aria-valuemax="100"
-			aria-label={ label }
-		>
-			<div
-				class="h-full bg-primary"
-				style={ fmt.Sprintf("width: %.0f%%", pct) }
-			></div>
-		</div>
-		<p class="text-xs text-muted-foreground">
-			{ label }
-		</p>
-		<dl class="grid grid-cols-3 gap-2 text-xs mt-1">
-			<div>
-				<dt class="text-muted-foreground">Start</dt>
-				<dd class="font-medium">{ fmt.Sprintf("%.1f kg", start) }</dd>
-			</div>
+		<dl class="grid grid-cols-2 gap-2 text-xs">
 			<div>
 				<dt class="text-muted-foreground">Current</dt>
-				<dd class="font-medium">{ fmt.Sprintf("%.1f kg", current) }</dd>
+				<dd class="text-base">{ fmt.Sprintf("%.1f kg", current) }</dd>
 			</div>
 			<div>
 				<dt class="text-muted-foreground">Target</dt>
-				<dd class="font-medium">{ fmt.Sprintf("%.1f kg", target) }</dd>
+				<dd class="text-base">{ fmt.Sprintf("%.1f kg", target) }</dd>
 			</div>
 		</dl>
 	</div>
 }
 
-// weightProgress returns the percent progress (clamped to [0, 100]) and a
-// short human-readable summary line for the WeightProgressCard.
-//
-// The percent is the simplest possible: current as a percentage of target.
+// weightProgress returns the current weight as a percentage of the
+// target, clamped to [0, 100]. A zero target yields 0 (no goal set).
 //   - 67.6 / 70 * 100 = 96.6%
-//   - 90 / 80 * 100   = 112.5% → clamped to 100% (overshot)
-//   - 100 / 80 * 100  = 125%   → clamped to 100% (well over target)
-//
-// The label reports the distance from current to target. When current
-// is within 0.05 kg of the target, "Goal reached" is shown instead.
-func weightProgress(start, current, target float64) (float64, string) {
+//   - 95 / 90 * 100   = 105.5% → clamped to 100% (overshot)
+func weightProgress(current, target float64) float64 {
 	if target == 0 {
-		return 0, "Set a new target weight to see progress."
+		return 0
 	}
 	pct := current / target * 100
 	if pct < 0 {
@@ -266,11 +253,7 @@ func weightProgress(start, current, target float64) (float64, string) {
 	if pct > 100 {
 		pct = 100
 	}
-	remaining := math.Abs(target - current)
-	if remaining < 0.05 {
-		return pct, "Goal reached — keep it up!"
-	}
-	return pct, fmt.Sprintf("%.1f kg to go", remaining)
+	return pct
 }
 
 // WeightCompareScript renders the inline JavaScript that wires up the

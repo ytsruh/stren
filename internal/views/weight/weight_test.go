@@ -28,116 +28,127 @@ func renderToString(t *testing.T, component templ.Component) string {
 // WeightProgressCard is covered by TestWeightProgressCard_*.
 //
 // The formula is simply current / target * 100, clamped to [0, 100].
-// The start argument is no longer used by the formula but kept in the
-// signature for backwards compatibility with existing test cases.
 func TestWeightProgress(t *testing.T) {
 	tests := []struct {
-		name                   string
-		start, current, target float64
-		wantPct                float64
-		wantContains           string // substring expected in the label
+		name        string
+		current     float64
+		target      float64
+		wantPct     float64
 	}{
 		{
-			name:  "current below target (gaining goal)",
-			start: 69, current: 67.6, target: 70,
-			wantPct:      96.57142857142857,
-			wantContains: "2.4 kg to go",
+			name:    "current below target (gaining goal)",
+			current: 67.6, target: 70,
+			wantPct: 96.57142857142857,
 		},
 		{
-			name:  "current above target (cutting goal)",
-			start: 90, current: 95, target: 90,
-			wantPct:      100, // 95/90 = 105.5%, clamped
-			wantContains: "5.0 kg to go",
+			name:    "current above target (cutting goal)",
+			current: 95, target: 90,
+			wantPct: 100, // 95/90 = 105.5%, clamped
 		},
 		{
-			name:  "exactly at goal",
-			start: 80, current: 80, target: 80,
-			wantPct:      100,
-			wantContains: "Goal reached",
+			name:    "exactly at goal",
+			current: 80, target: 80,
+			wantPct: 100,
 		},
 		{
-			name:  "current is 90% of target",
-			start: 100, current: 90, target: 100,
-			wantPct:      90,
-			wantContains: "10.0 kg to go",
+			name:    "current is 90% of target",
+			current: 90, target: 100,
+			wantPct: 90,
 		},
 		{
-			name:  "current is 50% of target",
-			start: 100, current: 50, target: 100,
-			wantPct:      50,
-			wantContains: "50.0 kg to go",
+			name:    "current is 50% of target",
+			current: 50, target: 100,
+			wantPct: 50,
 		},
 		{
-			name:  "target is zero (no goal)",
-			start: 100, current: 90, target: 0,
-			wantPct:      0,
-			wantContains: "Set a new target",
+			name:    "target is zero (no goal)",
+			current: 90, target: 0,
+			wantPct: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pct, label := weightProgress(tt.start, tt.current, tt.target)
+			pct := weightProgress(tt.current, tt.target)
 			if pct != tt.wantPct {
-				t.Errorf("weightProgress(%v, %v, %v) pct = %v, want %v", tt.start, tt.current, tt.target, pct, tt.wantPct)
-			}
-			if !strings.Contains(label, tt.wantContains) {
-				t.Errorf("weightProgress(%v, %v, %v) label = %q, want substring %q", tt.start, tt.current, tt.target, label, tt.wantContains)
+				t.Errorf("weightProgress(%v, %v) = %v, want %v", tt.current, tt.target, pct, tt.wantPct)
 			}
 		})
 	}
 }
 
-// TestWeightProgressCard_RendersKeyStats asserts the card surfaces the
-// start/current/target values and the percent progress to the user.
-func TestWeightProgressCard_RendersKeyStats(t *testing.T) {
+// TestLatestWeight asserts the helper returns the weight from the most
+// recent entry, regardless of the input order. The chart sorts
+// defensively too, so this guarantees both consumers pick the same
+// "current" reading.
+func TestLatestWeight(t *testing.T) {
 	day1 := time.Date(2024, 6, 1, 8, 0, 0, 0, time.UTC)
 	day2 := time.Date(2024, 6, 8, 8, 0, 0, 0, time.UTC)
-	entries := []models.WeightEntry{
-		{ID: "w1", Weight: 80, CreatedAt: day1},
-		{ID: "w2", Weight: 50, CreatedAt: day2},
-	}
+	day3 := time.Date(2024, 6, 15, 8, 0, 0, 0, time.UTC)
 
-	html := renderToString(t, WeightProgressCard(entries, 100))
+	t.Run("ascending order", func(t *testing.T) {
+		entries := []models.WeightEntry{
+			{ID: "w1", Weight: 80, CreatedAt: day1},
+			{ID: "w2", Weight: 78, CreatedAt: day2},
+			{ID: "w3", Weight: 76, CreatedAt: day3},
+		}
+		if got, want := latestWeight(entries), 76.0; got != want {
+			t.Errorf("latestWeight = %v, want %v", got, want)
+		}
+	})
 
-	// Headline percent: current 50 / target 100 = 50%.
+	t.Run("reverse-chronological order (as the repo returns)", func(t *testing.T) {
+		entries := []models.WeightEntry{
+			{ID: "w3", Weight: 30, CreatedAt: day3},
+			{ID: "w2", Weight: 35, CreatedAt: day2},
+			{ID: "w1", Weight: 40, CreatedAt: day1},
+		}
+		if got, want := latestWeight(entries), 30.0; got != want {
+			t.Errorf("latestWeight = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("empty slice", func(t *testing.T) {
+		if got := latestWeight(nil); got != 0 {
+			t.Errorf("latestWeight(nil) = %v, want 0", got)
+		}
+	})
+}
+
+// TestWeightProgressCard_RendersKeyStats asserts the card surfaces the
+// current/target values and the percent progress to the user.
+func TestWeightProgressCard_RendersKeyStats(t *testing.T) {
+	html := renderToString(t, WeightProgressCard(50, 100, 50))
+
+	// Headline percent.
 	if !strings.Contains(html, "50%") {
 		t.Error("expected 50% progress in rendered card")
 	}
-	// Start, current, and target values appear in the stats grid.
-	for _, want := range []string{"80.0 kg", "50.0 kg", "100.0 kg"} {
+	// Current and target values appear in the stats grid.
+	for _, want := range []string{"50.0 kg", "100.0 kg"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("expected %q in rendered card", want)
 		}
 	}
-	// Accessibility: a progressbar with aria-valuenow.
-	if !strings.Contains(html, `role="progressbar"`) {
-		t.Error("expected progressbar role")
-	}
-	if !strings.Contains(html, `aria-valuenow="50"`) {
-		t.Errorf("expected aria-valuenow=50, got: %s", html)
-	}
 }
 
-// TestWeightProgressCard_UsesSortedOrder asserts the card picks the
-// earliest entry as "start" and the latest as "current", even when the
-// caller passes them in descending order (the order the repo returns).
-func TestWeightProgressCard_UsesSortedOrder(t *testing.T) {
-	day1 := time.Date(2024, 6, 1, 8, 0, 0, 0, time.UTC)
-	day2 := time.Date(2024, 6, 8, 8, 0, 0, 0, time.UTC)
-	day3 := time.Date(2024, 6, 15, 8, 0, 0, 0, time.UTC)
-	// Reverse-chronological order, as the weight repo returns.
-	entries := []models.WeightEntry{
-		{ID: "w3", Weight: 30, CreatedAt: day3},
-		{ID: "w2", Weight: 35, CreatedAt: day2},
-		{ID: "w1", Weight: 40, CreatedAt: day1},
-	}
+// TestWeightProgressCard_RendersSuppliedValues asserts the card is a
+// pure render: whatever current/target/pct the caller passes in are
+// what the user sees. (The "latest entry" sort and the
+// current/target percent are the caller's responsibility — covered
+// separately by TestLatestWeight and TestWeightProgress.)
+func TestWeightProgressCard_RendersSuppliedValues(t *testing.T) {
+	html := renderToString(t, WeightProgressCard(30, 50, 60))
 
-	html := renderToString(t, WeightProgressCard(entries, 50))
-
-	// current 30 / target 50 = 60%.
+	// current 30, target 50, pct 60.
 	if !strings.Contains(html, "60%") {
-		t.Errorf("expected 60%% progress (current=30, target=50), got: %s", html)
+		t.Errorf("expected 60%% progress, got: %s", html)
+	}
+	if !strings.Contains(html, "30.0 kg") {
+		t.Errorf("expected current 30.0 kg, got: %s", html)
+	}
+	if !strings.Contains(html, "50.0 kg") {
+		t.Errorf("expected target 50.0 kg, got: %s", html)
 	}
 }
 
@@ -161,7 +172,7 @@ func TestWeightPage_ChartIsFullWidthWithoutGoal(t *testing.T) {
 			t.Error("expected chart to be full width on sm+ when no target weight is set")
 		}
 		// Progress card must not be rendered at all.
-		if strings.Contains(html, "Goal progress") {
+		if strings.Contains(html, "Progress") {
 			t.Error("expected progress card to be omitted when no target weight is set")
 		}
 	})
@@ -174,7 +185,7 @@ func TestWeightPage_ChartIsFullWidthWithoutGoal(t *testing.T) {
 			t.Error("expected chart to be 3/4 width on sm+ when a target weight is set")
 		}
 		// Progress card IS rendered.
-		if !strings.Contains(html, "Goal progress") {
+		if !strings.Contains(html, "Progress") {
 			t.Error("expected progress card to render when a target weight is set")
 		}
 	})
@@ -186,7 +197,7 @@ func TestWeightPage_ChartIsFullWidthWithoutGoal(t *testing.T) {
 func TestWeightPage_ProgressCardHiddenWithoutEntries(t *testing.T) {
 	target := 80.0
 	html := renderToString(t, WeightPage(nil, "Test User", true, false, &target))
-	if strings.Contains(html, "Goal progress") {
+	if strings.Contains(html, "Progress") {
 		t.Error("expected progress card to be omitted when there are no entries")
 	}
 	// The chart still takes the full row — same layout as the no-goal case.
