@@ -22,7 +22,7 @@ const (
 	defaultTTL      = 24 * time.Hour
 	defaultUrgency  = webpush.UrgencyNormal
 	defaultTopic    = "stren-admin-message"
-	defaultSubject  = "mailto:chris@stren.ytsruh.com"
+	defaultSubject  = "https://stren.ytsruh.com"
 	defaultHTTPTime = 30 * time.Second
 )
 
@@ -103,16 +103,23 @@ type ClientConfig struct {
 	// HTTPClient is the net/http client used to talk to the push
 	// service. Defaults to a 30s-timeout client.
 	HTTPClient webpush.HTTPClient
-	// Subscriber is the VAPID `sub` claim: a mailto: URL or
-	// https:// URL identifying the operator. Required by the spec.
+	// Subscriber is the VAPID contact for the `sub` claim. Pass
+	// either a bare email address (e.g. "chris@example.com"), a
+	// full `https://` URL (e.g. "https://stren.ytsruh.com"), or
+	// any other scheme webpush-go will leave alone. Do NOT include
+	// a `mailto:` prefix on email addresses — webpush-go prepends
+	// `mailto:` automatically for any value that does not already
+	// start with `https:`, so a `mailto:`-prefixed value produces
+	// the malformed `mailto:mailto:...` in the JWT and Apple
+	// rejects it with HTTP 403 + {"reason":"BadJwtToken"}.
 	//
 	// The value MUST resolve to a real contact. Apple
 	// (web.push.apple.com) is the strictest of the major push
 	// providers and returns HTTP 403 when the `sub` is a clearly
-	// placeholder address (e.g. a `.local` hostname). FCM and
-	// Mozilla autopush tend to accept placeholder values, which
-	// means a bad default here shows up as iOS-only 403s in
-	// production while every other platform appears to work.
+	// placeholder address. FCM and Mozilla autopush tend to
+	// accept placeholder values, which means a bad default here
+	// shows up as iOS-only 403s in production while every other
+	// platform appears to work.
 	Subscriber string
 	// Topic groups multiple messages so the push service can collapse
 	// them on the device. Default: "stren-admin-message".

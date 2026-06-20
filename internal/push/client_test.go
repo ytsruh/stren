@@ -432,3 +432,114 @@ func TestClient_Send_NoLoggerNoLog(t *testing.T) {
 		t.Errorf("expected silent log buffer, got %q", logBuf.String())
 	}
 }
+
+// TestClient_Send_VAPIDSubClaimIsNotDoublePrefixed is the
+// regression test for the bug that surfaced as Apple's
+// `BadJwtToken` 403: webpush-go prepends `mailto:` to any
+// `Subscriber` value that does not start with `https:`, so
+// passing `mailto:foo@bar` produces the malformed
+// `mailto:mailto:foo@bar` in the JWT. This test pins down the
+// exact `sub` claim value the default configuration produces,
+// so any future change to defaultSubject or to the way the
+// value is passed to webpush-go is caught at unit-test time
+// rather than discovered by an iOS user.
+func TestClient_Send_VAPIDSubClaimIsNotDoublePrefixed(t *testing.T) {
+	keys := validKeys(t)
+
+	var logBuf safeBuffer
+	logger := func(format string, args ...any) {
+		fmt.Fprintf(&logBuf, format, args...)
+		logBuf.WriteByte('\n')
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	// Use the package default (no Subscriber override) so this
+	// test is the one that catches a regression in defaultSubject
+	// itself. The other tests in this file pass
+	// `mailto:test@example.com` explicitly, which is the case the
+	// new doc comment warns about.
+	client := NewClient(keys, ClientConfig{
+		HTTPClient: srv.Client(),
+		Logger:     logger,
+	})
+
+	sub := validSub()
+	sub.Endpoint = srv.URL + "/push/abc"
+	if out := client.Send(context.Background(), sub, Message{Title: "x", Body: "y"}); out.Error != nil {
+		t.Fatalf("send failed: %v", out.Error)
+	}
+
+	logged := logBuf.String()
+	if !contains(logged, "vapid t=") {
+		t.Fatalf("no VAPID header in log; got %q", logged)
+	}
+
+	// Extract the JWT from the auth="vapid t=...,k=..." line.
+	// The log format is fixed by the loggingHTTPClient wrapper.
+	const marker = `auth="vapid t=`
+	start := strings.Index(logged, marker)
+	if start < 0 {
+		t.Fatalf("could not find VAPID marker in log line %q", logged)
+	}
+	rest := logged[start+len(marker):]
+	end := strings.Index(rest, `"`)
+	if end < 0 {
+		t.Fatalf("could not find end of auth value in log line %q", logged)
+	}
+	authValue := rest[:end]
+
+	// authValue is "<JWT>, k=<key>". The marker already consumed
+	// "vapid t=", so the rest starts with the JWT itself. The JWT
+	// is everything before the ", k=" separator. webpush-go emits
+	// the separator with a space (see vapid.go:106 in the library).
+	const sep = ", k="
+	comma := strings.Index(authValue, sep)
+	if comma < 0 {
+		t.Fatalf(`no %q separator in auth value %q`, sep, authValue)
+	}
+	jwt := authValue[:comma]
+
+	// JWT is header.payload.signature. We only need the payload
+	// (the second segment) to assert the sub claim.
+	parts := strings.Split(jwt, ".")
+	if len(parts) != 3 {
+		t.Fatalf("expected 3-part JWT, got %d parts: %q", len(parts), jwt)
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatalf("decode JWT payload: %v", err)
+	}
+
+	// The single most important assertion: the sub claim is the
+	// raw value we configured, not a double-prefixed form.
+	if !contains(string(payload), `"sub":"https://stren.ytsruh.com"`) {
+		t.Errorf(`sub claim should be "https://stren.ytsruh.com" (no extra prefix), got payload: %s`, payload)
+	}
+
+	// Belt and braces: assert we never produced the malformed
+	// form, regardless of how the bug could manifest. If a
+	// future refactor introduces a different prefix, the test
+	// above catches it; this one catches a regression of the
+	// original bug.
+	if contains(string(payload), "mailto:mailto:") {
+		t.Errorf("sub claim contains the double-prefix bug; got payload: %s", payload)
+	}
+
+	// Also confirm the rest of the JWT looks right, so a future
+	// regression that swapped `sub` for some other claim is
+	// caught here too.
+	if !contains(string(payload), `"aud":"https://web.push.apple.com"`) &&
+		!contains(string(payload), `"aud":"https://`+srv.Listener.Addr().String()) {
+		// The aud claim is the origin of the endpoint, which is
+		// the test server's address when using httptest. Just
+		// confirm an aud claim is present at all.
+		if !contains(string(payload), `"aud":"`) {
+			t.Errorf("payload missing aud claim: %s", payload)
+		}
+	}
+}
