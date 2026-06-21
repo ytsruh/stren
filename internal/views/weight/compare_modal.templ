@@ -55,8 +55,8 @@ templ CompareModal(
 				id="weight-compare-slider"
 				class="image-compare"
 			>
-				<img src={ beforeURL } alt={ "Weight photo from " + beforeLabel } class="object-cover"/>
-				<img src={ afterURL } alt={ "Weight photo from " + afterLabel } class="object-cover"/>
+				<img src={ beforeURL } alt={ "Weight photo from " + beforeLabel }/>
+				<img src={ afterURL } alt={ "Weight photo from " + afterLabel }/>
 			</div>
 			// <footer class="flex justify-end">
 			// 	<button
@@ -81,10 +81,6 @@ templ CompareModal(
 				console.error('image-compare-viewer library not loaded');
 				return;
 			}
-
-			var beforeURL = slider.previousElementSibling && slider.previousElementSibling.tagName === 'IMG'
-				? slider.querySelector('img:nth-of-type(1)').getAttribute('src')
-				: null;
 
 			var labelA = dialog.getAttribute('data-label-a') || 'Before';
 			var labelB = dialog.getAttribute('data-label-b') || 'After';
@@ -113,7 +109,7 @@ templ CompareModal(
 					hoverStart: false,
 					verticalMode: isVertical(),
 					startingPoint: 50,
-					fluidMode: false
+					fluidMode: true
 				};
 			}
 
