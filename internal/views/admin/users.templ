@@ -12,7 +12,6 @@ templ AdminUserList(users []models.User, userName string, isAuthenticated bool, 
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Users"})
 		</div>
-
 		if len(users) == 0 {
 			<div class="text-center py-12 text-muted-foreground">
 				<p>No users yet.</p>
@@ -21,7 +20,7 @@ templ AdminUserList(users []models.User, userName string, isAuthenticated bool, 
 			<table class="table w-full">
 				<thead>
 					<tr>
-						<th>ID</th>
+						<th class="hidden lg:table-cell">ID</th>
 						<th>Name</th>
 						<th>Email</th>
 						<th>Admin</th>
@@ -31,7 +30,7 @@ templ AdminUserList(users []models.User, userName string, isAuthenticated bool, 
 				<tbody>
 					for _, u := range users {
 						<tr>
-							<td>{ u.ID }</td>
+							<td class="hidden lg:table-cell">{ u.ID }</td>
 							<td>{ u.Name }</td>
 							<td>{ u.Email }</td>
 							<td>

@@ -1,6 +1,9 @@
-package components
+package weight
 
-import "fmt"
+import (
+	"fmt"
+	"stren/internal/views/components"
+)
 
 // PhotoUploadProps configures the photo upload widget.
 type PhotoUploadProps struct {
@@ -41,7 +44,7 @@ templ PhotoUpload(props PhotoUploadProps) {
 					alt="Current photo"
 					class="size-32 rounded-md object-cover border"
 				/>
-				<div class="flex items-center gap-2 pt-2">
+				<div class="flex items-center gap-2">
 					<input
 						type="checkbox"
 						id={ removeID }
@@ -73,7 +76,7 @@ templ PhotoUpload(props PhotoUploadProps) {
 			/>
 			<span id={ spinnerID } class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground">
 				<span class="animate-spin">
-					@Icon(IconProps{Name: "loader", Size: 14})
+					@components.Icon(components.IconProps{Name: "loader", Size: 14})
 				</span>
 				Uploading...
 			</span>

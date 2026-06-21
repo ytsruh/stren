@@ -54,12 +54,13 @@ templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *flo
 					<input
 						class="input"
 						type="number"
+						inputmode="numeric"
 						id="target_weight"
 						name="target_weight"
 						step="0.1"
 						min="0"
 						max="1000"
-						placeholder="e.g. 75.0"
+						placeholder="85.0"
 						if targetWeight != nil {
 							value={ fmt.Sprintf("%.1f", *targetWeight) }
 						}

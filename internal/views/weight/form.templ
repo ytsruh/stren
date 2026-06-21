@@ -42,7 +42,7 @@ templ WeightForm(userName string, isAuthenticated bool, isAdmin bool) {
 						placeholder="Any observations about your weight today?"
 					></textarea>
 				</div>
-				@components.PhotoUpload(components.PhotoUploadProps{
+				@PhotoUpload(PhotoUploadProps{
 					Name:       "weight",
 					Label:      "Photo (optional)",
 					CurrentURL: "",
@@ -54,7 +54,7 @@ templ WeightForm(userName string, isAuthenticated bool, isAdmin bool) {
 				<button type="submit" hx-indicator="#weight-spinner" class="btn relative inline-flex">
 					<span class="btn-text flex items-center justify-around gap-2">
 						@components.Icon(components.IconProps{Name: "check", Size: 18})
-						Save Weight
+						Save
 					</span>
 					<span id="weight-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
 						@components.Icon(components.IconProps{Name: "loader", Size: 18})
@@ -134,7 +134,7 @@ templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated
 						placeholder="Any observations about your weight today?"
 					>{ entry.Notes }</textarea>
 				</div>
-				@components.PhotoUpload(components.PhotoUploadProps{
+				@PhotoUpload(PhotoUploadProps{
 					Name:       "weight",
 					Label:      "Photo (optional)",
 					CurrentURL: entry.PhotoURL(),
@@ -147,7 +147,7 @@ templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated
 				<button type="submit" hx-indicator="#weight-spinner" class="btn relative inline-flex">
 					<span class="btn-text flex items-center justify-around gap-2">
 						@components.Icon(components.IconProps{Name: "check", Size: 18})
-						Update Weight
+						Update
 					</span>
 					<span id="weight-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
 						@components.Icon(components.IconProps{Name: "loader", Size: 18})

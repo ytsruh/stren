@@ -46,7 +46,7 @@ templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
 				<button type="submit" hx-indicator="#feedback-spinner" class="btn relative inline-flex">
 					<span class="btn-text flex items-center gap-2 justify-between">
 						@components.Icon(components.IconProps{Name: "check", Size: 18})
-						Submit Feedback
+						Submit
 					</span>
 					<span id="feedback-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
 						@components.Icon(components.IconProps{Name: "loader", Size: 18})

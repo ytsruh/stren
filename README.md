@@ -1,6 +1,6 @@
 # Strength Tracker
 
-A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS + Basecoat CSS, and SQLite. HTMX and Basecoat give a simple, clean semantic view layer. Built using an MVC architecture and focused on using as few dependencies as possible.
+A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS + Basecoat CSS, and SQLite/Turso. HTMX and Basecoat give a simple, clean semantic view layer. Built using an MVC architecture and focused on using as few dependencies as possible.
 
 ## Features
 
@@ -9,6 +9,7 @@ A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS +
 - Track individual exercise sets with weight (in kg), set number, and notes
 - Exercise history view showing all sets for a specific exercise
 - Rest/countdown timer & an EMOM timer
+- Weight tracking
 
 ## Environment Variables
 
