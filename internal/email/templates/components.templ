@@ -1,0 +1,100 @@
+package emailtmpl
+
+// EmailHeader is the colored strip at the top of every email.
+// Carries the wordmark and, in the future, a small logo. The
+// primary-color background is #f54900 — a more saturated
+// orange than the web app's --primary (oklch 64.6% .222 41.116)
+// reads as, because hex is the only safe format for email
+// clients and the sRGB approximation looked washed out in
+// inboxes. Hex is hard-coded because email clients do not
+// understand oklch().
+templ EmailHeader() {
+	<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f54900;">
+		<tr>
+			<td align="left" style="padding:16px 24px;">
+				<span style="display:inline-block;width:28px;height:28px;line-height:28px;background-color:#ffffff;color:#f54900;text-align:center;font-weight:700;font-size:16px;border-radius:6px;vertical-align:middle;font-family:Inter,Helvetica,Arial,sans-serif;">S</span>
+				<span style="display:inline-block;margin-left:8px;color:#ffffff;font-weight:600;font-size:16px;vertical-align:middle;font-family:Inter,Helvetica,Arial,sans-serif;">Stren</span>
+			</td>
+		</tr>
+	</table>
+}
+
+// EmailTitle is a large heading for the start of the email body.
+templ EmailTitle(text string) {
+	<h1 style="margin:0;padding:0 24px 8px 24px;font-size:24px;line-height:32px;font-weight:600;color:#27272a;font-family:Inter,Helvetica,Arial,sans-serif;">
+		{ text }
+	</h1>
+}
+
+// EmailParagraph is a body paragraph. The leading margin matches
+// the baseline of the surrounding EmailTitle so the visual rhythm
+// of the email matches the web app's typographic stack.
+templ EmailParagraph(text string) {
+	<p style="margin:0;padding:0 24px 16px 24px;font-size:15px;line-height:24px;color:#27272a;font-family:Inter,Helvetica,Arial,sans-serif;">
+		{ text }
+	</p>
+}
+
+// EmailMutedParagraph is the secondary, lighter-weight body
+// paragraph used for callouts and the footer's metadata. Same
+// shape as EmailParagraph with a different color.
+templ EmailMutedParagraph(text string) {
+	<p style="margin:0;padding:0 24px 16px 24px;font-size:13px;line-height:20px;color:#71717a;font-family:Inter,Helvetica,Arial,sans-serif;">
+		{ text }
+	</p>
+}
+
+// EmailButton renders a single call-to-action. Outlook's Word
+// engine ignores border-radius, so the button has a square
+// fallback by default. The fallback is acceptable for the
+// primary use case (a single password-reset CTA); a VML-shaped
+// pill is overkill.
+//
+// The link wraps a <table> nested in a <td> so the button
+// collapses to its content width in narrow clients and centers
+// reliably in Outlook.
+templ EmailButton(href, label string) {
+	<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 24px 24px 24px;">
+		<tr>
+			<td align="center" bgcolor="#f54900" style="border-radius:6px;background-color:#f54900;">
+				<a href={ templ.SafeURL(href) } target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 24px;font-size:15px;line-height:20px;font-weight:600;color:#ffffff;text-decoration:none;background-color:#f54900;border-radius:6px;font-family:Inter,Helvetica,Arial,sans-serif;mso-padding-alt:0;">
+					{ label }
+				</a>
+			</td>
+		</tr>
+	</table>
+}
+
+// EmailDivider is a 1px hairline that visually separates the body
+// from the footer. A border-top on a td is the most reliable
+// cross-client way to draw a horizontal line in email.
+templ EmailDivider() {
+	<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+		<tr>
+			<td style="padding:0 24px;">
+				<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #e4e4e7;">
+					<tr>
+						<td style="font-size:0;line-height:0;">&nbsp;</td>
+					</tr>
+				</table>
+			</td>
+		</tr>
+	</table>
+}
+
+// EmailFooter is the closing strip: app name, year, and a link
+// to the app. The baseURL is threaded through so the link
+// points at the deployment that sent the email (e.g. staging
+// vs production). No unsubscribe link yet — the app does not
+// send marketing email, only transactional, and RFC 8058
+// one-click unsubscribe is not required for transactional mail.
+templ EmailFooter(year int, baseURL string) {
+	<div style="padding:16px 24px 24px 24px;text-align:center;">
+		<p style="margin:0;padding:0;font-size:12px;line-height:18px;color:#71717a;font-family:Inter,Helvetica,Arial,sans-serif;">
+			© { year } Stren
+		</p>
+		<p style="margin:8px 0 0 0;padding:0;font-size:12px;line-height:18px;color:#71717a;font-family:Inter,Helvetica,Arial,sans-serif;">
+			<a href={ templ.SafeURL(baseURL) } target="_blank" rel="noopener noreferrer" style="color:#71717a;text-decoration:underline;">{ baseURL }</a>
+		</p>
+	</div>
+}

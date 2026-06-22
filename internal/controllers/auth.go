@@ -4,7 +4,9 @@
 package controllers
 
 import (
+	"context"
 	"errors"
+	"log"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -12,17 +14,33 @@ import (
 	"stren/internal/utils"
 )
 
-// AuthController handles user authentication business logic.
-type AuthController struct {
-	userRepo   models.UserRepo
-	jwtService *utils.JWTService
+// WelcomeSender is the narrow contract AuthController depends on
+// for the fire-and-forget welcome email sent right after a user
+// registers. Defining it as an interface (rather than depending
+// on *email.Service directly) lets the controller be unit-tested
+// with a mock — see auth_test.go's mockWelcomeSender.
+type WelcomeSender interface {
+	SendWelcome(ctx context.Context, user *models.User) error
 }
 
-// NewAuthController creates a new AuthController instance.
-func NewAuthController(userRepo models.UserRepo, jwtService *utils.JWTService) *AuthController {
+// AuthController handles user authentication business logic.
+type AuthController struct {
+	userRepo      models.UserRepo
+	jwtService    *utils.JWTService
+	welcomeSender WelcomeSender
+}
+
+// NewAuthController creates a new AuthController instance. The
+// welcomeSender is the email service used to send the
+// "welcome to Stren" message after a successful Register. The
+// controller is designed to be tolerant of a nil welcomeSender
+// (so existing tests that pre-date the email feature keep
+// working) — Register skips the send when the sender is nil.
+func NewAuthController(userRepo models.UserRepo, jwtService *utils.JWTService, welcomeSender WelcomeSender) *AuthController {
 	return &AuthController{
-		userRepo:   userRepo,
-		jwtService: jwtService,
+		userRepo:      userRepo,
+		jwtService:    jwtService,
+		welcomeSender: welcomeSender,
 	}
 }
 
@@ -89,6 +107,28 @@ func (ac *AuthController) Register(name, email, password string) (*models.User, 
 	token, err := ac.jwtService.GenerateToken(user.ID, user.Email, user.Name, user.IsAdmin)
 	if err != nil {
 		return nil, "", errors.New("failed to create session")
+	}
+
+	// Fire-and-forget welcome email. A failure must NOT fail
+	// the registration: the user has an account, a session,
+	// and is already authenticated. The goroutine has a
+	// recover so a panic in the email path (e.g. nil user
+	// dereference after a future refactor) does not crash
+	// the process. The context is a fresh background one
+	// because the request context will be cancelled the
+	// moment the HTTP response is written, well before the
+	// SMTP conversation completes.
+	if ac.welcomeSender != nil {
+		go func(u *models.User) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("auth: welcome email panicked: %v", r)
+				}
+			}()
+			if err := ac.welcomeSender.SendWelcome(context.Background(), u); err != nil {
+				log.Printf("auth: welcome email failed for %s: %v", u.Email, err)
+			}
+		}(user)
 	}
 
 	return user, token, nil

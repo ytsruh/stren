@@ -42,10 +42,16 @@ func AuthMiddleware(jwtService *utils.JWTService) echo.MiddlewareFunc {
 }
 
 // isPublicRoute returns true for routes that don't require authentication.
+// /forgot and /reset are public so a user who has been logged out (or
+// never had an account) can still request a reset link and follow it.
+// The /reset POST handler additionally checks the token before
+// mutating anything, so the public accessibility is not a security hole.
 func isPublicRoute(path string) bool {
 	public := []string{
 		"/login",
 		"/register",
+		"/forgot",
+		"/reset",
 		"/css/",
 		"/icons/",
 		"/manifest.json",

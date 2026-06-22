@@ -12,6 +12,7 @@ import (
 
 	"stren/internal/controllers"
 	"stren/internal/db"
+	"stren/internal/email"
 	"stren/internal/export"
 	"stren/internal/models"
 	"stren/internal/push"
@@ -45,6 +46,7 @@ func main() {
 	adminUserRepo := models.NewUserAdminRepository(database)
 	weightRepo := models.NewWeightRepository(database)
 	pushRepo := models.NewPushSubscriptionRepository(database)
+	authTokenRepo := models.NewAuthTokenRepository(database)
 
 	// Initialize auth service
 	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
@@ -68,8 +70,27 @@ func main() {
 	pushClient := push.NewClient(keys, push.ClientConfig{})
 	pushService := push.NewService(pushClient, push.NewStoreAdapter(pushRepo), push.ServiceConfig{})
 
+	// Wire the email service. The SMTP client targets Cloudflare's
+	// implicit-TLS endpoint (smtp.mx.cloudflare.net:465); the
+	// default From address, port, and timeout are set by
+	// email.NewClient from the APIToken alone. Email is required at
+	// startup (the env var is in the required list), so a failure
+	// to construct the client is fatal. The PUBLIC_URL env var is
+	// the base URL threaded into every link the email contains
+	// (dashboard button, password-reset URL, footer link).
+	emailClient, err := email.NewClient(email.ClientConfig{
+		APIToken: cfg.CLOUDFLARE_EMAIL_TOKEN,
+	})
+	if err != nil {
+		log.Fatalf("Failed to initialize email client: %v", err)
+	}
+	emailService, err := email.NewService(emailClient, cfg.PUBLIC_URL)
+	if err != nil {
+		log.Fatalf("Failed to initialize email service: %v", err)
+	}
+
 	// Initialize controllers
-	authCtrl := controllers.NewAuthController(userRepo, jwtService)
+	authCtrl := controllers.NewAuthController(userRepo, jwtService, emailService)
 	entryCtrl := controllers.NewEntryController(repo)
 	adminCtrl := controllers.NewAdminController(repo)
 	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
@@ -78,11 +99,13 @@ func main() {
 	weightCtrl := controllers.NewWeightController(weightRepo, r2PhotoGetter{})
 	pushCtrl := controllers.NewPushController(pushRepo)
 	adminNotificationsCtrl := controllers.NewAdminNotificationsController(pushService)
+	authRecoveryCtrl := controllers.NewAuthRecoveryController(userRepo, authTokenRepo, emailService)
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
 	h := routes.NewHandler(
 		authCtrl,
+		authRecoveryCtrl,
 		entryCtrl,
 		adminCtrl,
 		adminUserCtrl,

@@ -10,8 +10,23 @@ import (
 )
 
 type Querier interface {
+	// Atomically claim a token: marks used_at and returns the row only
+	// when the token exists for the given purpose, has not been used,
+	// and has not expired. The single-statement UPDATE...RETURNING is
+	// the concurrency primitive that prevents double-use across tabs,
+	// devices, or racing requests.
+	//
+	// `expires_at` comparison uses the literal `datetime('now')` rather
+	// than a parameter so the database clock (not the application clock)
+	// decides what "expired" means. SQLite's datetime('now') returns
+	// UTC, matching the value written by the application.
+	ConsumeAuthToken(ctx context.Context, arg ConsumeAuthTokenParams) (AuthToken, error)
 	CountPushSubscriptionsByUser(ctx context.Context, userID string) (int64, error)
 	Create(ctx context.Context, arg CreateParams) (string, error)
+	// Insert a new auth token row. The caller is responsible for hashing
+	// the raw token with sha256 before storing. The raw token only ever
+	// lives in the email link; the database never sees it.
+	CreateAuthToken(ctx context.Context, arg CreateAuthTokenParams) (AuthToken, error)
 	CreateEntry(ctx context.Context, arg CreateEntryParams) (string, error)
 	CreateFeedback(ctx context.Context, arg CreateFeedbackParams) (Feedback, error)
 	CreatePushSubscription(ctx context.Context, arg CreatePushSubscriptionParams) (PushSubscription, error)
@@ -49,6 +64,11 @@ type Querier interface {
 	UpdatePushSubscription(ctx context.Context, arg UpdatePushSubscriptionParams) (PushSubscription, error)
 	UpdateStatus(ctx context.Context, arg UpdateStatusParams) (Feedback, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) error
+	// Replace a user's password hash. Used by the password-reset flow
+	// after a reset token has been successfully consumed. Separate from
+	// UpdateUser so the profile-editing form cannot be tricked into
+	// clearing the password by omitting fields.
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateWeightEntry(ctx context.Context, arg UpdateWeightEntryParams) error
 }
 

@@ -22,6 +22,30 @@ func NewUserRepository(dbConn *db.DB) *UserRepository {
 	}
 }
 
+// UpdateUserPassword replaces the bcrypt hash for a user. Used by the
+// password-reset flow after a reset token has been successfully
+// consumed. Kept separate from UpdateUser so the profile-editing
+// form cannot be tricked into clearing the password by omitting
+// fields. Returns the same wrapped error shape as the other repo
+// methods so the controller can compare with errors.Is if needed.
+func (r *UserRepository) UpdateUserPassword(userID, passwordHash string) error {
+	if userID == "" {
+		return fmt.Errorf("failed to update password: user id is empty")
+	}
+	if passwordHash == "" {
+		return fmt.Errorf("failed to update password: hash is empty")
+	}
+	ctx := context.Background()
+	if err := r.queries.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{
+		PasswordHash: passwordHash,
+		UpdatedAt:    sql.NullTime{Time: time.Now(), Valid: true},
+		ID:           userID,
+	}); err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+	return nil
+}
+
 // CreateUser inserts a new user into the database.
 func (r *UserRepository) CreateUser(user *User) error {
 	ctx := context.Background()

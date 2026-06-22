@@ -5,6 +5,7 @@
 - Every entry created for a workout is a single set. A set has a number of repititions (reps) & a weight 
 - Push notifications are powered by the protocol `webpush-go` (one Go dep, isolated in `internal/push`); the third-party is the push service (FCM / Mozilla autopush / Apple), not a Go library. The VAPID keypair lives in `/data` alongside the SQLite file so subscriptions survive restarts.
 - The weight data export is a streaming zip download produced at `GET /weight/export`. The zip is built by `internal/export` (zip + CSV via Go stdlib, no new deps) and pulled from R2 via `utils.GetObject`. Photos that can't be fetched are skipped, with their keys listed in the zip's `manifest.json` `missing_photos` array. The route uses the global confirm dialog defined in `layout.templ`.
+- Transactional email is sent through Cloudflare Email Sending's authenticated SMTP endpoint (`smtp.mx.cloudflare.net:465`, implicit TLS). The whole feature is in `internal/email` (`client.go` does the hand-rolled `crypto/tls` + `net/smtp`, `service.go` composes messages) and the email-specific Templ components live in `internal/email/templates/`. The sender address (`stren@ytsruh.com`) and SMTP host are hard-coded in the package; the only required env vars are `CLOUDFLARE_EMAIL_TOKEN` (SMTP auth) and `PUBLIC_URL` (base URL threaded into every link the email contains). **Do not add more env vars for email config without discussing first.**
 
 ## Code & Development Instructions
 - Use Makefile scripts where possible
@@ -36,3 +37,5 @@ Create a `.env` file based on `.env.example` before running the application.
 - `DB_PATH` - Local database file path (e.g., `/data/strength_tracker.db`)
 - `TURSO_DATABASE_URL` - Turso Cloud database URL (`libsql://...`)
 - `TURSO_AUTH_TOKEN` - Turso Cloud authentication token
+- `CLOUDFLARE_EMAIL_TOKEN` - Cloudflare API token used as the SMTP password for `smtp.mx.cloudflare.net:465`. The token must have the **Email Sending: Edit** permission. Used by `internal/email` for the welcome email on register and the password-reset email.
+- `PUBLIC_URL` - Absolute origin the app is served from (e.g. `https://stren.ytsruh.com`). Threaded into every link in transactional emails — the dashboard link in the welcome email, the password-reset link, and the footer's "view on the web" link. Must be a valid http/https URL with no trailing slash; the value is validated at startup by `email.NewService`.

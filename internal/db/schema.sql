@@ -72,3 +72,15 @@ CREATE TABLE push_subscriptions (
     last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_push_subs_user ON push_subscriptions(user_id);
+
+CREATE TABLE auth_tokens (
+    id         TEXT     PRIMARY KEY,
+    user_id    TEXT     NOT NULL REFERENCES users(id),
+    purpose    TEXT     NOT NULL,
+    token_hash TEXT     NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at    DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_auth_tokens_lookup ON auth_tokens(token_hash, purpose);
+CREATE INDEX idx_auth_tokens_user ON auth_tokens(user_id);

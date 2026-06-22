@@ -25,3 +25,13 @@ SET name = ?,
     weight_unit = ?,
     updated_at = ?
 WHERE id = ?;
+
+-- name: UpdateUserPassword :exec
+-- Replace a user's password hash. Used by the password-reset flow
+-- after a reset token has been successfully consumed. Separate from
+-- UpdateUser so the profile-editing form cannot be tricked into
+-- clearing the password by omitting fields.
+UPDATE users
+SET password_hash = ?,
+    updated_at = ?
+WHERE id = ?;

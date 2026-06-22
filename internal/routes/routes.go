@@ -25,6 +25,7 @@ import (
 // Handler holds dependencies for HTTP route handlers.
 type Handler struct {
 	authCtrl               *controllers.AuthController
+	authRecoveryCtrl       *controllers.AuthRecoveryController
 	entryCtrl              *controllers.EntryController
 	adminCtrl              *controllers.AdminController
 	adminUserCtrl          *controllers.AdminUserController
@@ -42,9 +43,10 @@ type Handler struct {
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controllers.AuthRecoveryController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
 	return &Handler{
 		authCtrl:               authCtrl,
+		authRecoveryCtrl:       authRecoveryCtrl,
 		entryCtrl:              entryCtrl,
 		adminCtrl:              adminCtrl,
 		adminUserCtrl:          adminUserCtrl,
@@ -79,6 +81,12 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/register", h.RegisterForm)
 	e.POST("/register", h.Register)
 	e.POST("/logout", h.Logout)
+
+	// Password recovery
+	e.GET("/forgot", h.ForgotPasswordForm)
+	e.POST("/forgot", h.RequestPasswordReset)
+	e.GET("/reset", h.ResetPasswordForm)
+	e.POST("/reset", h.ResetPassword)
 
 	// Routes
 	e.GET("/", h.Dashboard)

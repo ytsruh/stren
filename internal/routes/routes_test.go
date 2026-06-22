@@ -411,6 +411,37 @@ func (m *mockUserRepository) UpdateUser(user *models.User) error {
 	return errors.New("user not found")
 }
 
+func (m *mockUserRepository) UpdateUserPassword(userID, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if passwordHash == "" {
+		return errors.New("password hash is empty")
+	}
+	for i, u := range m.users {
+		if u.ID == userID {
+			m.users[i].PasswordHash = passwordHash
+			return nil
+		}
+	}
+	return errors.New("user not found")
+}
+
+// mockAuthTokenRepo is a no-op AuthTokenRepo used by the
+// route tests that don't exercise the password-reset flow.
+// The recovery controller's tests in
+// auth_recovery_test.go use a richer mock.
+type mockAuthTokenRepo struct{}
+
+func newMockAuthTokenRepo() *mockAuthTokenRepo { return &mockAuthTokenRepo{} }
+
+func (m *mockAuthTokenRepo) CreatePasswordResetToken(ctx context.Context, userID, raw string, ttl time.Duration) (string, error) {
+	return "", nil
+}
+
+func (m *mockAuthTokenRepo) ConsumePasswordResetToken(ctx context.Context, raw string) (string, error) {
+	return "", models.ErrAuthTokenInvalid
+}
+
 type mockAdminUserRepository struct {
 	mu    sync.Mutex
 	users []models.User
@@ -694,7 +725,8 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 		{ID: "ex-1", Name: "Squat"},
 		{ID: "ex-2", Name: "Bench Press"},
 	}
-	authCtrl := controllers.NewAuthController(mockUser, jwtService)
+	authCtrl := controllers.NewAuthController(mockUser, jwtService, nil)
+	authRecoveryCtrl := controllers.NewAuthRecoveryController(mockUser, newMockAuthTokenRepo(), nil)
 	entryCtrl := controllers.NewEntryController(mock)
 	adminCtrl := controllers.NewAdminController(mock)
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
@@ -705,12 +737,17 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil)
 	validator := utils.NewValidator()
 	h := NewHandler(
-		authCtrl, entryCtrl, adminCtrl, adminUserCtrl,
+		authCtrl, authRecoveryCtrl, entryCtrl, adminCtrl, adminUserCtrl,
 		feedbackCtrl, timersCtrl, weightCtrl,
 		pushCtrl, adminNotificationsCtrl,
 		mockPush, "", false,
 		mockUser, jwtService, validator,
 	)
+	// Register routes so the full HTTP path (including
+	// middleware) is exercised. Tests that need to call
+	// handler methods directly can still do so — the
+	// middleware runs only through e.ServeHTTP.
+	h.RegisterRoutes(e)
 	return h, mock, mockUser, e
 }
 

@@ -74,6 +74,10 @@ type UserRepo interface {
 	GetUserByEmail(email string) (*User, error)
 	GetUserByID(id string) (*User, error)
 	UpdateUser(user *User) error
+	// UpdateUserPassword replaces a user's password hash. Used by
+	// the password-reset flow. Kept separate from UpdateUser so a
+	// profile form cannot be tricked into clearing the password.
+	UpdateUserPassword(userID, passwordHash string) error
 }
 
 // AdminUserRepo defines the interface for admin user operations.

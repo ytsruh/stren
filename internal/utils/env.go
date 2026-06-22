@@ -15,16 +15,28 @@ import (
 // Each field must have an `env` tag matching the environment variable name.
 // These values are loaded from the environment or a local .env file on startup.
 type EnvVar struct {
-	PORT               string `env:"PORT"`
-	DB_PATH            string `env:"DB_PATH"`
-	TURSO_DATABASE_URL string `env:"TURSO_DATABASE_URL"`
-	TURSO_AUTH_TOKEN   string `env:"TURSO_AUTH_TOKEN"`
-	JWT_SECRET         string `env:"JWT_SECRET"`
-	STORAGE_ENDPOINT   string `env:"STORAGE_ENDPOINT"`
-	STORAGE_ACCESS_KEY string `env:"STORAGE_ACCESS_KEY"`
-	STORAGE_SECRET_KEY string `env:"STORAGE_SECRET_KEY"`
-	STORAGE_BUCKET     string `env:"STORAGE_BUCKET"`
-	STORAGE_PUBLIC_URL string `env:"STORAGE_PUBLIC_URL"`
+	PORT                  string `env:"PORT"`
+	DB_PATH               string `env:"DB_PATH"`
+	TURSO_DATABASE_URL    string `env:"TURSO_DATABASE_URL"`
+	TURSO_AUTH_TOKEN      string `env:"TURSO_AUTH_TOKEN"`
+	JWT_SECRET            string `env:"JWT_SECRET"`
+	STORAGE_ENDPOINT      string `env:"STORAGE_ENDPOINT"`
+	STORAGE_ACCESS_KEY    string `env:"STORAGE_ACCESS_KEY"`
+	STORAGE_SECRET_KEY    string `env:"STORAGE_SECRET_KEY"`
+	STORAGE_BUCKET        string `env:"STORAGE_BUCKET"`
+	STORAGE_PUBLIC_URL    string `env:"STORAGE_PUBLIC_URL"`
+	// CLOUDFLARE_EMAIL_TOKEN authenticates outbound SMTP to
+	// Cloudflare Email Sending (smtp.mx.cloudflare.net:465).
+	// Required: startup hard-fails if empty. The token must
+	// have the "Email Sending: Edit" permission.
+	CLOUDFLARE_EMAIL_TOKEN string `env:"CLOUDFLARE_EMAIL_TOKEN"`
+	// PUBLIC_URL is the absolute origin the app is served
+	// from, e.g. "https://stren.ytsruh.com". Used by the
+	// email subsystem to build links in transactional
+	// emails (password-reset URL, welcome dashboard link).
+	// Required: startup hard-fails if empty. Must be a
+	// valid http or https URL with no trailing slash.
+	PUBLIC_URL string `env:"PUBLIC_URL"`
 }
 
 var (
@@ -42,16 +54,18 @@ func LoadAndValidateEnv() (*EnvVar, error) {
 	_ = godotenv.Load()
 
 	env := EnvVar{
-		PORT:               os.Getenv("PORT"),
-		DB_PATH:            os.Getenv("DB_PATH"),
-		TURSO_DATABASE_URL: os.Getenv("TURSO_DATABASE_URL"),
-		TURSO_AUTH_TOKEN:   os.Getenv("TURSO_AUTH_TOKEN"),
-		JWT_SECRET:         os.Getenv("JWT_SECRET"),
-		STORAGE_ENDPOINT:   os.Getenv("STORAGE_ENDPOINT"),
-		STORAGE_ACCESS_KEY: os.Getenv("STORAGE_ACCESS_KEY"),
-		STORAGE_SECRET_KEY: os.Getenv("STORAGE_SECRET_KEY"),
-		STORAGE_BUCKET:     os.Getenv("STORAGE_BUCKET"),
-		STORAGE_PUBLIC_URL: os.Getenv("STORAGE_PUBLIC_URL"),
+		PORT:                   os.Getenv("PORT"),
+		DB_PATH:                os.Getenv("DB_PATH"),
+		TURSO_DATABASE_URL:     os.Getenv("TURSO_DATABASE_URL"),
+		TURSO_AUTH_TOKEN:       os.Getenv("TURSO_AUTH_TOKEN"),
+		JWT_SECRET:             os.Getenv("JWT_SECRET"),
+		STORAGE_ENDPOINT:       os.Getenv("STORAGE_ENDPOINT"),
+		STORAGE_ACCESS_KEY:     os.Getenv("STORAGE_ACCESS_KEY"),
+		STORAGE_SECRET_KEY:     os.Getenv("STORAGE_SECRET_KEY"),
+		STORAGE_BUCKET:         os.Getenv("STORAGE_BUCKET"),
+		STORAGE_PUBLIC_URL:     os.Getenv("STORAGE_PUBLIC_URL"),
+		CLOUDFLARE_EMAIL_TOKEN: os.Getenv("CLOUDFLARE_EMAIL_TOKEN"),
+		PUBLIC_URL:             os.Getenv("PUBLIC_URL"),
 	}
 
 	// Validate that all required environment variables are set

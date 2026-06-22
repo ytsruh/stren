@@ -9,6 +9,16 @@ import (
 	"time"
 )
 
+type AuthToken struct {
+	ID        string
+	UserID    string
+	Purpose   string
+	TokenHash string
+	ExpiresAt time.Time
+	UsedAt    sql.NullTime
+	CreatedAt time.Time
+}
+
 type Exercise struct {
 	ID          string
 	Name        string

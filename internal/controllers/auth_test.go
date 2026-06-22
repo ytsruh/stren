@@ -1,15 +1,22 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"stren/internal/models"
 	"stren/internal/utils"
 )
+
+// timeAfter is a one-line helper to keep the test above readable.
+// 2_000_000_000 ns == 2s, which is generous for an in-process
+// goroutine handoff that just appends to a slice.
+func timeAfter(d time.Duration) <-chan time.Time { return time.After(d) }
 
 type mockUserRepository struct {
 	mu    sync.Mutex
@@ -69,11 +76,60 @@ func (m *mockUserRepository) UpdateUser(user *models.User) error {
 	return errors.New("user not found")
 }
 
+func (m *mockUserRepository) UpdateUserPassword(userID, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if passwordHash == "" {
+		return errors.New("password hash is empty")
+	}
+	for i, u := range m.users {
+		if u.ID == userID {
+			m.users[i].PasswordHash = passwordHash
+			return nil
+		}
+	}
+	return errors.New("user not found")
+}
+
 func setupAuthController(t *testing.T) (*AuthController, *mockUserRepository) {
 	t.Helper()
 	mockUser := newMockUserRepository()
 	jwtService := utils.NewJWTService("test-secret")
-	return NewAuthController(mockUser, jwtService), mockUser
+	return NewAuthController(mockUser, jwtService, nil), mockUser
+}
+
+// mockWelcomeSender records the user the email would be sent to.
+// Used by the new "welcome is fired on register" test below.
+type mockWelcomeSender struct {
+	mu      sync.Mutex
+	users   []*models.User
+	err     error // returned by SendWelcome
+	gotCall chan struct{}
+}
+
+func newMockWelcomeSender() *mockWelcomeSender {
+	return &mockWelcomeSender{gotCall: make(chan struct{}, 1)}
+}
+
+func (m *mockWelcomeSender) SendWelcome(ctx context.Context, user *models.User) error {
+	m.mu.Lock()
+	m.users = append(m.users, user)
+	m.mu.Unlock()
+	select {
+	case m.gotCall <- struct{}{}:
+	default:
+	}
+	return m.err
+}
+
+func (m *mockWelcomeSender) lastUser() *models.User {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.users) == 0 {
+		return nil
+	}
+	u := m.users[len(m.users)-1]
+	return u
 }
 
 func TestAuthController_Login_Success(t *testing.T) {
@@ -243,5 +299,65 @@ func TestAuthController_RegisterAndLogin(t *testing.T) {
 	}
 	if loggedInUser.Email != "alice@example.com" {
 		t.Fatalf("expected email alice@example.com, got %q", loggedInUser.Email)
+	}
+}
+
+func TestAuthController_Register_FiresWelcome(t *testing.T) {
+	// A successful Register must hand the user off to the
+	// welcomeSender. The send happens in a goroutine, so the
+	// test waits on the gotCall channel up to a small
+	// timeout — a missing handoff would mean the goroutine
+	// never ran, not that it ran slowly.
+	mockUser := newMockUserRepository()
+	sender := newMockWelcomeSender()
+	ac := NewAuthController(mockUser, utils.NewJWTService("test-secret"), sender)
+
+	_, _, err := ac.Register("Alice", "alice@example.com", "secret123")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	select {
+	case <-sender.gotCall:
+	case <-timeAfter(2_000_000_000): // 2 seconds in ns
+		t.Fatal("welcome email was not sent within 2s")
+	}
+
+	got := sender.lastUser()
+	if got == nil {
+		t.Fatal("sender received no user")
+	}
+	if got.Email != "alice@example.com" {
+		t.Errorf("welcome user email = %q, want alice@example.com", got.Email)
+	}
+}
+
+func TestAuthController_Register_EmailFailureDoesNotFailRegister(t *testing.T) {
+	// A sender that errors must not propagate the error
+	// back to the caller. The user is created and
+	// authenticated regardless; the email is best-effort.
+	mockUser := newMockUserRepository()
+	sender := &mockWelcomeSender{err: errors.New("smtp down"), gotCall: make(chan struct{}, 1)}
+	ac := NewAuthController(mockUser, utils.NewJWTService("test-secret"), sender)
+
+	user, token, err := ac.Register("Alice", "alice@example.com", "secret123")
+	if err != nil {
+		t.Fatalf("Register should not fail on email error, got %v", err)
+	}
+	if user == nil || token == "" {
+		t.Fatal("expected user and token despite email error")
+	}
+}
+
+func TestAuthController_Register_NilSenderSkipsWelcome(t *testing.T) {
+	// A nil sender must not panic. Register with a nil
+	// welcomeSender is supported so the existing tests that
+	// pre-date the email feature still work.
+	mockUser := newMockUserRepository()
+	ac := NewAuthController(mockUser, utils.NewJWTService("test-secret"), nil)
+
+	_, _, err := ac.Register("Alice", "alice@example.com", "secret123")
+	if err != nil {
+		t.Fatalf("Register with nil sender: %v", err)
 	}
 }
