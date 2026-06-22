@@ -17,7 +17,8 @@ templ LoginPage(errorMsg string) {
 					hx-post="/login"
 					hx-target="#toaster"
 					hx-swap="beforeend"
-					class="form grid gap-4">
+					class="form grid gap-4"
+				>
 					<fieldset class="grid gap-3">
 						<div class="grid gap-2">
 							<label for="login-email">Email</label>
@@ -26,6 +27,7 @@ templ LoginPage(errorMsg string) {
 						<div class="grid gap-2">
 							<label for="login-password">Password</label>
 							<input class="input" type="password" id="login-password" name="password" placeholder="Password" required/>
+							<a href="/forgot" class="text-xs hover:underline">Forgot password?</a>
 						</div>
 					</fieldset>
 					<button type="submit" hx-indicator="#login-spinner" class="btn relative inline-flex">
@@ -38,7 +40,6 @@ templ LoginPage(errorMsg string) {
 			}
 			<footer class="text-center text-sm">
 				<p>Don't have an account? <a href="/register" class="underline-offset-4 hover:underline">Register</a></p>
-				<p class="mt-1"><a href="/forgot" class="underline-offset-4 hover:underline">Forgot password?</a></p>
 			</footer>
 		}
 	}
@@ -70,7 +71,8 @@ templ ForgotPasswordPage(errorMsg string, submitted bool) {
 						hx-post="/forgot"
 						hx-target="#toaster"
 						hx-swap="beforeend"
-						class="form grid gap-4">
+						class="form grid gap-4"
+					>
 						<fieldset class="grid gap-3">
 							<div class="grid gap-2">
 								<label for="forgot-email">Email</label>
@@ -86,7 +88,7 @@ templ ForgotPasswordPage(errorMsg string, submitted bool) {
 					</form>
 				}
 			}
-			<footer class="text-center text-sm">
+			<footer class="text-center text-sm mx-auto">
 				<p><a href="/login" class="underline-offset-4 hover:underline">Back to login</a></p>
 			</footer>
 		}
@@ -112,7 +114,8 @@ templ ResetPasswordPage(token string, errorMsg string) {
 					hx-post="/reset"
 					hx-target="#toaster"
 					hx-swap="beforeend"
-					class="form grid gap-4">
+					class="form grid gap-4"
+				>
 					<input type="hidden" name="token" value={ token }/>
 					<fieldset class="grid gap-3">
 						<div class="grid gap-2">
@@ -132,7 +135,7 @@ templ ResetPasswordPage(token string, errorMsg string) {
 					</button>
 				</form>
 			}
-			<footer class="text-center text-sm">
+			<footer class="text-center text-sm mx-auto">
 				<p><a href="/login" class="underline-offset-4 hover:underline">Back to login</a></p>
 			</footer>
 		}
@@ -158,7 +161,8 @@ templ RegisterPage(errorMsg string) {
 					hx-post="/register"
 					hx-target="#toaster"
 					hx-swap="beforeend"
-					class="form grid gap-4">
+					class="form grid gap-4"
+				>
 					<fieldset class="grid gap-3">
 						<div class="grid gap-2">
 							<label for="register-name">Name</label>
