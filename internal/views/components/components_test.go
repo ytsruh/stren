@@ -8,7 +8,9 @@ import (
 	"testing"
 )
 
-func renderToString(t *testing.T, component interface{ Render(context.Context, io.Writer) error }) string {
+func renderToString(t *testing.T, component interface {
+	Render(context.Context, io.Writer) error
+}) string {
 	t.Helper()
 	var buf bytes.Buffer
 	if err := component.Render(context.Background(), &buf); err != nil {

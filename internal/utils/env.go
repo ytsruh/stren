@@ -15,16 +15,16 @@ import (
 // Each field must have an `env` tag matching the environment variable name.
 // These values are loaded from the environment or a local .env file on startup.
 type EnvVar struct {
-	PORT                  string `env:"PORT"`
-	DB_PATH               string `env:"DB_PATH"`
-	TURSO_DATABASE_URL    string `env:"TURSO_DATABASE_URL"`
-	TURSO_AUTH_TOKEN      string `env:"TURSO_AUTH_TOKEN"`
-	JWT_SECRET            string `env:"JWT_SECRET"`
-	STORAGE_ENDPOINT      string `env:"STORAGE_ENDPOINT"`
-	STORAGE_ACCESS_KEY    string `env:"STORAGE_ACCESS_KEY"`
-	STORAGE_SECRET_KEY    string `env:"STORAGE_SECRET_KEY"`
-	STORAGE_BUCKET        string `env:"STORAGE_BUCKET"`
-	STORAGE_PUBLIC_URL    string `env:"STORAGE_PUBLIC_URL"`
+	PORT               string `env:"PORT"`
+	DB_PATH            string `env:"DB_PATH"`
+	TURSO_DATABASE_URL string `env:"TURSO_DATABASE_URL"`
+	TURSO_AUTH_TOKEN   string `env:"TURSO_AUTH_TOKEN"`
+	JWT_SECRET         string `env:"JWT_SECRET"`
+	STORAGE_ENDPOINT   string `env:"STORAGE_ENDPOINT"`
+	STORAGE_ACCESS_KEY string `env:"STORAGE_ACCESS_KEY"`
+	STORAGE_SECRET_KEY string `env:"STORAGE_SECRET_KEY"`
+	STORAGE_BUCKET     string `env:"STORAGE_BUCKET"`
+	STORAGE_PUBLIC_URL string `env:"STORAGE_PUBLIC_URL"`
 	// CLOUDFLARE_EMAIL_TOKEN authenticates outbound SMTP to
 	// Cloudflare Email Sending (smtp.mx.cloudflare.net:465).
 	// Required: startup hard-fails if empty. The token must

@@ -84,7 +84,7 @@ func (m *mockRepository) CreateNoTx(params models.CreateExerciseParams) (string,
 		}
 	}
 	id := "ex-" + params.Name
-	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: params.Name, Description: params.Description, VideoURL: params.VideoURL, ImgURL: params.ImgURL, Type: params.Type})
+	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: params.Name, Description: params.Description, VideoURL: params.VideoURL, ImgURL: params.ImgURL, ImgURLOriginal: params.ImgURLOriginal, Type: params.Type})
 	return id, nil
 }
 
@@ -145,6 +145,7 @@ func (m *mockRepository) Update(id string, params models.UpdateExerciseParams) (
 			m.exercises[i].Description = params.Description
 			m.exercises[i].VideoURL = params.VideoURL
 			m.exercises[i].ImgURL = params.ImgURL
+			m.exercises[i].ImgURLOriginal = params.ImgURLOriginal
 			m.exercises[i].Type = params.Type
 			cp := m.exercises[i]
 			return &cp, nil
@@ -736,12 +737,17 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	pushCtrl := controllers.NewPushController(mockPush)
 	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil)
 	validator := utils.NewValidator()
+	// The default test wiring uses a fake image processor and
+	// uploader so the upload route can be exercised without
+	// pulling in the real imaging package or a live S3 client.
+	proc, upl := newFakeImagePipeline()
 	h := NewHandler(
 		authCtrl, authRecoveryCtrl, entryCtrl, adminCtrl, adminUserCtrl,
 		feedbackCtrl, timersCtrl, weightCtrl,
 		pushCtrl, adminNotificationsCtrl,
 		mockPush, "", false,
 		mockUser, jwtService, validator,
+		proc, upl, DefaultExerciseImageConfig,
 	)
 	// Register routes so the full HTTP path (including
 	// middleware) is exercised. Tests that need to call

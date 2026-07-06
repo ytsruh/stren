@@ -40,10 +40,18 @@ type Handler struct {
 	userRepo               models.UserRepo
 	jwtService             *utils.JWTService
 	validator              utils.Validator
+	// imageProcessor and imageUploader are the dependencies for
+	// the admin exercise image upload route. Both are interfaces
+	// (defined in admin_images.go) so tests can substitute fakes
+	// without touching the real S3 client or imaging package.
+	imageProcessor exerciseImageProcessor
+	imageUploader  exerciseImageUploader
+	// imageConfig controls the two variants produced per upload.
+	imageConfig ExerciseImageConfig
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controllers.AuthRecoveryController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controllers.AuthRecoveryController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator, imageProcessor exerciseImageProcessor, imageUploader exerciseImageUploader, imageConfig ExerciseImageConfig) *Handler {
 	return &Handler{
 		authCtrl:               authCtrl,
 		authRecoveryCtrl:       authRecoveryCtrl,
@@ -61,6 +69,9 @@ func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controll
 		userRepo:               userRepo,
 		jwtService:             jwtService,
 		validator:              validator,
+		imageProcessor:         imageProcessor,
+		imageUploader:          imageUploader,
+		imageConfig:            imageConfig,
 	}
 }
 
@@ -151,6 +162,10 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	admin.POST("/exercises", h.AdminCreateExercise)
 	admin.GET("/exercises/:id/edit", h.AdminEditExerciseForm)
 	admin.POST("/exercises/:id", h.AdminUpdateExercise)
+	// Admin image upload (multipart, 10 MB cap applied inside the
+	// handler via http.MaxBytesReader so a hostile client can't
+	// exhaust memory before the multipart parser runs).
+	admin.POST("/exercises/image-upload", h.AdminExerciseImageUpload)
 	admin.GET("/feedback", h.AdminListFeedback)
 	admin.GET("/feedback/:id", h.AdminFeedbackDetail)
 	admin.POST("/feedback/:id/close", h.AdminCloseFeedback)

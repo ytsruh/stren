@@ -46,12 +46,13 @@ func (r *ExerciseRepository) GetByName(name string) (*Exercise, error) {
 		return nil, fmt.Errorf("failed to get exercise: %w", err)
 	}
 	return &Exercise{
-		ID:          row.ID,
-		Name:        row.Name,
-		Description: nullStringToString(row.Description),
-		VideoURL:    nullStringToString(row.VideoUrl),
-		ImgURL:      nullStringToString(row.ImgUrl),
-		Type:        ExerciseType(row.Type),
+		ID:             row.ID,
+		Name:           row.Name,
+		Description:    nullStringToString(row.Description),
+		VideoURL:       nullStringToString(row.VideoUrl),
+		ImgURL:         nullStringToString(row.ImgUrl),
+		ImgURLOriginal: nullStringToString(row.ImgUrlOriginal),
+		Type:           ExerciseType(row.Type),
 	}, nil
 }
 
@@ -66,12 +67,13 @@ func (r *ExerciseRepository) List() ([]Exercise, error) {
 	exercises := make([]Exercise, len(rows))
 	for i, row := range rows {
 		exercises[i] = Exercise{
-			ID:          row.ID,
-			Name:        row.Name,
-			Description: nullStringToString(row.Description),
-			VideoURL:    nullStringToString(row.VideoUrl),
-			ImgURL:      nullStringToString(row.ImgUrl),
-			Type:        ExerciseType(row.Type),
+			ID:             row.ID,
+			Name:           row.Name,
+			Description:    nullStringToString(row.Description),
+			VideoURL:       nullStringToString(row.VideoUrl),
+			ImgURL:         nullStringToString(row.ImgUrl),
+			ImgURLOriginal: nullStringToString(row.ImgUrlOriginal),
+			Type:           ExerciseType(row.Type),
 		}
 	}
 	return exercises, nil
@@ -88,12 +90,13 @@ func (r *ExerciseRepository) GetByID(id string) (*Exercise, error) {
 		return nil, fmt.Errorf("failed to get exercise: %w", err)
 	}
 	return &Exercise{
-		ID:          row.ID,
-		Name:        row.Name,
-		Description: nullStringToString(row.Description),
-		VideoURL:    nullStringToString(row.VideoUrl),
-		ImgURL:      nullStringToString(row.ImgUrl),
-		Type:        ExerciseType(row.Type),
+		ID:             row.ID,
+		Name:           row.Name,
+		Description:    nullStringToString(row.Description),
+		VideoURL:       nullStringToString(row.VideoUrl),
+		ImgURL:         nullStringToString(row.ImgUrl),
+		ImgURLOriginal: nullStringToString(row.ImgUrlOriginal),
+		Type:           ExerciseType(row.Type),
 	}, nil
 }
 
@@ -109,12 +112,13 @@ func (r *ExerciseRepository) GetExerciseByID(id string, userID string) (*Exercis
 		return nil, fmt.Errorf("failed to get exercise: %w", err)
 	}
 	return &Exercise{
-		ID:          row.ID,
-		Name:        row.Name,
-		Description: nullStringToString(row.Description),
-		VideoURL:    nullStringToString(row.VideoUrl),
-		ImgURL:      nullStringToString(row.ImgUrl),
-		Type:        ExerciseType(row.Type),
+		ID:             row.ID,
+		Name:           row.Name,
+		Description:    nullStringToString(row.Description),
+		VideoURL:       nullStringToString(row.VideoUrl),
+		ImgURL:         nullStringToString(row.ImgUrl),
+		ImgURLOriginal: nullStringToString(row.ImgUrlOriginal),
+		Type:           ExerciseType(row.Type),
 	}, nil
 }
 
@@ -123,12 +127,13 @@ func (r *ExerciseRepository) CreateNoTx(params CreateExerciseParams) (string, er
 	ctx := context.Background()
 	id := uuid.New().String()
 	return r.queries.Create(ctx, db.CreateParams{
-		ID:          id,
-		Name:        params.Name,
-		Description: stringToNullString(params.Description),
-		VideoUrl:    stringToNullString(params.VideoURL),
-		ImgUrl:      stringToNullString(params.ImgURL),
-		Type:        string(params.Type),
+		ID:             id,
+		Name:           params.Name,
+		Description:    stringToNullString(params.Description),
+		VideoUrl:       stringToNullString(params.VideoURL),
+		ImgUrl:         stringToNullString(params.ImgURL),
+		ImgUrlOriginal: stringToNullString(params.ImgURLOriginal),
+		Type:           string(params.Type),
 	})
 }
 
@@ -136,23 +141,25 @@ func (r *ExerciseRepository) CreateNoTx(params CreateExerciseParams) (string, er
 func (r *ExerciseRepository) Update(id string, params UpdateExerciseParams) (*Exercise, error) {
 	ctx := context.Background()
 	row, err := r.queries.Update(ctx, db.UpdateParams{
-		Name:        params.Name,
-		Description: stringToNullString(params.Description),
-		VideoUrl:    stringToNullString(params.VideoURL),
-		ImgUrl:      stringToNullString(params.ImgURL),
-		Type:        string(params.Type),
-		ID:          id,
+		Name:           params.Name,
+		Description:    stringToNullString(params.Description),
+		VideoUrl:       stringToNullString(params.VideoURL),
+		ImgUrl:         stringToNullString(params.ImgURL),
+		ImgUrlOriginal: stringToNullString(params.ImgURLOriginal),
+		Type:           string(params.Type),
+		ID:             id,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update exercise: %w", err)
 	}
 	return &Exercise{
-		ID:          row.ID,
-		Name:        row.Name,
-		Description: nullStringToString(row.Description),
-		VideoURL:    nullStringToString(row.VideoUrl),
-		ImgURL:      nullStringToString(row.ImgUrl),
-		Type:        ExerciseType(row.Type),
+		ID:             row.ID,
+		Name:           row.Name,
+		Description:    nullStringToString(row.Description),
+		VideoURL:       nullStringToString(row.VideoUrl),
+		ImgURL:         nullStringToString(row.ImgUrl),
+		ImgURLOriginal: nullStringToString(row.ImgUrlOriginal),
+		Type:           ExerciseType(row.Type),
 	}, nil
 }
 

@@ -1,19 +1,21 @@
 package models
 
 type CreateExerciseParams struct {
-	Name        string
-	Description string
-	VideoURL    string
-	ImgURL      string
-	Type        ExerciseType
+	Name           string
+	Description    string
+	VideoURL       string
+	ImgURL         string
+	ImgURLOriginal string
+	Type           ExerciseType
 }
 
 type UpdateExerciseParams struct {
-	Name        string
-	Description string
-	VideoURL    string
-	ImgURL      string
-	Type        ExerciseType
+	Name           string
+	Description    string
+	VideoURL       string
+	ImgURL         string
+	ImgURLOriginal string
+	Type           ExerciseType
 }
 
 // AdminRepository defines the interface for admin-only exercise operations.

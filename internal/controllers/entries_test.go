@@ -16,20 +16,20 @@ type mockRepository struct {
 	exercises []models.Exercise
 	entries   []models.ExerciseEntry
 
-	errCreate                       error
-	errGetByName                    error
-	errList                         error
-	errCreateEntry                  error
-	errGetEntry                     error
-	errUpdateEntry                  error
-	errUpdateEntryWithDate          error
-	errDeleteEntry                  error
-	errListEntries                  error
+	errCreate                        error
+	errGetByName                     error
+	errList                          error
+	errCreateEntry                   error
+	errGetEntry                      error
+	errUpdateEntry                   error
+	errUpdateEntryWithDate           error
+	errDeleteEntry                   error
+	errListEntries                   error
 	errGetEntriesByExercisePaginated error
-	errGetEntriesByDateRange        error
-	errGetExerciseByID              error
-	errGetMaxWeightByExercise       error
-	errGetLastSetByExercise         error
+	errGetEntriesByDateRange         error
+	errGetExerciseByID               error
+	errGetMaxWeightByExercise        error
+	errGetLastSetByExercise          error
 }
 
 func newMockRepository() *mockRepository {

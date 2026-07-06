@@ -68,12 +68,13 @@ func (ac *AdminController) Create(params models.CreateExerciseParams) (*models.E
 	}
 
 	return &models.Exercise{
-		ID:          id,
-		Name:        params.Name,
-		Description: params.Description,
-		VideoURL:    params.VideoURL,
-		ImgURL:      params.ImgURL,
-		Type:        params.Type,
+		ID:             id,
+		Name:           params.Name,
+		Description:    params.Description,
+		VideoURL:       params.VideoURL,
+		ImgURL:         params.ImgURL,
+		ImgURLOriginal: params.ImgURLOriginal,
+		Type:           params.Type,
 	}, nil
 }
 

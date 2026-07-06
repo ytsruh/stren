@@ -1,0 +1,245 @@
+package components
+
+import "fmt"
+
+// ImageUploadProps configures the ImageUpload widget.
+//
+// Name disambiguates the widget's DOM ids when more than one
+// appears on a page (e.g. inside a modal). Label is the form-label
+// text. CurrentURL / CurrentKey / CurrentOriginalKey pre-populate
+// the preview and hidden inputs on edit forms. MaxSizeMB is the
+// client-side pre-check; the server enforces the same cap.
+type ImageUploadProps struct {
+	Name               string
+	Label              string
+	CurrentURL         string
+	CurrentKey         string
+	CurrentOriginalKey string
+	MaxSizeMB          int
+	UploadEndpoint     string
+	// AspectWidth / AspectHeight define the visual frame the
+	// preview should match. The cropped output from the server is
+	// guaranteed to have this ratio, so the preview never jumps
+	// when the upload completes.
+	AspectWidth  int
+	AspectHeight int
+}
+
+// ImageUpload renders an image upload widget that:
+//   1. Optionally shows the current image (CurrentURL) above the input.
+//   2. Lets the user pick a new file; on change, JS POSTs the file
+//      as multipart to UploadEndpoint, which returns a pair of
+//      storage keys (display + original), and stashes them in the
+//      hidden inputs.
+//
+// On form submit, the hidden `img_key` and `img_key_original`
+// fields are posted back to the server alongside the rest of the
+// form. The server is the only thing that knows the keys map to
+// valid R2 objects — the keys are populated exclusively via the
+// upload endpoint.
+templ ImageUpload(props ImageUploadProps) {
+	{{
+		name := props.Name
+		if name == "" {
+			name = "image"
+		}
+		maxSize := props.MaxSizeMB
+		if maxSize <= 0 {
+			maxSize = 10
+		}
+		endpoint := props.UploadEndpoint
+		if endpoint == "" {
+			endpoint = "/api/admin/exercises/image-upload"
+		}
+		aspectW := props.AspectWidth
+		aspectH := props.AspectHeight
+		if aspectW <= 0 {
+			aspectW = 4
+		}
+		if aspectH <= 0 {
+			aspectH = 3
+		}
+		inputID := "image-input-" + name
+		previewID := "image-preview-" + name
+		displayHiddenID := "image-key-display-" + name
+		originalHiddenID := "image-key-original-" + name
+		currentID := "image-current-" + name
+		spinnerID := "image-spinner-" + name
+		// aspectWidth% / aspectHeight% produce the right padding-bottom
+		// for an aspect-ratio frame: e.g. 4:3 = 75%, 16:9 = 56.25%.
+		aspectPercent := (aspectH * 100) / aspectW
+		if aspectPercent < 1 {
+			aspectPercent = 75
+		}
+	}}
+	<div
+		class="grid gap-2"
+		data-image-upload={ name }
+		data-upload-endpoint={ templ.SafeURL(endpoint) }
+		data-max-size-mb={ templ.SafeURL(fmt.Sprintf("%d", maxSize)) }
+	>
+		<label for={ inputID }>{ props.Label }</label>
+		if props.CurrentURL != "" {
+			<div id={ currentID } class="flex items-start gap-4">
+				<div
+					class="relative w-full max-w-sm overflow-hidden rounded-md border bg-muted"
+					style={ templ.SafeURL(fmt.Sprintf("padding-bottom: %d%%;", aspectPercent)) }
+				>
+					<img
+						src={ templ.SafeURL(props.CurrentURL) }
+						alt="Current image"
+						class="absolute inset-0 size-full object-cover"
+					/>
+				</div>
+			</div>
+		}
+		<input
+			class="input pt-2"
+			type="file"
+			id={ inputID }
+			accept="image/jpeg,image/png"
+		/>
+		<input
+			type="hidden"
+			id={ displayHiddenID }
+			name="img_key"
+			value={ props.CurrentKey }
+		/>
+		<input
+			type="hidden"
+			id={ originalHiddenID }
+			name="img_key_original"
+			value={ props.CurrentOriginalKey }
+		/>
+		<div class="flex items-center gap-3">
+			<div
+				id={ previewID }
+				class="relative hidden w-full max-w-sm overflow-hidden rounded-md border bg-muted"
+				style={ templ.SafeURL(fmt.Sprintf("padding-bottom: %d%%;", aspectPercent)) }
+			>
+				<img alt="New image preview" class="absolute inset-0 size-full object-cover"/>
+			</div>
+			<span id={ spinnerID } class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground">
+				<span class="animate-spin">
+					@Icon(IconProps{Name: "loader", Size: 14})
+				</span>
+				Uploading...
+			</span>
+		</div>
+	</div>
+	<script>
+		(function() {
+			var MAX_SIZE_MB = 10;
+			var ACCEPTED_TYPES = ['image/jpeg', 'image/png'];
+			// Mirror the Basecoat toast structure rendered by
+			// views.Toast in layout.templ. Keep in sync if the
+			// server-rendered toast changes.
+			var TOAST_ICONS = {
+				success: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>',
+				error: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>',
+				warning: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>',
+				default: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>'
+			};
+			function showToast(category, title, message) {
+				var toaster = document.getElementById('toaster');
+				if (!toaster) return;
+				var cat = TOAST_ICONS[category] ? category : 'default';
+				var icon = TOAST_ICONS[cat];
+				var descHTML = message ? '<p>' + message + '</p>' : '';
+				var el = document.createElement('div');
+				el.className = 'toast';
+				el.setAttribute('role', 'status');
+				el.setAttribute('aria-atomic', 'true');
+				el.setAttribute('aria-hidden', 'false');
+				el.setAttribute('data-category', cat);
+				el.innerHTML = '<div class="toast-content">' + icon + '<section><h2>' + title + '</h2>' + descHTML + '</section></div>';
+				toaster.appendChild(el);
+			}
+
+			document.querySelectorAll('[data-image-upload]').forEach(function(root) {
+				if (root.dataset.bound === '1') return;
+				root.dataset.bound = '1';
+				var name = root.getAttribute('data-image-upload');
+				var endpoint = root.getAttribute('data-upload-endpoint') || '/api/admin/exercises/image-upload';
+				var maxMB = parseInt(root.getAttribute('data-max-size-mb') || '10', 10) || MAX_SIZE_MB;
+				var input = document.getElementById('image-input-' + name);
+				var preview = document.getElementById('image-preview-' + name);
+				var displayHidden = document.getElementById('image-key-display-' + name);
+				var originalHidden = document.getElementById('image-key-original-' + name);
+				var current = document.getElementById('image-current-' + name);
+				var spinner = document.getElementById('image-spinner-' + name);
+				if (!input) return;
+
+				function clearPreview() {
+					if (preview) {
+						var img = preview.querySelector('img');
+						if (img) img.src = '';
+						preview.classList.add('hidden');
+					}
+				}
+
+				input.addEventListener('change', function() {
+					var file = input.files && input.files[0];
+					if (!file) {
+						clearPreview();
+						return;
+					}
+					if (ACCEPTED_TYPES.indexOf(file.type) === -1) {
+						showToast('error', 'Upload failed', 'Please select a JPEG or PNG image.');
+						input.value = '';
+						return;
+					}
+					if (file.size > maxMB * 1024 * 1024) {
+						showToast('error', 'Upload failed', 'File is too large. Max size is ' + maxMB + 'MB.');
+						input.value = '';
+						return;
+					}
+					// Local preview
+					var reader = new FileReader();
+					reader.onload = function(e) {
+						if (preview) {
+							var img = preview.querySelector('img');
+							if (img) img.src = e.target.result;
+							preview.classList.remove('hidden');
+						}
+					};
+					reader.readAsDataURL(file);
+
+					// POST the file as multipart to the upload endpoint.
+					var fd = new FormData();
+					fd.append('file', file);
+					spinner.classList.remove('htmx-indicator');
+					spinner.style.display = 'inline-flex';
+					fetch(endpoint, {
+						method: 'POST',
+						body: fd
+					}).then(function(r) {
+						if (!r.ok) {
+							return r.text().then(function(body) {
+								throw new Error(body || 'Upload failed (status ' + r.status + ')');
+							});
+						}
+						return r.json();
+					}).then(function(data) {
+						if (!data || !data.display_key) {
+							throw new Error('Upload response missing display_key');
+						}
+						if (displayHidden) displayHidden.value = data.display_key;
+						if (originalHidden) originalHidden.value = data.original_key || '';
+						// Fade the current-image block so the user
+						// can see the new image replaced it.
+						if (current) current.style.opacity = '0.4';
+						showToast('success', 'Image uploaded', 'Ready to save.');
+					}).catch(function(e) {
+						showToast('error', 'Upload failed', e.message || 'Unknown error');
+						input.value = '';
+						clearPreview();
+					}).finally(function() {
+						spinner.classList.add('htmx-indicator');
+						spinner.style.display = '';
+					});
+				});
+			});
+		})();
+	</script>
+}

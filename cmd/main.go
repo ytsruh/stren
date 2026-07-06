@@ -14,6 +14,7 @@ import (
 	"stren/internal/db"
 	"stren/internal/email"
 	"stren/internal/export"
+	"stren/internal/imaging"
 	"stren/internal/models"
 	"stren/internal/push"
 	"stren/internal/routes"
@@ -120,6 +121,9 @@ func main() {
 		userRepo,
 		jwtService,
 		validator,
+		imaging.NewStdProcessor(),
+		utilsR2Uploader{},
+		routes.DefaultExerciseImageConfig,
 	)
 
 	// Create Echo instance
@@ -188,3 +192,20 @@ func (r2PhotoGetter) Get(ctx context.Context, key string) (io.ReadCloser, error)
 
 // Compile-time check: r2PhotoGetter satisfies export.PhotoGetter.
 var _ export.PhotoGetter = r2PhotoGetter{}
+
+// utilsR2Uploader adapts utils.PutObject to the
+// routes.exerciseImageUploader interface. Same shape as
+// r2PhotoGetter (the read-side adapter used by the export flow);
+// keeping it as a named type makes it easy to swap a fake in tests
+// when the admin image route eventually needs end-to-end coverage.
+type utilsR2Uploader struct{}
+
+func (utilsR2Uploader) PutObject(ctx context.Context, key, contentType string, body io.Reader) error {
+	return utils.PutObject(ctx, key, contentType, body)
+}
+
+// Compile-time check: utilsR2Uploader satisfies the
+// routes.exerciseImageUploader interface.
+var _ interface {
+	PutObject(ctx context.Context, key, contentType string, body io.Reader) error
+} = utilsR2Uploader{}

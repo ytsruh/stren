@@ -30,10 +30,10 @@ func renderToString(t *testing.T, component templ.Component) string {
 // The formula is simply current / target * 100, clamped to [0, 100].
 func TestWeightProgress(t *testing.T) {
 	tests := []struct {
-		name        string
-		current     float64
-		target      float64
-		wantPct     float64
+		name    string
+		current float64
+		target  float64
+		wantPct float64
 	}{
 		{
 			name:    "current below target (gaining goal)",

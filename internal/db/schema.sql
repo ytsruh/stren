@@ -4,6 +4,7 @@ CREATE TABLE exercises (
     description TEXT,
     video_url TEXT,
     img_url TEXT,
+    img_url_original TEXT,
     type TEXT NOT NULL DEFAULT 'other'
 );
 

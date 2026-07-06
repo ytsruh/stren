@@ -62,4 +62,3 @@ func TestEMOMPage_RendersTabsWithEMOMActive(t *testing.T) {
 		t.Fatal("expected Timer panel to be hidden")
 	}
 }
-

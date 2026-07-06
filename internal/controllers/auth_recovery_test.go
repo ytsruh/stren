@@ -87,12 +87,12 @@ func hashForTest(s string) string {
 // mockResetSender records the (tokenRepo, user) pairs handed
 // to it. The test controls whether the send returns an error.
 type mockResetSender struct {
-	mu        sync.Mutex
-	calls     int
-	user      *models.User
-	repo      models.AuthTokenRepo
-	sendErr   error
-	calledCh  chan struct{}
+	mu       sync.Mutex
+	calls    int
+	user     *models.User
+	repo     models.AuthTokenRepo
+	sendErr  error
+	calledCh chan struct{}
 }
 
 func newMockResetSender() *mockResetSender {

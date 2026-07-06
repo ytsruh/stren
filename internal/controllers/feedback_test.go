@@ -13,10 +13,10 @@ type mockFeedbackRepository struct {
 	mu       sync.Mutex
 	feedback []*models.Feedback
 
-	errCreate   error
-	errGetAll   error
-	errGetByID  error
-	errUpdate   error
+	errCreate  error
+	errGetAll  error
+	errGetByID error
+	errUpdate  error
 }
 
 func newMockFeedbackRepository() *mockFeedbackRepository {

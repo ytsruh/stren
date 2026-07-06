@@ -123,6 +123,114 @@ func TestExerciseRepository_List(t *testing.T) {
 	}
 }
 
+func TestExerciseRepository_CreateNoTx_RoundTripsImageKeys(t *testing.T) {
+	// The admin image upload flow stores two storage keys per
+	// exercise (display + original). Both columns must round-trip
+	// through CreateNoTx, GetByID, GetByName, List, and Update.
+	repo, _, database, _ := setupTestRepo(t)
+	defer database.Close()
+
+	id, err := repo.CreateNoTx(CreateExerciseParams{
+		Name:           "Image Test",
+		Description:    "Has an image",
+		VideoURL:       "https://example.com/v.mp4",
+		ImgURL:         "exercises/abc.jpg",
+		ImgURLOriginal: "exercises/abc_original.jpg",
+		Type:           ExerciseTypeStrength,
+	})
+	if err != nil {
+		t.Fatalf("CreateNoTx: %v", err)
+	}
+	if id == "" {
+		t.Fatal("expected non-empty id")
+	}
+
+	// GetByID round-trip
+	got, err := repo.GetByID(id)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected exercise, got nil")
+	}
+	if got.ImgURL != "exercises/abc.jpg" {
+		t.Errorf("ImgURL = %q, want exercises/abc.jpg", got.ImgURL)
+	}
+	if got.ImgURLOriginal != "exercises/abc_original.jpg" {
+		t.Errorf("ImgURLOriginal = %q, want exercises/abc_original.jpg", got.ImgURLOriginal)
+	}
+
+	// GetByName round-trip (uses the same row -> same select)
+	byName, err := repo.GetByName("Image Test")
+	if err != nil {
+		t.Fatalf("GetByName: %v", err)
+	}
+	if byName == nil || byName.ImgURL != "exercises/abc.jpg" || byName.ImgURLOriginal != "exercises/abc_original.jpg" {
+		t.Errorf("GetByName returned %+v, want ImgURL and ImgURLOriginal set", byName)
+	}
+
+	// Update replaces both keys
+	updated, err := repo.Update(id, UpdateExerciseParams{
+		Name:           "Image Test",
+		Description:    "Has an image",
+		VideoURL:       "https://example.com/v.mp4",
+		ImgURL:         "exercises/xyz.jpg",
+		ImgURLOriginal: "exercises/xyz_original.jpg",
+		Type:           ExerciseTypeStrength,
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.ImgURL != "exercises/xyz.jpg" || updated.ImgURLOriginal != "exercises/xyz_original.jpg" {
+		t.Errorf("Update returned %+v, want updated keys", updated)
+	}
+
+	// List sees the new keys.
+	list, err := repo.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	found := false
+	for _, e := range list {
+		if e.ID == id {
+			found = true
+			if e.ImgURL != "exercises/xyz.jpg" || e.ImgURLOriginal != "exercises/xyz_original.jpg" {
+				t.Errorf("List row %+v, want updated keys", e)
+			}
+		}
+	}
+	if !found {
+		t.Error("updated exercise not in List() result")
+	}
+}
+
+func TestExerciseRepository_CreateNoTx_EmptyImageKeys(t *testing.T) {
+	// An exercise created without an image must round-trip
+	// empty (NULL) for both columns, not "" strings or zero
+	// values. Guards against a future migration accidentally
+	// adding a NOT NULL constraint or default.
+	repo, _, database, _ := setupTestRepo(t)
+	defer database.Close()
+
+	id, err := repo.CreateNoTx(CreateExerciseParams{
+		Name: "Plain Exercise",
+		Type: ExerciseTypeOther,
+	})
+	if err != nil {
+		t.Fatalf("CreateNoTx: %v", err)
+	}
+	got, err := repo.GetByID(id)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.ImgURL != "" {
+		t.Errorf("ImgURL = %q, want empty", got.ImgURL)
+	}
+	if got.ImgURLOriginal != "" {
+		t.Errorf("ImgURLOriginal = %q, want empty", got.ImgURLOriginal)
+	}
+}
+
 func TestExerciseRepository_CreateEntry(t *testing.T) {
 	repo, _, database, userID := setupTestRepo(t)
 	defer database.Close()

@@ -20,12 +20,13 @@ type AuthToken struct {
 }
 
 type Exercise struct {
-	ID          string
-	Name        string
-	Description sql.NullString
-	VideoUrl    sql.NullString
-	ImgUrl      sql.NullString
-	Type        string
+	ID             string
+	Name           string
+	Description    sql.NullString
+	VideoUrl       sql.NullString
+	ImgUrl         sql.NullString
+	ImgUrlOriginal sql.NullString
+	Type           string
 }
 
 type ExerciseEntry struct {

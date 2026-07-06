@@ -23,12 +23,13 @@ func (et ExerciseType) IsValid() bool {
 
 // Exercise represents a normalized exercise name with metadata.
 type Exercise struct {
-	ID          string
-	Name        string
-	Description string
-	VideoURL    string
-	ImgURL      string
-	Type        ExerciseType
+	ID             string
+	Name           string
+	Description    string
+	VideoURL       string
+	ImgURL         string
+	ImgURLOriginal string
+	Type           ExerciseType
 }
 
 // ExerciseEntry represents a single set of an exercise

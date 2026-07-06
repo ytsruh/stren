@@ -65,6 +65,7 @@ func (m *mockAdminRepository) Update(id string, params models.UpdateExercisePara
 			m.exercises[i].Description = params.Description
 			m.exercises[i].VideoURL = params.VideoURL
 			m.exercises[i].ImgURL = params.ImgURL
+			m.exercises[i].ImgURLOriginal = params.ImgURLOriginal
 			m.exercises[i].Type = params.Type
 			cp := m.exercises[i]
 			return &cp, nil
@@ -85,7 +86,7 @@ func (m *mockAdminRepository) CreateNoTx(params models.CreateExerciseParams) (st
 		}
 	}
 	id := "mock-id-" + params.Name
-	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: params.Name, Description: params.Description, VideoURL: params.VideoURL, ImgURL: params.ImgURL, Type: params.Type})
+	m.exercises = append(m.exercises, models.Exercise{ID: id, Name: params.Name, Description: params.Description, VideoURL: params.VideoURL, ImgURL: params.ImgURL, ImgURLOriginal: params.ImgURLOriginal, Type: params.Type})
 	return id, nil
 }
 
@@ -322,11 +323,12 @@ func TestAdminController_Create_Validation(t *testing.T) {
 
 	t.Run("all fields are set on returned exercise", func(t *testing.T) {
 		params := models.CreateExerciseParams{
-			Name:        "Full Exercise",
-			Description: "A description",
-			VideoURL:    "https://example.com/video.mp4",
-			ImgURL:      "https://example.com/image.jpg",
-			Type:        models.ExerciseTypeStrength,
+			Name:           "Full Exercise",
+			Description:    "A description",
+			VideoURL:       "https://example.com/video.mp4",
+			ImgURL:         "exercises/abc.jpg",
+			ImgURLOriginal: "exercises/abc_original.jpg",
+			Type:           models.ExerciseTypeStrength,
 		}
 		ex, err := ctrl.Create(params)
 		if err != nil {
@@ -343,6 +345,9 @@ func TestAdminController_Create_Validation(t *testing.T) {
 		}
 		if ex.ImgURL != params.ImgURL {
 			t.Errorf("ImgURL = %q, want %q", ex.ImgURL, params.ImgURL)
+		}
+		if ex.ImgURLOriginal != params.ImgURLOriginal {
+			t.Errorf("ImgURLOriginal = %q, want %q", ex.ImgURLOriginal, params.ImgURLOriginal)
 		}
 		if ex.Type != params.Type {
 			t.Errorf("Type = %q, want %q", ex.Type, params.Type)
