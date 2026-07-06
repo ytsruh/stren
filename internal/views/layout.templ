@@ -384,13 +384,13 @@ templ EmptyState() {
 			<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
 				@components.Icon(components.IconProps{Name: "dumbbell", Size: 24})
 			</div>
-			<h3 class="text-lg font-semibold">No workouts yet</h3>
-			<p class="text-muted-foreground text-sm">Start tracking your strength journey by adding your first exercise entry.</p>
+			<h3 class="text-lg font-semibold">No workouts in the last 7 days</h3>
+			<p class="text-muted-foreground text-sm">Log a session to keep your streak going.</p>
 		</header>
 		<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
 			<a href="/entries/new" class="btn">
 				@components.Icon(components.IconProps{Name: "plus", Size: 18})
-				Add First Entry
+				Add Entry
 			</a>
 		</section>
 	</div>

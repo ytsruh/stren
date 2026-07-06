@@ -239,7 +239,7 @@ func TestDashboard_WithEntries(t *testing.T) {
 
 func TestDashboard_Empty(t *testing.T) {
 	html := renderToString(t, Dashboard([]models.ExerciseEntry{}, "Test User", true, false))
-	if !strings.Contains(html, "No workouts yet") {
+	if !strings.Contains(html, "No workouts in the last 7 days") {
 		t.Error("expected empty state when no entries")
 	}
 	// The donut should not render in the empty case (a zero-slice
@@ -308,7 +308,7 @@ func TestRecentEntries_WithData(t *testing.T) {
 
 func TestRecentEntries_Empty(t *testing.T) {
 	html := renderToString(t, RecentEntries([]models.ExerciseEntry{}))
-	if !strings.Contains(html, "No workouts yet") {
+	if !strings.Contains(html, "No workouts in the last 7 days") {
 		t.Error("expected empty state")
 	}
 }

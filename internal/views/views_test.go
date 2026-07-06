@@ -50,10 +50,10 @@ func TestToast_Success(t *testing.T) {
 
 func TestEmptyState(t *testing.T) {
 	html := renderToString(t, EmptyState())
-	if !strings.Contains(html, "No workouts yet") {
+	if !strings.Contains(html, "No workouts in the last 7 days") {
 		t.Error("expected empty state heading")
 	}
-	if !strings.Contains(html, "Add First Entry") {
+	if !strings.Contains(html, "Add Entry") {
 		t.Error("expected call-to-action button")
 	}
 }
