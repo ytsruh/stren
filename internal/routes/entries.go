@@ -24,7 +24,12 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		return err
 	}
 
-	return render(c, dashboard.Dashboard(entries, claims.Name, true, claims.IsAdmin))
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
+	return render(c, dashboard.Dashboard(entries, claims.Name, true, claims.IsAdmin, unit))
 }
 
 // NewEntryForm renders the form for creating a new entry.
@@ -48,7 +53,12 @@ func (h *Handler) NewEntryForm(c echo.Context) error {
 		}
 	}
 
-	return render(c, exerciseviews.EntryForm(exercises, preselectedID, claims.Name, true, claims.IsAdmin))
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
+	return render(c, exerciseviews.EntryForm(exercises, preselectedID, claims.Name, true, claims.IsAdmin, unit))
 }
 
 // CreateEntry handles the creation of a new entry (with one or more sets).
@@ -114,7 +124,12 @@ func (h *Handler) EditEntryForm(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Entry not found")
 	}
 
-	return render(c, exerciseviews.EditEntryForm(entry, claims.Name, true, claims.IsAdmin))
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
+	return render(c, exerciseviews.EditEntryForm(entry, claims.Name, true, claims.IsAdmin, unit))
 }
 
 // GetEntry returns a single entry (for API/hx-get).
@@ -130,7 +145,12 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Entry not found")
 	}
 
-	return render(c, dashboard.EntryRow(*entry))
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
+	return render(c, dashboard.EntryRow(*entry, unit))
 }
 
 // UpdateEntry handles updating an existing entry.
@@ -212,15 +232,20 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 		return err
 	}
 
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("Vary", "HX-Request")
-		return render(c, exerciseviews.HistoryTable(exercise.ID, history))
+		return render(c, exerciseviews.HistoryTable(exercise.ID, history, unit))
 	}
 	chartEntries, err := h.entryCtrl.GetRecentEntriesForChart(exercise.ID, claims.UserID)
 	if err != nil {
 		return err
 	}
-	return render(c, exerciseviews.ExerciseHistory(exercise, history, chartEntries, claims.Name, true, claims.IsAdmin))
+	return render(c, exerciseviews.ExerciseHistory(exercise, history, chartEntries, claims.Name, true, claims.IsAdmin, unit))
 }
 
 // ExerciseChart renders the dedicated chart view for a specific exercise:
@@ -249,7 +274,12 @@ func (h *Handler) ExerciseChart(c echo.Context) error {
 		return err
 	}
 
-	return render(c, exerciseviews.ExerciseChart(exercise, chartEntries, claims.Name, true, claims.IsAdmin))
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
+	return render(c, exerciseviews.ExerciseChart(exercise, chartEntries, claims.Name, true, claims.IsAdmin, unit))
 }
 
 // ExerciseChartAdvanced renders the advanced chart view for a specific
@@ -276,7 +306,12 @@ func (h *Handler) ExerciseChartAdvanced(c echo.Context) error {
 		return err
 	}
 
-	return render(c, exerciseviews.ExerciseChartAdvanced(exercise, chartEntries, claims.Name, true, claims.IsAdmin))
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
+	return render(c, exerciseviews.ExerciseChartAdvanced(exercise, chartEntries, claims.Name, true, claims.IsAdmin, unit))
 }
 
 // parsePage reads the ?page=N query param and returns a clamped 1-indexed page

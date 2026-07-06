@@ -14,12 +14,16 @@ import (
 // back into per-set structs. The remove button is wired up via data attributes
 // — see entryFormSetScript for the add/remove logic.
 //
+// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
+// weight input's label so the form reflects the user's setting rather than
+// always showing "(kg)".
+//
 // Layout: on mobile (<sm) the label and X button form a header row and the
 // three inputs stack vertically beneath it as full-width fields. At sm: and
 // above the header wrapper switches to display:contents (sm:contents) so its
 // children join the parent grid as direct items, giving the original
 // five-column row (label · reps · weight · rest · X).
-templ entrySetRow(index int) {
+templ entrySetRow(index int, weightUnit string) {
 	<div class="grid gap-3 sm:grid-cols-[auto_1fr_1fr_1fr_auto] sm:items-end sm:gap-3" data-set-row>
 		<div class="flex items-center justify-between sm:contents">
 			<div class="pb-0 sm:pb-2 text-sm font-medium text-muted-foreground" data-set-label>
@@ -48,7 +52,7 @@ templ entrySetRow(index int) {
 			/>
 		</div>
 		<div class="grid gap-2">
-			<label class="text-sm">Weight (kg)</label>
+			<label class="text-sm">Weight ({ weightUnit })</label>
 			<input
 				class="input"
 				type="number"
@@ -78,8 +82,12 @@ templ entrySetRow(index int) {
 // entrySetRowPlaceholder is rendered only inside the <template> element that
 // the inline script clones to add new rows. It uses the literal placeholder
 // string __INDEX__ in field names; the script substitutes it for the next
-// available index at clone time. Layout matches entrySetRow so cloned rows
-// look identical to the starter rows.
+// available index at clone time. The weight label is rendered as a literal
+// "Weight (kg)" here because the cloning script doesn't have access to the
+// per-request weight unit; the visible rows are what matter for first paint,
+// and the unit shown in the form header (see EntryForm) gives the user the
+// correct context. Layout matches entrySetRow so cloned rows look identical
+// to the starter rows.
 templ entrySetRowPlaceholder() {
 	<div class="grid gap-3 sm:grid-cols-[auto_1fr_1fr_1fr_auto] sm:items-end sm:gap-3" data-set-row>
 		<div class="flex items-center justify-between sm:contents">
@@ -174,7 +182,8 @@ templ entryFormSetScript() {
 
 // EntryForm renders the form for creating a new entry.
 // preselectedExerciseID, when non-empty, marks the matching <option> as selected.
-templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userName string, isAuthenticated bool, isAdmin bool) {
+// weightUnit is the user's preferred unit and drives the weight input label.
+templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: "New Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Entry"})
 		<form
@@ -222,7 +231,7 @@ templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userN
 					</div>
 				</div>
 				<div class="grid gap-3" data-set-list>
-					@entrySetRow(0)
+					@entrySetRow(0, weightUnit)
 				</div>
 				<div>
 					<button
@@ -269,8 +278,9 @@ templ EntryForm(exercises []models.Exercise, preselectedExerciseID string, userN
 	}
 }
 
-// EditEntryForm renders the form for editing an existing entry
-templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+// EditEntryForm renders the form for editing an existing entry.
+// weightUnit is the user's preferred unit and drives the weight input label.
+templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: "Edit Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="w-full flex items-center justify-between">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Entry"})
@@ -326,7 +336,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 						/>
 					</div>
 					<div class="grid gap-2">
-						<label for="weight">Weight (kg)</label>
+						<label for="weight">Weight ({ weightUnit })</label>
 						<input
 							class="input"
 							type="number"

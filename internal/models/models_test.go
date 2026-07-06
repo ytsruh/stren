@@ -9,36 +9,133 @@ func TestExerciseEntry_FormattedWeight(t *testing.T) {
 	tests := []struct {
 		name     string
 		weight   float64
+		unit     string
 		expected string
 	}{
 		{
-			name:     "whole number",
+			name:     "kg whole number",
 			weight:   100,
+			unit:     "kg",
 			expected: "100.0 kg",
 		},
 		{
-			name:     "decimal",
+			name:     "kg decimal",
 			weight:   67.5,
+			unit:     "kg",
 			expected: "67.5 kg",
 		},
 		{
-			name:     "zero",
+			name:     "kg zero",
 			weight:   0,
+			unit:     "kg",
 			expected: "0.0 kg",
 		},
 		{
-			name:     "large number",
+			name:     "kg large number",
 			weight:   999.9,
+			unit:     "kg",
 			expected: "999.9 kg",
+		},
+		{
+			name:     "lbs whole number",
+			weight:   225,
+			unit:     "lbs",
+			expected: "225.0 lbs",
+		},
+		{
+			name:     "lbs decimal",
+			weight:   67.5,
+			unit:     "lbs",
+			expected: "67.5 lbs",
+		},
+		{
+			name:     "lbs zero",
+			weight:   0,
+			unit:     "lbs",
+			expected: "0.0 lbs",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			entry := &ExerciseEntry{Weight: tt.weight}
-			got := entry.FormattedWeight()
+			got := entry.FormattedWeight(tt.unit)
 			if got != tt.expected {
-				t.Errorf("FormattedWeight() = %q, want %q", got, tt.expected)
+				t.Errorf("FormattedWeight(%q) = %q, want %q", tt.unit, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatWeight(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    float64
+		unit     string
+		expected string
+	}{
+		{name: "kg whole", value: 100, unit: "kg", expected: "100.0 kg"},
+		{name: "kg decimal", value: 67.5, unit: "kg", expected: "67.5 kg"},
+		{name: "lbs whole", value: 225, unit: "lbs", expected: "225.0 lbs"},
+		{name: "lbs decimal", value: 182.5, unit: "lbs", expected: "182.5 lbs"},
+		// FormatWeight does not normalise; callers are expected to
+		// pass a value from NormalizeWeightUnit (or User.WeightUnitDisplay)
+		// so an empty / unrecognised unit is the caller's bug to surface.
+		{name: "empty unit is passed through", value: 100, unit: "", expected: "100.0 "},
+		{name: "unrecognised unit is passed through", value: 100, unit: "stones", expected: "100.0 stones"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatWeight(tt.value, tt.unit)
+			if got != tt.expected {
+				t.Errorf("FormatWeight(%v, %q) = %q, want %q", tt.value, tt.unit, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNormalizeWeightUnit(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "kg", input: "kg", expected: "kg"},
+		{name: "lbs", input: "lbs", expected: "lbs"},
+		{name: "empty falls back to kg", input: "", expected: "kg"},
+		{name: "unrecognised falls back to kg", input: "stones", expected: "kg"},
+		{name: "uppercase is not normalised", input: "KG", expected: "kg"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeWeightUnit(tt.input)
+			if got != tt.expected {
+				t.Errorf("NormalizeWeightUnit(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestUser_WeightUnitDisplay(t *testing.T) {
+	tests := []struct {
+		name     string
+		user     *User
+		expected string
+	}{
+		{name: "nil user falls back to kg", user: nil, expected: "kg"},
+		{name: "stored kg", user: &User{WeightUnit: "kg"}, expected: "kg"},
+		{name: "stored lbs", user: &User{WeightUnit: "lbs"}, expected: "lbs"},
+		{name: "empty falls back to kg", user: &User{WeightUnit: ""}, expected: "kg"},
+		{name: "unrecognised falls back to kg", user: &User{WeightUnit: "stones"}, expected: "kg"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.user.WeightUnitDisplay()
+			if got != tt.expected {
+				t.Errorf("WeightUnitDisplay() = %q, want %q", got, tt.expected)
 			}
 		})
 	}

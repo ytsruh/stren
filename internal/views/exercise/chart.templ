@@ -78,7 +78,10 @@ templ ExerciseNav(exerciseID string, active string) {
 // "heaviest weight per calendar day" and plots it as a single line.
 // When there are fewer than 2 unique days, a friendly empty-state
 // message is rendered in place of the chart.
-templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+//
+// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
+// dataset label so the chart legend matches the user's setting.
+templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@ExerciseNav(exercise.ID, exerciseNavActiveChart)
 		<header class="mb-4">
@@ -87,7 +90,7 @@ templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEnt
 		<div class="card p-4">
 			if chartHasEnoughData(chartEntries) {
 				<div class="h-[60vh] min-h-96">
-					@components.Chart(chartDataForExerciseFull(chartEntries, exercise.Name, "Max weight per training day"))
+					@components.Chart(chartDataForExerciseFull(chartEntries, exercise.Name, "Max weight per training day", weightUnit))
 				</div>
 			} else {
 				<p class="text-muted-foreground text-center py-12">
@@ -111,7 +114,10 @@ templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEnt
 // rendered as separate translucent dots so no set is hidden. With
 // fewer than 2 entries the view shows a short empty-state message
 // instead of a chart.
-templ ExerciseChartAdvanced(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+//
+// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
+// y-axis label.
+templ ExerciseChartAdvanced(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@ExerciseNav(exercise.ID, exerciseNavActiveAdvanced)
 		<header class="mb-4">
@@ -120,7 +126,7 @@ templ ExerciseChartAdvanced(exercise *models.Exercise, chartEntries []models.Exe
 		<div class="card p-4">
 			if chartScatterHasEnoughData(chartEntries) {
 				<div class="h-[60vh] min-h-96">
-					@components.ScatterChart(chartDataForExerciseScatter(chartEntries, exercise.Name, "Every set plotted by reps and weight"))
+					@components.ScatterChart(chartDataForExerciseScatter(chartEntries, exercise.Name, "Every set plotted by reps and weight", weightUnit))
 				</div>
 			} else {
 				<p class="text-muted-foreground text-center py-12">
@@ -166,7 +172,10 @@ func chartScatterHasEnoughData(entries []models.ExerciseEntry) bool {
 //     are ever loaded on the same page
 //   - does NOT hide the axis tick labels — the full-width layout has
 //     room to render them legibly
-func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName string, chartTitle string) components.ChartProps {
+//
+// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
+// dataset label.
+func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName string, chartTitle string, weightUnit string) components.ChartProps {
 	days := aggregateEntriesByDay(entries)
 	labels, values := dayLabelsAndValues(days, "02 Jan")
 	return components.ChartProps{
@@ -174,7 +183,7 @@ func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName strin
 		Title:  chartTitle,
 		Labels: labels,
 		Datasets: []components.ChartDataset{
-			{Label: exerciseName + " (kg)", Values: values},
+			{Label: fmt.Sprintf("%s (%s)", exerciseName, weightUnit), Values: values},
 		},
 	}
 }
@@ -192,7 +201,10 @@ func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName strin
 // it from colliding with the line chart on the /chart view. The chart
 // does not hide axis tick labels — the full-width layout has room for
 // them, and integer rep ticks help the user read set counts at a glance.
-func chartDataForExerciseScatter(entries []models.ExerciseEntry, exerciseName string, chartTitle string) components.ScatterChartProps {
+//
+// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
+// y-axis label.
+func chartDataForExerciseScatter(entries []models.ExerciseEntry, exerciseName string, chartTitle string, weightUnit string) components.ScatterChartProps {
 	points := make([]components.ScatterPoint, 0, len(entries))
 	for _, e := range entries {
 		points = append(points, components.ScatterPoint{
@@ -205,7 +217,7 @@ func chartDataForExerciseScatter(entries []models.ExerciseEntry, exerciseName st
 		ID:     "exercise-chart-advanced",
 		Title:  chartTitle,
 		XLabel: "Reps",
-		YLabel: exerciseName + " (kg)",
+		YLabel: fmt.Sprintf("%s (%s)", exerciseName, weightUnit),
 		Points: points,
 	}
 }

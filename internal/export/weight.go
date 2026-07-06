@@ -80,7 +80,13 @@ type pendingPhoto struct {
 // Photos whose R2 fetch fails are NOT written to the zip; the entry is
 // still included in weight.csv (with an empty photo_filename) and the
 // offending key is appended to manifest.json's missing_photos list.
-func BuildWeightZip(ctx context.Context, w io.Writer, entries []models.WeightEntry, photos PhotoGetter, userID string) (Result, error) {
+//
+// weightUnit is the user's preferred display unit ("kg" or "lbs").
+// The DB stores weights as a unit-agnostic number, so the CSV's
+// `weight` column is written verbatim. The `weight_unit` column
+// records the same value on every row so the file is self-describing
+// when opened in a spreadsheet.
+func BuildWeightZip(ctx context.Context, w io.Writer, entries []models.WeightEntry, photos PhotoGetter, userID string, weightUnit string) (Result, error) {
 	// Sort a copy so the caller's slice is untouched.
 	sorted := make([]models.WeightEntry, len(entries))
 	copy(sorted, entries)
@@ -139,7 +145,7 @@ func BuildWeightZip(ctx context.Context, w io.Writer, entries []models.WeightEnt
 		return result, fmt.Errorf("export: create csv entry: %w", err)
 	}
 	cw := csv.NewWriter(csvBody)
-	if err := cw.Write([]string{"id", "created_at", "date", "weight_kg", "notes", "photo_filename"}); err != nil {
+	if err := cw.Write([]string{"id", "created_at", "date", "weight", "weight_unit", "notes", "photo_filename"}); err != nil {
 		_ = zw.Close()
 		return result, fmt.Errorf("export: write csv header: %w", err)
 	}
@@ -154,6 +160,7 @@ func BuildWeightZip(ctx context.Context, w io.Writer, entries []models.WeightEnt
 			e.CreatedAt.UTC().Format(time.RFC3339),
 			e.CreatedAt.UTC().Format("2006-01-02"),
 			fmt.Sprintf("%.1f", e.Weight),
+			weightUnit,
 			e.Notes,
 			photoNameFor[i],
 		}); err != nil {

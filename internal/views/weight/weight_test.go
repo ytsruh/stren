@@ -118,7 +118,7 @@ func TestLatestWeight(t *testing.T) {
 // TestWeightProgressCard_RendersKeyStats asserts the card surfaces the
 // current/target values and the percent progress to the user.
 func TestWeightProgressCard_RendersKeyStats(t *testing.T) {
-	html := renderToString(t, WeightProgressCard(50, 100, 50))
+	html := renderToString(t, WeightProgressCard(50, 100, 50, "kg"))
 
 	// Headline percent.
 	if !strings.Contains(html, "50%") {
@@ -138,7 +138,7 @@ func TestWeightProgressCard_RendersKeyStats(t *testing.T) {
 // current/target percent are the caller's responsibility — covered
 // separately by TestLatestWeight and TestWeightProgress.)
 func TestWeightProgressCard_RendersSuppliedValues(t *testing.T) {
-	html := renderToString(t, WeightProgressCard(30, 50, 60))
+	html := renderToString(t, WeightProgressCard(30, 50, 60, "kg"))
 
 	// current 30, target 50, pct 60.
 	if !strings.Contains(html, "60%") {
@@ -166,7 +166,7 @@ func TestWeightPage_ChartIsFullWidthWithoutGoal(t *testing.T) {
 	}
 
 	t.Run("no goal", func(t *testing.T) {
-		html := renderToString(t, WeightPage(entries, "Test User", true, false, nil))
+		html := renderToString(t, WeightPage(entries, "Test User", true, false, nil, "kg"))
 		// Chart wrapper must NOT carry sm:w-3/4 when there's no goal.
 		if strings.Contains(html, "sm:w-3/4") {
 			t.Error("expected chart to be full width on sm+ when no target weight is set")
@@ -179,7 +179,7 @@ func TestWeightPage_ChartIsFullWidthWithoutGoal(t *testing.T) {
 
 	t.Run("with goal", func(t *testing.T) {
 		target := 80.0
-		html := renderToString(t, WeightPage(entries, "Test User", true, false, &target))
+		html := renderToString(t, WeightPage(entries, "Test User", true, false, &target, "kg"))
 		// Chart wrapper DOES carry sm:w-3/4 when a goal is set.
 		if !strings.Contains(html, "sm:w-3/4") {
 			t.Error("expected chart to be 3/4 width on sm+ when a target weight is set")
@@ -196,7 +196,7 @@ func TestWeightPage_ChartIsFullWidthWithoutGoal(t *testing.T) {
 // the progress card (which would index into an empty slice).
 func TestWeightPage_ProgressCardHiddenWithoutEntries(t *testing.T) {
 	target := 80.0
-	html := renderToString(t, WeightPage(nil, "Test User", true, false, &target))
+	html := renderToString(t, WeightPage(nil, "Test User", true, false, &target, "kg"))
 	if strings.Contains(html, "Progress") {
 		t.Error("expected progress card to be omitted when there are no entries")
 	}
@@ -217,7 +217,7 @@ func TestWeightRow_RendersCompareCheckboxWhenPhoto(t *testing.T) {
 		PhotoKey:  "weight/u1/abc.jpg",
 		CreatedAt: day,
 	}
-	html := renderToString(t, WeightRow(entry))
+	html := renderToString(t, WeightRow(entry, "kg"))
 	if !strings.Contains(html, `data-compare-pick`) {
 		t.Error("expected compare checkbox on a photo-bearing row")
 	}
@@ -237,7 +237,7 @@ func TestWeightRow_HidesCompareCheckboxWhenNoPhoto(t *testing.T) {
 		PhotoKey:  "",
 		CreatedAt: day,
 	}
-	html := renderToString(t, WeightRow(entry))
+	html := renderToString(t, WeightRow(entry, "kg"))
 	if strings.Contains(html, `data-compare-pick`) {
 		t.Errorf("expected no compare checkbox on a photo-less row, got: %s", html)
 	}
@@ -253,7 +253,7 @@ func TestWeightPage_RendersCompareBarAndModalContainer(t *testing.T) {
 		{ID: "w1", Weight: 80, PhotoKey: "weight/u1/a.jpg", CreatedAt: day1},
 		{ID: "w2", Weight: 79, PhotoKey: "weight/u1/b.jpg", CreatedAt: day2},
 	}
-	html := renderToString(t, WeightPage(entries, "Test User", true, false, nil))
+	html := renderToString(t, WeightPage(entries, "Test User", true, false, nil, "kg"))
 	if !strings.Contains(html, `id="weight-compare-bar"`) {
 		t.Error("expected compare bar in page")
 	}
@@ -430,7 +430,7 @@ func TestWeightPage_RendersExportLinkWithEntries(t *testing.T) {
 	entries := []models.WeightEntry{
 		{ID: "w1", Weight: 80, CreatedAt: day},
 	}
-	html := renderToString(t, WeightPage(entries, "Test User", true, false, nil))
+	html := renderToString(t, WeightPage(entries, "Test User", true, false, nil, "kg"))
 
 	if !strings.Contains(html, `id="weight-export-link"`) {
 		t.Error("expected export link in header")
@@ -447,7 +447,7 @@ func TestWeightPage_RendersExportLinkWithEntries(t *testing.T) {
 // entries don't see an export button — exporting an empty zip would
 // just be a confusing no-op.
 func TestWeightPage_HidesExportLinkWhenEmpty(t *testing.T) {
-	html := renderToString(t, WeightPage(nil, "Test User", true, false, nil))
+	html := renderToString(t, WeightPage(nil, "Test User", true, false, nil, "kg"))
 	if strings.Contains(html, `id="weight-export-link"`) {
 		t.Error("expected no export link when the user has no entries")
 	}

@@ -217,7 +217,7 @@ func TestDashboard_WithEntries(t *testing.T) {
 	entries := []models.ExerciseEntry{
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
-	html := renderToString(t, Dashboard(entries, "Test User", true, false))
+	html := renderToString(t, Dashboard(entries, "Test User", true, false, "kg"))
 	if !strings.Contains(html, "7 Day History") {
 		t.Error("expected page title")
 	}
@@ -238,7 +238,7 @@ func TestDashboard_WithEntries(t *testing.T) {
 }
 
 func TestDashboard_Empty(t *testing.T) {
-	html := renderToString(t, Dashboard([]models.ExerciseEntry{}, "Test User", true, false))
+	html := renderToString(t, Dashboard([]models.ExerciseEntry{}, "Test User", true, false, "kg"))
 	if !strings.Contains(html, "No workouts in the last 7 days") {
 		t.Error("expected empty state when no entries")
 	}
@@ -254,7 +254,7 @@ func TestEntryList(t *testing.T) {
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 		{ID: "entry-2", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
 	}
-	html := renderToString(t, EntryList(entries))
+	html := renderToString(t, EntryList(entries, "kg"))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected Squat in output")
 	}
@@ -275,7 +275,7 @@ func TestEntryRow(t *testing.T) {
 		Notes:        "PR",
 		CreatedAt:    time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 	}
-	html := renderToString(t, EntryRow(entry))
+	html := renderToString(t, EntryRow(entry, "kg"))
 	if !strings.Contains(html, "Deadlift") {
 		t.Error("expected exercise name")
 	}
@@ -297,7 +297,7 @@ func TestRecentEntries_WithData(t *testing.T) {
 	entries := []models.ExerciseEntry{
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
-	html := renderToString(t, RecentEntries(entries))
+	html := renderToString(t, RecentEntries(entries, "kg"))
 	if !strings.Contains(html, "Recent Workouts") {
 		t.Error("expected section heading")
 	}
@@ -307,7 +307,7 @@ func TestRecentEntries_WithData(t *testing.T) {
 }
 
 func TestRecentEntries_Empty(t *testing.T) {
-	html := renderToString(t, RecentEntries([]models.ExerciseEntry{}))
+	html := renderToString(t, RecentEntries([]models.ExerciseEntry{}, "kg"))
 	if !strings.Contains(html, "No workouts in the last 7 days") {
 		t.Error("expected empty state")
 	}
@@ -328,7 +328,7 @@ func TestQuickStats(t *testing.T) {
 		{ExerciseName: "Squat", Weight: 100, CreatedAt: time.Now()},
 		{ExerciseName: "Bench Press", Weight: 80, CreatedAt: time.Now()},
 	}
-	html := renderToString(t, QuickStats(entries))
+	html := renderToString(t, QuickStats(entries, "kg"))
 	if !strings.Contains(html, "Last 7 Days") {
 		t.Error("expected heading")
 	}

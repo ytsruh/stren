@@ -39,7 +39,7 @@ func TestChartDataForExercise(t *testing.T) {
 		{Weight: 85, CreatedAt: day1Evening},
 		{Weight: 90, CreatedAt: day3},
 	}
-	props := chartDataForExercise(entries, "Squat")
+	props := chartDataForExercise(entries, "Squat", "kg")
 	if props.ID != "exercise-history-chart" {
 		t.Errorf("ID = %q, want %q", props.ID, "exercise-history-chart")
 	}
@@ -71,7 +71,7 @@ func TestChartDataForExercise(t *testing.T) {
 }
 
 func TestChartDataForExercise_Empty(t *testing.T) {
-	props := chartDataForExercise(nil, "Squat")
+	props := chartDataForExercise(nil, "Squat", "kg")
 	if len(props.Labels) != 0 {
 		t.Errorf("expected no labels for empty input, got %v", props.Labels)
 	}
@@ -85,7 +85,7 @@ func TestEntryForm_New(t *testing.T) {
 		{ID: "ex-1", Name: "Squat"},
 		{ID: "ex-2", Name: "Bench Press"},
 	}
-	html := renderToString(t, EntryForm(types, "", "Test User", true, false))
+	html := renderToString(t, EntryForm(types, "", "Test User", true, false, "kg"))
 	if !strings.Contains(html, "New Entry") {
 		t.Error("expected new entry title")
 	}
@@ -184,7 +184,7 @@ func TestEditEntryForm(t *testing.T) {
 		Notes:        "good",
 		CreatedAt:    time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 	}
-	html := renderToString(t, EditEntryForm(entry, "Test User", true, false))
+	html := renderToString(t, EditEntryForm(entry, "Test User", true, false, "kg"))
 	if !strings.Contains(html, "Edit Entry") {
 		t.Error("expected edit title")
 	}
@@ -238,7 +238,7 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 		},
 		Page: 1,
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg"))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected exercise name heading")
 	}
@@ -253,7 +253,7 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 func TestExerciseHistory_Empty(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{Page: 1}
-	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg"))
 	if !strings.Contains(html, "No entries yet") {
 		t.Error("expected empty state")
 	}
@@ -273,7 +273,7 @@ func TestExerciseHistory_RendersChart(t *testing.T) {
 		{Weight: 85, CreatedAt: time.Date(2024, 6, 12, 9, 0, 0, 0, time.UTC)},
 		{Weight: 90, CreatedAt: time.Date(2024, 6, 15, 9, 0, 0, 0, time.UTC)},
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, chartEntries, "Test User", true, false, "kg"))
 	if !strings.Contains(html, `id="exercise-history-chart"`) {
 		t.Error("expected chart canvas with id exercise-history-chart")
 	}
@@ -310,7 +310,7 @@ func TestExerciseHistory_OmitsChartWhenSingleDay(t *testing.T) {
 		{Weight: 80, CreatedAt: sameDay},
 		{Weight: 85, CreatedAt: sameDay.Add(time.Hour)},
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, chartEntries, "Test User", true, false, "kg"))
 	if strings.Contains(html, `id="exercise-history-chart"`) {
 		t.Error("expected chart to be omitted when only one unique day is present")
 	}
@@ -323,7 +323,7 @@ func TestHistoryTable_NoPagerWhenSinglePage(t *testing.T) {
 		},
 		Page: 1,
 	}
-	html := renderToString(t, HistoryTable("ex-1", page))
+	html := renderToString(t, HistoryTable("ex-1", page, "kg"))
 	if !strings.Contains(html, historyTableWrapID) {
 		t.Error("expected swappable wrap region to be present")
 	}
@@ -339,7 +339,7 @@ func TestHistoryTable_NoPagerWhenSinglePage(t *testing.T) {
 func TestExerciseHistory_RendersChartButton(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{Page: 1}
-	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg"))
 	if !strings.Contains(html, `href="/exercises/ex-1/chart"`) {
 		t.Error("expected Chart link pointing at /exercises/ex-1/chart")
 	}
@@ -354,7 +354,7 @@ func TestExerciseHistory_RendersChartButton(t *testing.T) {
 		Stats: models.HistoryStats{MaxWeight: 100},
 		Page:  1,
 	}
-	populatedHTML := renderToString(t, ExerciseHistory(exercise, populatedPage, nil, "Test User", true, false))
+	populatedHTML := renderToString(t, ExerciseHistory(exercise, populatedPage, nil, "Test User", true, false, "kg"))
 	if !strings.Contains(populatedHTML, `href="/exercises/ex-1/chart"`) {
 		t.Error("expected Chart link in populated history view as well")
 	}
@@ -376,7 +376,7 @@ func TestExerciseChart(t *testing.T) {
 		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: day1},
 		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: day2},
 	}
-	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false, "kg"))
 
 	// Button group container with the documented basecoat class.
 	if !strings.Contains(html, `class="button-group"`) {
@@ -431,7 +431,7 @@ func TestExerciseChart_RendersFullWidthChartCard(t *testing.T) {
 		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: now.AddDate(0, 0, 7)},
 		{ID: "e3", Reps: 3, Weight: 110, CreatedAt: now.AddDate(0, 0, 14)},
 	}
-	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false, "kg"))
 
 	// Card container wraps the chart.
 	if !strings.Contains(html, `<div class="card p-4">`) {
@@ -492,7 +492,7 @@ func TestExerciseChart_EmptyState(t *testing.T) {
 	}
 	for name, entries := range cases {
 		t.Run(name, func(t *testing.T) {
-			html := renderToString(t, ExerciseChart(exercise, entries, "Test User", true, false))
+			html := renderToString(t, ExerciseChart(exercise, entries, "Test User", true, false, "kg"))
 			if !strings.Contains(html, "Log at least 2 sessions to see your progression.") {
 				t.Errorf("expected friendly empty-state message for %q", name)
 			}
@@ -521,7 +521,7 @@ func TestExerciseChart_AggregatesMaxWeightPerDay(t *testing.T) {
 		{ID: "e3", Reps: 5, Weight: 112, CreatedAt: day2morning}, // day2: 112 (max)
 		{ID: "e4", Reps: 5, Weight: 108, CreatedAt: day2evening}, // day2: 108 (not max)
 	}
-	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false, "kg"))
 
 	re := regexp.MustCompile(`<script id="exercise-chart-data" type="application/json">([\s\S]*?)</script>`)
 	m := re.FindStringSubmatch(html)
@@ -568,7 +568,7 @@ func TestExerciseChartAdvanced(t *testing.T) {
 		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
 		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)},
 	}
-	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false, "kg"))
 
 	if !strings.Contains(html, `class="button-group"`) {
 		t.Error("expected basecoat button-group container")
@@ -618,7 +618,7 @@ func TestExerciseChartAdvanced_RendersScatterCard(t *testing.T) {
 		{ID: "e2", Reps: 3, Weight: 110, CreatedAt: now.AddDate(0, 0, 1)},
 		{ID: "e3", Reps: 8, Weight: 90, CreatedAt: now.AddDate(0, 0, 2)},
 	}
-	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false, "kg"))
 
 	if !strings.Contains(html, `<div class="card p-4">`) {
 		t.Error("expected full-width card container with p-4 padding")
@@ -680,7 +680,7 @@ func TestExerciseChartAdvanced_EmptyState(t *testing.T) {
 	}
 	for name, entries := range cases {
 		t.Run(name, func(t *testing.T) {
-			html := renderToString(t, ExerciseChartAdvanced(exercise, entries, "Test User", true, false))
+			html := renderToString(t, ExerciseChartAdvanced(exercise, entries, "Test User", true, false, "kg"))
 			if !strings.Contains(html, "Log at least 2 sets to see your volume profile.") {
 				t.Errorf("expected friendly empty-state message for %q", name)
 			}
@@ -708,7 +708,7 @@ func TestExerciseChartAdvanced_PlotsEverySet(t *testing.T) {
 		{ID: "e2", Reps: 3, Weight: 110, CreatedAt: day1evening},
 		{ID: "e3", Reps: 5, Weight: 112, CreatedAt: day2morning},
 	}
-	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false, "kg"))
 
 	re := regexp.MustCompile(`<script id="exercise-chart-advanced-data" type="application/json">([\s\S]*?)</script>`)
 	m := re.FindStringSubmatch(html)
@@ -758,7 +758,7 @@ func TestHistoryTable_ShowsNextAndPrev(t *testing.T) {
 		HasPrev: true,
 		HasNext: true,
 	}
-	html := renderToString(t, HistoryTable("ex-1", page))
+	html := renderToString(t, HistoryTable("ex-1", page, "kg"))
 	if !strings.Contains(html, `aria-label="Previous page"`) {
 		t.Error("expected Previous button on a middle page")
 	}

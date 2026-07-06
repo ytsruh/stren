@@ -7,11 +7,16 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"stren/internal/models"
 	"stren/internal/utils"
 )
 
 // authContextKey is used to store auth claims in the Echo context.
 const authContextKey = "auth_claims"
+
+// userContextKey is used to cache the authenticated user on the Echo
+// context so multiple handlers in the same request only hit the DB once.
+const userContextKey = "auth_user"
 
 // AuthMiddleware returns an Echo middleware function that verifies the auth cookie
 // and injects the user claims into the request context.
@@ -83,6 +88,35 @@ func GetClaims(c echo.Context) *utils.Claims {
 		return nil
 	}
 	return claims
+}
+
+// GetUser returns the authenticated user for the current request, loading
+// it from the user repo on first access and caching the result on the
+// Echo context. Subsequent calls in the same request are an in-memory
+// lookup, so multiple handlers that need the user (or different fields
+// of the user) only trigger one DB read.
+//
+// Returns nil when there are no claims (e.g. on a public route) or the
+// DB read fails. Callers are expected to handle a nil user — typically
+// by falling back to safe defaults (e.g. "kg" for the weight unit) or
+// hiding optional widgets (e.g. the target-weight progress card).
+func (h *Handler) GetUser(c echo.Context) *models.User {
+	if cached, ok := c.Get(userContextKey).(*models.User); ok {
+		return cached
+	}
+	claims := GetClaims(c)
+	if claims == nil {
+		return nil
+	}
+	user, err := h.userRepo.GetUserByID(claims.UserID)
+	if err != nil {
+		c.Logger().Errorf("GetUser: %v", err)
+		return nil
+	}
+	if user != nil {
+		c.Set(userContextKey, user)
+	}
+	return user
 }
 
 // AdminMiddleware returns an Echo middleware function that restricts access

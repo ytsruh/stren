@@ -7,8 +7,10 @@ import (
 	"stren/internal/views/components"
 )
 
-// WeightForm renders the form for creating a new weight entry
-templ WeightForm(userName string, isAuthenticated bool, isAdmin bool) {
+// WeightForm renders the form for creating a new weight entry.
+// weightUnit is the user's preferred unit ("kg" / "lbs") and drives
+// the weight input's label.
+templ WeightForm(userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: "New Weight Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Weight Entry"})
 		<form
@@ -20,7 +22,7 @@ templ WeightForm(userName string, isAuthenticated bool, isAdmin bool) {
 		>
 			<fieldset class="grid gap-4">
 				<div class="grid gap-2">
-					<label for="weight">Weight (kg)</label>
+					<label for="weight">Weight ({ weightUnit })</label>
 					<input
 						class="input"
 						type="number"
@@ -69,8 +71,9 @@ templ WeightForm(userName string, isAuthenticated bool, isAdmin bool) {
 	}
 }
 
-// EditWeightForm renders the form for editing an existing weight entry
-templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool) {
+// EditWeightForm renders the form for editing an existing weight entry.
+// weightUnit is the user's preferred unit and drives the weight input's label.
+templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: "Edit Weight Entry", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="w-full flex items-center justify-between">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Weight Entry"})
@@ -100,7 +103,7 @@ templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated
 		>
 			<fieldset class="grid gap-4">
 				<div class="grid gap-2">
-					<label for="weight">Weight (kg)</label>
+					<label for="weight">Weight ({ weightUnit })</label>
 					<input
 						class="input"
 						type="number"

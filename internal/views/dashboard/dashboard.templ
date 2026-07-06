@@ -9,8 +9,10 @@ import (
 	"time"
 )
 
-// Dashboard renders the main dashboard page
-templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+// Dashboard renders the main dashboard page.
+// weightUnit is the user's preferred unit ("kg" / "lbs") and
+// drives the per-row "Weight" column and the "Total Volume" stat.
+templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<section class="mb-8">
 			<div class="grid grid-cols-2 gap-2 sm:gap-4">
@@ -28,14 +30,16 @@ templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated
 				<div class="card p-4 h-72 sm:h-80">
 					@components.DonutChart(popularExercisesChartProps(entries))
 				</div>
-				@EntryList(entries)
+				@EntryList(entries, weightUnit)
 			</section>
 		}
 	}
 }
 
-// EntryList renders a table of entries
-templ EntryList(entries []models.ExerciseEntry) {
+// EntryList renders a table of entries.
+// weightUnit is forwarded to EntryRow so the "Weight" column is
+// labelled with whatever unit the user prefers.
+templ EntryList(entries []models.ExerciseEntry, weightUnit string) {
 	<table class="table w-full">
 		<thead>
 			<tr>
@@ -49,14 +53,16 @@ templ EntryList(entries []models.ExerciseEntry) {
 		</thead>
 		<tbody id="entries-table">
 			for _, entry := range entries {
-				@EntryRow(entry)
+				@EntryRow(entry, weightUnit)
 			}
 		</tbody>
 	</table>
 }
 
-// EntryRow renders a single entry row (used for htmx swaps)
-templ EntryRow(entry models.ExerciseEntry) {
+// EntryRow renders a single entry row (used for htmx swaps).
+// weightUnit is passed to entry.FormattedWeight so the cell shows
+// the user's preferred unit instead of always "kg".
+templ EntryRow(entry models.ExerciseEntry, weightUnit string) {
 	<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
 		<td>{ entry.FormattedDate() }</td>
 		<td>
@@ -66,7 +72,7 @@ templ EntryRow(entry models.ExerciseEntry) {
 			</a>
 		</td>
 		<td class="hidden sm:table-cell">{ fmt.Sprintf("%d", entry.Reps) }</td>
-		<td class="hidden sm:table-cell">{ entry.FormattedWeight() }</td>
+		<td class="hidden sm:table-cell">{ entry.FormattedWeight(weightUnit) }</td>
 		<td class="hidden lg:table-cell">{ entry.Notes }</td>
 		<td>
 			<div class="flex gap-2">
@@ -88,19 +94,21 @@ templ DeletedRow() {
 }
 
 // RecentEntries shows the most recent entries on the dashboard
-templ RecentEntries(entries []models.ExerciseEntry) {
+templ RecentEntries(entries []models.ExerciseEntry, weightUnit string) {
 	<section>
 		<h2 class="mb-4">Recent Workouts</h2>
 		if len(entries) == 0 {
 			@views.EmptyState()
 		} else {
-			@EntryList(entries)
+			@EntryList(entries, weightUnit)
 		}
 	</section>
 }
 
-// QuickStats shows some basic statistics
-templ QuickStats(entries []models.ExerciseEntry) {
+// QuickStats shows some basic statistics.
+// weightUnit is used for the "Total Volume" stat so the value is
+// labelled with whatever unit the user prefers.
+templ QuickStats(entries []models.ExerciseEntry, weightUnit string) {
 	<section class="mt-8">
 		<h3 class="flex items-center gap-2 mb-4">
 			@components.Icon(components.IconProps{Name: "calendar", Size: 20})
@@ -109,7 +117,7 @@ templ QuickStats(entries []models.ExerciseEntry) {
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			@components.StatCard(components.StatCardProps{Label: "Total Sets", Value: fmt.Sprintf("%d", len(entries))})
 			@components.StatCard(components.StatCardProps{Label: "Unique Exercises", Value: fmt.Sprintf("%d", countUniqueExercises(entries))})
-			@components.StatCard(components.StatCardProps{Label: "Total Volume", Value: fmt.Sprintf("%.0f kg", calculateVolume(entries))})
+			@components.StatCard(components.StatCardProps{Label: "Total Volume", Value: models.FormatWeight(calculateVolume(entries), weightUnit)})
 		</div>
 	</section>
 }

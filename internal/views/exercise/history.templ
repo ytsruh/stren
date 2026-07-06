@@ -23,7 +23,11 @@ const historySpinnerID = "history-spinner"
 // chartEntries is the most recent slice of entries used to drive the line
 // chart shown next to the stat cards. May be nil or short; the chart
 // renders nothing when fewer than 2 unique calendar days are present.
-templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPage, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+//
+// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
+// stat-card values, the chart's dataset label, and the table's "Weight"
+// column.
+templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPage, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="">
 			<div class="flex items-center justify-between mb-2 gap-4">
@@ -128,9 +132,9 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 			</div>
 		} else {
 			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: fmt.Sprintf("%.1f kg", page.Stats.LastSet.Weight)})
-				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: fmt.Sprintf("%.1f kg", page.Stats.MaxWeight)})
-				{{ chartProps := chartDataForExercise(chartEntries, exercise.Name) }}
+				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: models.FormatWeight(page.Stats.LastSet.Weight, weightUnit)})
+				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: models.FormatWeight(page.Stats.MaxWeight, weightUnit)})
+				{{ chartProps := chartDataForExercise(chartEntries, exercise.Name, weightUnit) }}
 				if len(chartProps.Labels) >= 2 {
 					<div class="col-span-2 card p-2">
 						<div class="h-28 sm:h-32 md:h-48">
@@ -143,7 +147,7 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 				@components.Icon(components.IconProps{Name: "dumbbell", Size: 20})
 				History
 			</h3>
-			@HistoryTable(exercise.ID, page)
+			@HistoryTable(exercise.ID, page, weightUnit)
 		}
 	}
 }
@@ -151,7 +155,10 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 // HistoryTable renders the paginated table of entries plus the previous / next
 // controls. It is also the swap target for htmx-driven page changes: the
 // outer wrapper carries an id so the response replaces it via outerHTML.
-templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage) {
+//
+// weightUnit is forwarded to entry.FormattedWeight so each row's "Weight"
+// cell is labelled with the user's preferred unit.
+templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage, weightUnit string) {
 	<div id={ historyTableWrapID } class="mb-4">
 		<div class="overflow-x-auto">
 			<table class="table">
@@ -169,7 +176,7 @@ templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage) {
 						<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
 							<td>{ entry.FormattedDate() }</td>
 							<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
-							<td>{ entry.FormattedWeight() }</td>
+							<td>{ entry.FormattedWeight(weightUnit) }</td>
 							<td>{ entry.Notes }</td>
 							<td>
 								<a
@@ -211,7 +218,10 @@ templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage) {
 // The chart's title reports how many raw entries fed it (e.g. "Last 30 Sets")
 // so the user can tell at a glance how much history the line represents. The
 // chart component itself renders nothing when there are fewer than 2 labels.
-func chartDataForExercise(entries []models.ExerciseEntry, exerciseName string) components.ChartProps {
+//
+// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
+// dataset label so the chart legend matches the user's setting.
+func chartDataForExercise(entries []models.ExerciseEntry, exerciseName string, weightUnit string) components.ChartProps {
 	days := aggregateEntriesByDay(entries)
 	labels, values := dayLabelsAndValues(days, "02 Jan")
 	return components.ChartProps{
@@ -219,9 +229,9 @@ func chartDataForExercise(entries []models.ExerciseEntry, exerciseName string) c
 		Title:  fmt.Sprintf("Last %d Sets", len(entries)),
 		Labels: labels,
 		Datasets: []components.ChartDataset{
-			{Label: exerciseName + " (kg)", Values: values},
+			{Label: fmt.Sprintf("%s (%s)", exerciseName, weightUnit), Values: values},
 		},
-		// Hide the tick labels: the dates on x and the kg values on y would
+		// Hide the tick labels: the dates on x and the weight values on y would
 		// overflow at this size. The y axis line and gridlines stay so the
 		// line still has scale context, and tooltips still show exact values
 		// on hover. The chart's own wrapper fills its parent; the view places

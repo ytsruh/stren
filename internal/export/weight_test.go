@@ -73,7 +73,7 @@ func mustReadCSV(t *testing.T, b []byte) [][]string {
 // gets a valid zip containing the header CSV row and an empty manifest.
 func TestBuildWeightZip_EmptyInput(t *testing.T) {
 	var buf bytes.Buffer
-	res, err := BuildWeightZip(context.Background(), &buf, nil, &fakePhotos{}, "user-1")
+	res, err := BuildWeightZip(context.Background(), &buf, nil, &fakePhotos{}, "user-1", "kg")
 	if err != nil {
 		t.Fatalf("BuildWeightZip: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestBuildWeightZip_EmptyInput(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 CSV row (header only), got %d", len(rows))
 	}
-	wantHeader := []string{"id", "created_at", "date", "weight_kg", "notes", "photo_filename"}
+	wantHeader := []string{"id", "created_at", "date", "weight", "weight_unit", "notes", "photo_filename"}
 	if !equalRow(rows[0], wantHeader) {
 		t.Errorf("csv header = %v, want %v", rows[0], wantHeader)
 	}
@@ -132,7 +132,7 @@ func TestBuildWeightZip_MixedEntries(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	res, err := BuildWeightZip(context.Background(), &buf, entries, photos, "u1")
+	res, err := BuildWeightZip(context.Background(), &buf, entries, photos, "u1", "kg")
 	if err != nil {
 		t.Fatalf("BuildWeightZip: %v", err)
 	}
@@ -161,13 +161,20 @@ func TestBuildWeightZip_MixedEntries(t *testing.T) {
 		}
 	}
 
+	// weight_unit column is filled on every row with the value passed in.
+	for i := 1; i < len(rows); i++ {
+		if rows[i][4] != "kg" {
+			t.Errorf("row %d weight_unit = %q, want kg", i, rows[i][4])
+		}
+	}
+
 	// The middle entry has a photo; CSV should reference it.
 	mid := rows[2]
-	if mid[5] == "" {
+	if mid[6] == "" {
 		t.Errorf("expected photo_filename on the second entry, got empty")
 	}
 	// And that filename must exist inside the photos/ dir of the zip.
-	photoPath := "photos/" + mid[5]
+	photoPath := "photos/" + mid[6]
 	if _, ok := files[photoPath]; !ok {
 		t.Errorf("expected %q in zip, but it's missing", photoPath)
 	}
@@ -213,7 +220,7 @@ func TestBuildWeightZip_MissingPhotoInR2(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	res, err := BuildWeightZip(context.Background(), &buf, entries, photos, "u1")
+	res, err := BuildWeightZip(context.Background(), &buf, entries, photos, "u1", "lbs")
 	if err != nil {
 		t.Fatalf("BuildWeightZip: %v", err)
 	}
@@ -229,11 +236,15 @@ func TestBuildWeightZip_MissingPhotoInR2(t *testing.T) {
 	if len(rows) != 3 {
 		t.Fatalf("expected header + 2 rows, got %d", len(rows))
 	}
-	if rows[1][5] == "" {
+	if rows[1][6] == "" {
 		t.Errorf("expected photo_filename on ok row, got empty")
 	}
-	if rows[2][5] != "" {
-		t.Errorf("expected empty photo_filename on broken row, got %q", rows[2][5])
+	if rows[2][6] != "" {
+		t.Errorf("expected empty photo_filename on broken row, got %q", rows[2][6])
+	}
+	// weight_unit column is filled on every row with the value passed in.
+	if rows[1][4] != "lbs" || rows[2][4] != "lbs" {
+		t.Errorf("weight_unit column = (%q, %q), want (lbs, lbs)", rows[1][4], rows[2][4])
 	}
 
 	var mf struct {
@@ -260,7 +271,7 @@ func TestBuildWeightZip_CSVEscaping(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if _, err := BuildWeightZip(context.Background(), &buf, entries, &fakePhotos{}, "u1"); err != nil {
+	if _, err := BuildWeightZip(context.Background(), &buf, entries, &fakePhotos{}, "u1", "kg"); err != nil {
 		t.Fatalf("BuildWeightZip: %v", err)
 	}
 
@@ -270,8 +281,8 @@ func TestBuildWeightZip_CSVEscaping(t *testing.T) {
 		t.Fatalf("expected header + 1 row, got %d", len(rows))
 	}
 	want := `has, comma and "quote" and` + "\nnewline"
-	if rows[1][4] != want {
-		t.Errorf("csv notes = %q, want %q", rows[1][4], want)
+	if rows[1][5] != want {
+		t.Errorf("csv notes = %q, want %q", rows[1][5], want)
 	}
 }
 
@@ -293,7 +304,7 @@ func TestBuildWeightZip_PhotosSortedByDate(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	if _, err := BuildWeightZip(context.Background(), &buf, entries, photos, "u1"); err != nil {
+	if _, err := BuildWeightZip(context.Background(), &buf, entries, photos, "u1", "kg"); err != nil {
 		t.Fatalf("BuildWeightZip: %v", err)
 	}
 

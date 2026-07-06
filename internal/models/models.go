@@ -61,9 +61,33 @@ type ExerciseHistoryPage struct {
 	HasNext bool
 }
 
-// FormattedWeight returns the weight with unit
-func (e *ExerciseEntry) FormattedWeight() string {
-	return fmt.Sprintf("%.1f kg", e.Weight)
+// FormattedWeight returns the weight labelled with the given unit.
+// No conversion happens — the value is rendered as "%.1f <unit>" so
+// the number is displayed using whatever unit the user prefers.
+func (e *ExerciseEntry) FormattedWeight(unit string) string {
+	return FormatWeight(e.Weight, unit)
+}
+
+// FormatWeight returns a human-readable weight string using the
+// given unit. No conversion happens — the value is labelled with
+// whatever unit the caller passes. Use everywhere a weight is
+// shown to a user (display, chart labels, form labels) or written
+// to a CSV.
+func FormatWeight(value float64, unit string) string {
+	return fmt.Sprintf("%.1f %s", value, unit)
+}
+
+// NormalizeWeightUnit returns a clean "kg" or "lbs", or "kg" if
+// the input is empty or unrecognised. Use at trust boundaries
+// (e.g. reading a value from a form or the DB) so downstream code
+// can rely on a normalised value.
+func NormalizeWeightUnit(unit string) string {
+	switch unit {
+	case "kg", "lbs":
+		return unit
+	default:
+		return "kg"
+	}
 }
 
 // FormattedDate returns a human-readable date in UK short format

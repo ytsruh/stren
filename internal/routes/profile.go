@@ -43,21 +43,24 @@ func (h *Handler) Profile(c echo.Context) error {
 		hasSubscription = false
 	}
 
-	// Fetch the user to pre-populate the target_weight and weight_unit fields.
-	// A missing user (shouldn't happen — claims came from a verified JWT)
-	// is treated as a user with no goal and the default unit.
-	user, err := h.userRepo.GetUserByID(claims.UserID)
-	if err != nil {
-		c.Logger().Errorf("failed to load user for profile: %v", err)
-		user = &models.User{WeightUnit: defaultWeightUnit}
+	// GetUser caches the user on the request context, so this is a
+	// single DB read. A missing user (shouldn't happen — claims came
+	// from a verified JWT) is treated as a user with no goal and the
+	// default unit.
+	user := h.GetUser(c)
+	var target *float64
+	unit := defaultWeightUnit
+	if user != nil {
+		target = user.TargetWeight
+		unit = user.WeightUnitDisplay()
 	}
 
 	return render(c, profile.ProfilePage(
 		claims.Name,
 		claims.Email,
 		claims.IsAdmin,
-		user.TargetWeight,
-		user.WeightUnit,
+		target,
+		unit,
 		h.pushConfigured,
 		hasSubscription,
 		h.vapidPublicKey,
