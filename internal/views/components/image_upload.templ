@@ -9,6 +9,14 @@ import "fmt"
 // text. CurrentURL / CurrentKey / CurrentOriginalKey pre-populate
 // the preview and hidden inputs on edit forms. MaxSizeMB is the
 // client-side pre-check; the server enforces the same cap.
+//
+// RemoveFieldName is the form field name used to signal "delete the
+// current image on save" (default "clear_image"). The widget renders
+// a hidden input with that name plus a "Remove img" button; clicking
+// the button prompts the global #confirm-dialog and, on confirm,
+// flips the hidden field to "true" and fades the preview. A second
+// click reverses both. RemoveLabel is the title/tooltip on the
+// button.
 type ImageUploadProps struct {
 	Name               string
 	Label              string
@@ -17,6 +25,8 @@ type ImageUploadProps struct {
 	CurrentOriginalKey string
 	MaxSizeMB          int
 	UploadEndpoint     string
+	RemoveFieldName    string
+	RemoveLabel        string
 	// AspectWidth / AspectHeight define the visual frame the
 	// preview should match. The cropped output from the server is
 	// guaranteed to have this ratio, so the preview never jumps
@@ -26,17 +36,23 @@ type ImageUploadProps struct {
 }
 
 // ImageUpload renders an image upload widget that:
-//   1. Optionally shows the current image (CurrentURL) above the input.
-//   2. Lets the user pick a new file; on change, JS POSTs the file
-//      as multipart to UploadEndpoint, which returns a pair of
-//      storage keys (display + original), and stashes them in the
-//      hidden inputs.
+//  1. Optionally shows the current image (CurrentURL) above the
+//     input, with a "Remove img" button that asks for confirmation
+//     before marking the image for deletion on save.
+//  2. Lets the user pick a new file; the file input is rendered
+//     with htmx attributes so the file uploads to UploadEndpoint
+//     on change, the server's response is a views.Toast that
+//     htmx swaps into #toaster, and the server signals the new
+//     storage keys back via the HX-Trigger response header
+//     (`image-uploaded` event). The widget listens for that event
+//     and copies the keys into the form's hidden inputs so they
+//     survive until the exercise form is saved.
 //
-// On form submit, the hidden `img_key` and `img_key_original`
-// fields are posted back to the server alongside the rest of the
-// form. The server is the only thing that knows the keys map to
-// valid R2 objects — the keys are populated exclusively via the
-// upload endpoint.
+// On form submit, the hidden `img_key`, `img_key_original`, and
+// (when applicable) remove field are posted back to the server
+// alongside the rest of the form. The server is the only thing
+// that knows the keys map to valid R2 objects — the keys are
+// populated exclusively via the upload endpoint.
 templ ImageUpload(props ImageUploadProps) {
 	{{
 		name := props.Name
@@ -49,8 +65,18 @@ templ ImageUpload(props ImageUploadProps) {
 		}
 		endpoint := props.UploadEndpoint
 		if endpoint == "" {
-			endpoint = "/api/admin/exercises/image-upload"
+			endpoint = "/admin/exercises/image-upload"
 		}
+		removeField := props.RemoveFieldName
+		if removeField == "" {
+			removeField = "clear_image"
+		}
+		removeLabel := props.RemoveLabel
+		if removeLabel == "" {
+			removeLabel = "Remove image"
+		}
+		undoLabel := "Undo remove"
+		confirmMessage := "Remove this image? It will be deleted when you save."
 		aspectW := props.AspectWidth
 		aspectH := props.AspectHeight
 		if aspectW <= 0 {
@@ -60,11 +86,11 @@ templ ImageUpload(props ImageUploadProps) {
 			aspectH = 3
 		}
 		inputID := "image-input-" + name
-		previewID := "image-preview-" + name
+		currentID := "image-current-" + name
+		removeBtnID := "image-remove-" + name
+		removeFieldID := "image-remove-field-" + name
 		displayHiddenID := "image-key-display-" + name
 		originalHiddenID := "image-key-original-" + name
-		currentID := "image-current-" + name
-		spinnerID := "image-spinner-" + name
 		// aspectWidth% / aspectHeight% produce the right padding-bottom
 		// for an aspect-ratio frame: e.g. 4:3 = 75%, 16:9 = 56.25%.
 		aspectPercent := (aspectH * 100) / aspectW
@@ -75,20 +101,37 @@ templ ImageUpload(props ImageUploadProps) {
 	<div
 		class="grid gap-2"
 		data-image-upload={ name }
-		data-upload-endpoint={ templ.SafeURL(endpoint) }
-		data-max-size-mb={ templ.SafeURL(fmt.Sprintf("%d", maxSize)) }
+		data-remove-field={ removeField }
+		data-remove-label={ removeLabel }
+		data-undo-label={ undoLabel }
+		data-confirm-message={ confirmMessage }
 	>
 		<label for={ inputID }>{ props.Label }</label>
 		if props.CurrentURL != "" {
-			<div id={ currentID } class="flex items-start gap-4">
-				<div
-					class="relative w-full max-w-sm overflow-hidden rounded-md border bg-muted"
-					style={ fmt.Sprintf("padding-bottom: %d%%;", aspectPercent) }
-				>
+			<div class="flex items-start justify-between gap-3">
+				<div id={ currentID } class="relative flex-1 max-w-sm overflow-hidden rounded-md border bg-muted transition-opacity" style={ fmt.Sprintf("padding-bottom: %d%%;", aspectPercent) }>
 					<img
 						src={ templ.SafeURL(props.CurrentURL) }
 						alt="Current image"
 						class="absolute inset-0 size-full object-cover"
+					/>
+				</div>
+				<div class="flex items-center gap-2 pt-1">
+					<button
+						type="button"
+						id={ removeBtnID }
+						class="btn btn-sm-outline"
+						title={ removeLabel }
+						aria-label={ removeLabel }
+						data-state="idle"
+					>
+						Remove img
+					</button>
+					<input
+						type="hidden"
+						id={ removeFieldID }
+						name={ removeField }
+						value=""
 					/>
 				</div>
 			</div>
@@ -98,6 +141,11 @@ templ ImageUpload(props ImageUploadProps) {
 			type="file"
 			id={ inputID }
 			accept="image/jpeg,image/png"
+			hx-post={ templ.SafeURL(endpoint) }
+			hx-encoding="multipart/form-data"
+			hx-target="#toaster"
+			hx-swap="beforeend"
+			hx-trigger="change"
 		/>
 		<input
 			type="hidden"
@@ -111,133 +159,149 @@ templ ImageUpload(props ImageUploadProps) {
 			name="img_key_original"
 			value={ props.CurrentOriginalKey }
 		/>
-		<div class="flex items-center gap-3">
-			<div
-				id={ previewID }
-				class="relative hidden w-full max-w-sm overflow-hidden rounded-md border bg-muted"
-				style={ fmt.Sprintf("padding-bottom: %d%%;", aspectPercent) }
-			>
-				<img alt="New image preview" class="absolute inset-0 size-full object-cover"/>
-			</div>
-			<span id={ spinnerID } class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground">
-				<span class="animate-spin">
-					@Icon(IconProps{Name: "loader", Size: 14})
-				</span>
-				Uploading...
-			</span>
-		</div>
 	</div>
 	<script>
 		(function() {
-			var MAX_SIZE_MB = 10;
-			var ACCEPTED_TYPES = ['image/jpeg', 'image/png'];
-			// Mirror the Basecoat toast structure rendered by
-			// views.Toast in layout.templ. Keep in sync if the
-			// server-rendered toast changes.
-			var TOAST_ICONS = {
-				success: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>',
-				error: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>',
-				warning: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>',
-				default: '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>'
-			};
+			var REMOVE_TEXT = 'Remove img';
+			var UNDO_TEXT = 'Undo';
+			var REMOVED_TOAST = 'Image marked for removal — it will be deleted when you save.';
+			var CONFIRM_MESSAGE_DEFAULT = 'Remove this image? It will be deleted when you save.';
+
+			// showToast clones the hidden <template> rendered by
+			// the layout (toastTemplate) for the given category,
+			// fills in the title and description, and appends the
+			// clone to #toaster. The icon SVG and toast structure
+			// live in one place (the layout) so this widget doesn't
+			// duplicate them. Falls back to the "default" template
+			// if the requested category isn't present.
 			function showToast(category, title, message) {
 				var toaster = document.getElementById('toaster');
 				if (!toaster) return;
-				var cat = TOAST_ICONS[category] ? category : 'default';
-				var icon = TOAST_ICONS[cat];
-				var descHTML = message ? '<p>' + message + '</p>' : '';
-				var el = document.createElement('div');
-				el.className = 'toast';
-				el.setAttribute('role', 'status');
-				el.setAttribute('aria-atomic', 'true');
-				el.setAttribute('aria-hidden', 'false');
-				el.setAttribute('data-category', cat);
-				el.innerHTML = '<div class="toast-content">' + icon + '<section><h2>' + title + '</h2>' + descHTML + '</section></div>';
-				toaster.appendChild(el);
+				var template = document.getElementById('toast-template-' + category) || document.getElementById('toast-template-default');
+				if (!template) return;
+				var clone = template.content.cloneNode(true);
+				var h2 = clone.querySelector('[data-toast-title]');
+				if (h2) h2.textContent = title;
+				var p = clone.querySelector('[data-toast-description]');
+				if (p) {
+					if (message) {
+						p.textContent = message;
+						p.classList.remove('hidden');
+					} else {
+						p.remove();
+					}
+				}
+				toaster.appendChild(clone);
+			}
+
+			// openConfirm shows the global #confirm-dialog with the
+			// given message and resolves when the user clicks the
+			// OK button (or rejects when they cancel/close).
+			// The OK path must call dialog.close() itself — only the
+			// htmx:confirm handler in layout.templ gets a free
+			// close via htmx:afterRequest, and we're not on that
+			// path.
+			function openConfirm(message) {
+				return new Promise(function(resolve) {
+					var dialog = document.getElementById('confirm-dialog');
+					if (!dialog) {
+						resolve(window.confirm(message));
+						return;
+					}
+					var msgEl = document.getElementById('confirm-message');
+					var okBtn = document.getElementById('confirm-ok');
+					if (msgEl) msgEl.textContent = message;
+					var onClose = function() {
+						dialog.removeEventListener('close', onClose);
+						resolve(false);
+					};
+					dialog.addEventListener('close', onClose);
+					okBtn.onclick = function() {
+						dialog.removeEventListener('close', onClose);
+						dialog.close();
+						resolve(true);
+					};
+					dialog.showModal();
+				});
 			}
 
 			document.querySelectorAll('[data-image-upload]').forEach(function(root) {
 				if (root.dataset.bound === '1') return;
 				root.dataset.bound = '1';
 				var name = root.getAttribute('data-image-upload');
-				var endpoint = root.getAttribute('data-upload-endpoint') || '/api/admin/exercises/image-upload';
-				var maxMB = parseInt(root.getAttribute('data-max-size-mb') || '10', 10) || MAX_SIZE_MB;
-				var input = document.getElementById('image-input-' + name);
-				var preview = document.getElementById('image-preview-' + name);
+				var removeLabel = root.getAttribute('data-remove-label') || 'Remove image';
+				var undoLabel = root.getAttribute('data-undo-label') || 'Undo remove';
+				var confirmMessage = root.getAttribute('data-confirm-message') || CONFIRM_MESSAGE_DEFAULT;
+				var current = document.getElementById('image-current-' + name);
+				var removeBtn = document.getElementById('image-remove-' + name);
+				var removeField = document.getElementById('image-remove-field-' + name);
 				var displayHidden = document.getElementById('image-key-display-' + name);
 				var originalHidden = document.getElementById('image-key-original-' + name);
-				var current = document.getElementById('image-current-' + name);
-				var spinner = document.getElementById('image-spinner-' + name);
-				if (!input) return;
 
-				function clearPreview() {
-					if (preview) {
-						var img = preview.querySelector('img');
-						if (img) img.src = '';
-						preview.classList.add('hidden');
+				// setRemoveState flips the visual + hidden field to
+				// either 'pending' (image is being removed on save) or
+				// 'idle' (no pending removal). The hidden field is
+				// '' or 'true' — the route reads it as
+				// c.FormValue(...) == "true".
+				function setRemoveState(state) {
+					if (!removeBtn || !removeField) return;
+					if (state === 'pending') {
+						removeBtn.dataset.state = 'pending';
+						removeBtn.classList.remove('btn-sm-outline');
+						removeBtn.classList.add('btn-sm-destructive');
+						removeBtn.textContent = UNDO_TEXT;
+						removeBtn.title = undoLabel;
+						removeBtn.setAttribute('aria-label', undoLabel);
+						removeField.value = 'true';
+						if (current) current.style.opacity = '0.4';
+					} else {
+						removeBtn.dataset.state = 'idle';
+						removeBtn.classList.add('btn-sm-outline');
+						removeBtn.classList.remove('btn-sm-destructive');
+						removeBtn.textContent = REMOVE_TEXT;
+						removeBtn.title = removeLabel;
+						removeBtn.setAttribute('aria-label', removeLabel);
+						removeField.value = '';
+						if (current) current.style.opacity = '';
 					}
 				}
 
-				input.addEventListener('change', function() {
-					var file = input.files && input.files[0];
-					if (!file) {
-						clearPreview();
-						return;
-					}
-					if (ACCEPTED_TYPES.indexOf(file.type) === -1) {
-						showToast('error', 'Upload failed', 'Please select a JPEG or PNG image.');
-						input.value = '';
-						return;
-					}
-					if (file.size > maxMB * 1024 * 1024) {
-						showToast('error', 'Upload failed', 'File is too large. Max size is ' + maxMB + 'MB.');
-						input.value = '';
-						return;
-					}
-					// Local preview
-					var reader = new FileReader();
-					reader.onload = function(e) {
-						if (preview) {
-							var img = preview.querySelector('img');
-							if (img) img.src = e.target.result;
-							preview.classList.remove('hidden');
+				if (removeBtn) {
+					removeBtn.addEventListener('click', function(e) {
+						if (e && e.preventDefault) e.preventDefault();
+						var pending = removeBtn.dataset.state === 'pending';
+						if (pending) {
+							setRemoveState('idle');
+							return;
 						}
-					};
-					reader.readAsDataURL(file);
-
-					// POST the file as multipart to the upload endpoint.
-					var fd = new FormData();
-					fd.append('file', file);
-					spinner.classList.remove('htmx-indicator');
-					spinner.style.display = 'inline-flex';
-					fetch(endpoint, {
-						method: 'POST',
-						body: fd
-					}).then(function(r) {
-						if (!r.ok) {
-							return r.text().then(function(body) {
-								throw new Error(body || 'Upload failed (status ' + r.status + ')');
-							});
-						}
-						return r.json();
-					}).then(function(data) {
-						if (!data || !data.display_key) {
-							throw new Error('Upload response missing display_key');
-						}
-						if (displayHidden) displayHidden.value = data.display_key;
-						if (originalHidden) originalHidden.value = data.original_key || '';
-						// Fade the current-image block so the user
-						// can see the new image replaced it.
-						if (current) current.style.opacity = '0.4';
-						showToast('success', 'Image uploaded', 'Ready to save.');
-					}).catch(function(e) {
-						showToast('error', 'Upload failed', e.message || 'Unknown error');
-						input.value = '';
-						clearPreview();
-					}).finally(function() {
-						spinner.classList.add('htmx-indicator');
-						spinner.style.display = '';
+						openConfirm(confirmMessage).then(function(confirmed) {
+							if (!confirmed) return;
+							setRemoveState('pending');
+							// Confirm the action with a toast so the
+							// user knows their click registered.
+							// (The actual deletion happens on save.)
+							showToast('success', 'Image will be removed', REMOVED_TOAST);
+						});
 					});
+				}
+
+				// image-uploaded is fired by the server via the
+				// HX-Trigger response header on a successful upload.
+				// The detail contains the two storage keys; copy
+				// them into the form's hidden inputs so they
+				// survive until the exercise form is saved. Also
+				// reset the remove state (a fresh upload supersedes
+				// any pending remove) and fade the old image so the
+				// user can see the swap happened.
+				document.addEventListener('image-uploaded', function(evt) {
+					if (!evt.detail) return;
+					if (displayHidden && evt.detail.display_key) {
+						displayHidden.value = evt.detail.display_key;
+					}
+					if (originalHidden && evt.detail.original_key) {
+						originalHidden.value = evt.detail.original_key;
+					}
+					setRemoveState('idle');
 				});
 			});
 		})();

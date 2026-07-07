@@ -9,6 +9,7 @@ import (
 	"github.com/a-h/templ"
 
 	"stren/internal/models"
+	"stren/internal/utils"
 )
 
 // renderToString renders a templ component to a string for assertions.
@@ -25,15 +26,29 @@ func TestAdminExerciseForm_New_ContainsUploadWidget(t *testing.T) {
 	html := renderToString(t, AdminExerciseForm(AdminExerciseFormData{IsEdit: false}, "Admin", true, true))
 
 	// The ImageUpload widget must render with the expected data
-	// attributes so the JS can find the upload endpoint.
+	// attribute so the JS can find it.
 	if !strings.Contains(html, `data-image-upload="exercise"`) {
 		t.Error("expected data-image-upload attribute on the upload widget root")
 	}
-	if !strings.Contains(html, `data-upload-endpoint="/admin/exercises/image-upload"`) {
-		t.Error("expected data-upload-endpoint pointing at the admin image upload route")
+
+	// The file input is the upload trigger now — htmx posts the
+	// multipart file to the upload endpoint on change. The
+	// endpoint was previously a data attribute on the widget
+	// root; it's now on the input itself.
+	if !strings.Contains(html, `hx-post="/admin/exercises/image-upload"`) {
+		t.Error("expected hx-post pointing at the admin image upload route on the file input")
 	}
-	if !strings.Contains(html, `data-max-size-mb="10"`) {
-		t.Error("expected 10 MB max-size attribute on the upload widget")
+	if !strings.Contains(html, `hx-encoding="multipart/form-data"`) {
+		t.Error("expected hx-encoding=\"multipart/form-data\" on the file input")
+	}
+	if !strings.Contains(html, `hx-target="#toaster"`) {
+		t.Error("expected hx-target=\"#toaster\" on the file input")
+	}
+	if !strings.Contains(html, `hx-swap="beforeend"`) {
+		t.Error("expected hx-swap=\"beforeend\" on the file input")
+	}
+	if !strings.Contains(html, `hx-trigger="change"`) {
+		t.Error("expected hx-trigger=\"change\" on the file input")
 	}
 
 	// The hidden inputs the form submits back to the server must
@@ -52,10 +67,14 @@ func TestAdminExerciseForm_New_ContainsUploadWidget(t *testing.T) {
 		t.Error("legacy img_url text input must not appear on the new form")
 	}
 
-	// The "Remove current image" checkbox should only appear on
-	// the edit form when an image exists, never on the new form.
-	if strings.Contains(html, `id="clear_image"`) {
-		t.Error("clear_image checkbox must not appear on the new form")
+	// The "Remove current image" button + hidden field should only
+	// appear on the edit form when an image exists, never on the
+	// new form (the widget gates both on CurrentURL != "").
+	if strings.Contains(html, `id="image-remove-exercise"`) {
+		t.Error("image-remove button must not appear on the new form")
+	}
+	if strings.Contains(html, `name="clear_image"`) {
+		t.Error("clear_image hidden field must not appear on the new form")
 	}
 }
 
@@ -73,12 +92,12 @@ func TestAdminExerciseForm_Edit_NoImage_ContainsUploadWidget(t *testing.T) {
 		t.Error("expected empty img_key on edit form with no current image")
 	}
 	// No "Remove current image" control when there's no image.
-	if strings.Contains(html, `id="clear_image"`) {
-		t.Error("clear_image checkbox should not appear when there is no current image")
+	if strings.Contains(html, `id="image-remove-exercise"`) {
+		t.Error("image-remove button should not appear when there is no current image")
 	}
 }
 
-func TestAdminExerciseForm_Edit_WithImage_ContainsClearCheckbox(t *testing.T) {
+func TestAdminExerciseForm_Edit_WithImage_ContainsRemoveButton(t *testing.T) {
 	ex := &models.Exercise{
 		ID:             "ex-1",
 		Name:           "Squat",
@@ -97,32 +116,28 @@ func TestAdminExerciseForm_Edit_WithImage_ContainsClearCheckbox(t *testing.T) {
 		t.Error("expected img_key_original pre-populated with the current key")
 	}
 
-	// The "Remove current image" checkbox must appear on the edit
-	// form when the exercise already has an image.
-	if !strings.Contains(html, `id="clear_image"`) {
-		t.Error("expected clear_image checkbox on the edit form when an image exists")
+	// The form must thread the RemoveFieldName / RemoveLabel
+	// props through to the widget. The widget then renders the
+	// button + hidden field; the component-level test
+	// (image_upload_test.go) covers that rendering. Here we just
+	// verify the form passes the right values.
+	if !strings.Contains(html, `data-remove-field="clear_image"`) {
+		t.Error("expected data-remove-field attribute on the upload widget root")
 	}
-	if !strings.Contains(html, `name="clear_image"`) {
-		t.Error("expected clear_image name attribute")
-	}
-	if !strings.Contains(html, `value="true"`) {
-		t.Error("expected clear_image checkbox to submit value=true")
+	if !strings.Contains(html, `data-remove-label="Remove current image"`) {
+		t.Error("expected data-remove-label attribute on the upload widget root")
 	}
 
-	// The current image preview should be wired up with the
-	// public URL (the widget receives the resolved URL via
-	// CurrentURL, so we just check the key ends up in the hidden
-	// input — the actual public URL is computed by utils in the
-	// view, and a unit test against the rendered HTML can only
-	// see the absolute URL the template wrote).
-	if !strings.Contains(html, `name="img_key"`) {
-		t.Error("expected img_key input on the edit form")
+	// The legacy checkbox must be gone — only the button + hidden
+	// field should carry the "remove" intent.
+	if strings.Contains(html, `id="clear_image"`) {
+		t.Error("clear_image id must not be on a checkbox any more — it now belongs to a hidden field")
 	}
 }
 
 func TestAdminExerciseForm_Edit_UploadEndpointHardCoded(t *testing.T) {
-	// Regression guard: the ImageUpload widget's upload endpoint
-	// is a constant in the templ file. If a future refactor
+	// Regression guard: the ImageUpload widget hardcodes the admin
+	// upload endpoint on the file input. If a future refactor
 	// changes it to derive from a prop, this test ensures the
 	// admin form still POSTs to the admin route (not the generic
 	// /api path that the default UploadEndpoint value would
@@ -130,8 +145,8 @@ func TestAdminExerciseForm_Edit_UploadEndpointHardCoded(t *testing.T) {
 	ex := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	html := renderToString(t, AdminExerciseForm(AdminExerciseFormData{Exercise: ex, IsEdit: true}, "Admin", true, true))
 
-	if !strings.Contains(html, `data-upload-endpoint="/admin/exercises/image-upload"`) {
-		t.Errorf("expected /admin/exercises/image-upload endpoint, got html: %s", html)
+	if !strings.Contains(html, `hx-post="/admin/exercises/image-upload"`) {
+		t.Errorf("expected /admin/exercises/image-upload endpoint on file input, got html: %s", html)
 	}
 }
 
@@ -142,20 +157,40 @@ func TestAdminExerciseForm_PreviewAspectMatchesCard(t *testing.T) {
 	// admin form's preview must match that aspect so the admin
 	// sees roughly what users will see — not the raw 4:3 file
 	// aspect, which renders as a far taller rectangle.
+	//
+	// The preview div only renders when the widget has a CurrentURL
+	// (i.e. when storage is configured AND the exercise has an
+	// image). For the new form and the edit form without an image
+	// there's no preview to assert on. We load the storage config
+	// in the relevant subtests so the widget sees a non-empty URL.
+	for _, v := range []string{
+		"STORAGE_ENDPOINT", "STORAGE_ACCESS_KEY", "STORAGE_SECRET_KEY",
+		"STORAGE_BUCKET", "STORAGE_PUBLIC_URL",
+	} {
+		t.Setenv(v, "test")
+	}
+	if _, err := utils.LoadStorageConfig(); err != nil {
+		t.Fatalf("LoadStorageConfig: %v", err)
+	}
+
 	for _, tc := range []struct {
-		name   string
-		form   AdminExerciseFormData
+		name         string
+		form         AdminExerciseFormData
+		wantPadding  bool // true → preview div should be in the HTML
 	}{
 		{
 			name: "new form",
 			form: AdminExerciseFormData{IsEdit: false},
+			// No exercise, so no preview.
+			wantPadding: false,
 		},
 		{
 			name: "edit form with image",
 			form: AdminExerciseFormData{
-				IsEdit:           true,
-				Exercise:         &models.Exercise{ID: "ex-1", Name: "Squat", ImgURL: "exercises/abc.jpg"},
+				IsEdit:   true,
+				Exercise: &models.Exercise{ID: "ex-1", Name: "Squat", ImgURL: "exercises/abc.jpg"},
 			},
+			wantPadding: true,
 		},
 		{
 			name: "edit form without image",
@@ -163,12 +198,15 @@ func TestAdminExerciseForm_PreviewAspectMatchesCard(t *testing.T) {
 				IsEdit:   true,
 				Exercise: &models.Exercise{ID: "ex-1", Name: "Squat"},
 			},
+			// Image URL is empty, so no preview.
+			wantPadding: false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			html := renderToString(t, AdminExerciseForm(tc.form, "Admin", true, true))
-			if !strings.Contains(html, "padding-bottom: 25%") {
-				t.Errorf("expected preview to use 4:1 aspect (padding-bottom: 25%%), got html:\n%s", html)
+			hasPadding := strings.Contains(html, "padding-bottom: 25%")
+			if hasPadding != tc.wantPadding {
+				t.Errorf("padding-bottom: 25%% presence = %v, want %v", hasPadding, tc.wantPadding)
 			}
 			if strings.Contains(html, "padding-bottom: 75%") {
 				t.Errorf("preview still using 4:3 aspect (padding-bottom: 75%%), got html:\n%s", html)

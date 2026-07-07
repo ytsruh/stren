@@ -161,18 +161,6 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 							value={ data.Exercise.VideoURL }
 						/>
 					</div>
-					if data.Exercise.ImgURL != "" {
-						<div class="flex items-center gap-2">
-							<input
-								type="checkbox"
-								id="clear_image"
-								name="clear_image"
-								value="true"
-								class="checkbox"
-							/>
-							<label for="clear_image" class="text-sm">Remove current image</label>
-						</div>
-					}
 					@components.ImageUpload(components.ImageUploadProps{
 						Name:               "exercise",
 						Label:              "Image",
@@ -181,6 +169,8 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 						CurrentOriginalKey: data.Exercise.ImgURLOriginal,
 						MaxSizeMB:          10,
 						UploadEndpoint:     "/admin/exercises/image-upload",
+						RemoveFieldName:    "clear_image",
+						RemoveLabel:        "Remove current image",
 						AspectWidth:        4,
 						AspectHeight:       1,
 					})

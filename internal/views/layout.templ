@@ -350,30 +350,75 @@ templ Layout(data PageData) {
 		</script>
 		<script src="/js/push.js" defer></script>
 		<div id="toaster" class="toaster"></div>
+		// Hidden toast templates. Widgets that need to render a
+		// toast from client-side code (e.g. the weight photo
+		// widget, which uploads directly to R2 via a presigned
+		// URL and so can't piggy-back its toast onto the upload
+		// response) clone the right template and fill in the
+		// title/description. The exercise image widget uses the
+		// server-rendered views.Toast directly via htmx and
+		// doesn't need these. The icon SVGs are defined once
+		// here so they don't get duplicated into client-side JS.
+		@toastTemplate("success")
+		@toastTemplate("error")
+		@toastTemplate("warning")
+		@toastTemplate("default")
 		</body>
 	</html>
+}
+
+// toastBody renders the shared inner markup of a toast: the icon
+// for the category plus the title and optional description. Used by
+// both the server-rendered Toast and the hidden toastTemplate
+// elements so the markup lives in exactly one place.
+//
+// title and description are rendered into the <h2> and <p> only
+// when non-empty; the data-toast-title / data-toast-description
+// attributes are always present so client-side JS that clones the
+// template can find the right elements and fill them in (or
+// overwrite whatever's there).
+templ toastBody(category string, title string, description string) {
+	<div class="toast-content">
+		if category == "success" {
+			<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
+		} else if category == "error" {
+			<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
+		} else if category == "warning" {
+			<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
+		} else {
+			<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
+		}
+		<section>
+			if title != "" {
+				<h2 data-toast-title>{ title }</h2>
+			} else {
+				<h2 data-toast-title></h2>
+			}
+			if description != "" {
+				<p data-toast-description>{ description }</p>
+			} else {
+				<p data-toast-description class="hidden"></p>
+			}
+		</section>
+	</div>
+}
+
+// toastTemplate renders a hidden <template> element for one toast
+// category. The category name becomes the id suffix and the
+// data-category attribute. JS clones template.content, fills in
+// the title/description, and appends the clone to #toaster.
+templ toastTemplate(category string) {
+	<template id={ "toast-template-" + category }>
+		<div class="toast" role="status" aria-atomic="true" aria-hidden="false" data-category={ category }>
+			@toastBody(category, "", "")
+		</div>
+	</template>
 }
 
 // Toast is a notification component using Basecoat toast
 templ Toast(category string, title string, description string) {
 	<div class="toast" role="status" aria-atomic="true" aria-hidden="false" data-category={ category }>
-		<div class="toast-content">
-			if category == "success" {
-				<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
-			} else if category == "error" {
-				<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
-			} else if category == "warning" {
-				<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
-			} else {
-				<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
-			}
-			<section>
-				<h2>{ title }</h2>
-				if description != "" {
-					<p>{ description }</p>
-				}
-			</section>
-		</div>
+		@toastBody(category, title, description)
 	</div>
 }
 

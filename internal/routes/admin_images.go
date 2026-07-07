@@ -3,6 +3,7 @@ package routes
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"stren/internal/imaging"
 	"stren/internal/utils"
+	"stren/internal/views"
 )
 
 // ExerciseImageConfig controls the two image variants the admin
@@ -45,14 +47,6 @@ var DefaultExerciseImageConfig = ExerciseImageConfig{
 	OriginalHeight: 1440,
 }
 
-// imageUploadRequest is the JSON body the JS upload widget POSTs.
-// Kept as a separate type so the response type can evolve without
-// rippling through callers.
-type imageUploadResponse struct {
-	DisplayKey  string `json:"display_key"`
-	OriginalKey string `json:"original_key"`
-}
-
 // exerciseImageProcessor is the subset of imaging.Processor the
 // route uses. Declared as a local interface so the route is unit
 // testable with a fake without depending on the full package.
@@ -67,31 +61,47 @@ type exerciseImageUploader interface {
 	PutObject(ctx context.Context, key, contentType string, body io.Reader) error
 }
 
+// imageUploadedEvent is the detail payload of the `image-uploaded`
+// custom event fired via the HX-Trigger response header. The widget
+// listens for it on the document to copy the new keys into the form's
+// hidden inputs. Field tags match the JS property names so
+// json.Marshal emits display_key / original_key.
+type imageUploadedEvent struct {
+	DisplayKey  string `json:"display_key"`
+	OriginalKey string `json:"original_key"`
+}
+
 // AdminExerciseImageUpload handles the server-side upload flow for
-// exercise images. The browser POSTs a multipart form with a single
-// "file" field; this route validates, decodes, resizes via the
-// imaging package, and writes two normalised variants to R2. The
-// returned keys are set into the form's hidden inputs by the JS
-// widget and persisted when the admin submits the exercise form.
+// exercise images. The browser file input is rendered with htmx
+// attributes that POST the multipart form to this route, target
+// `#toaster`, and swap the response into the toaster. The route
+// therefore returns HTML (a views.Toast), not JSON.
 //
-// The route enforces a 10 MB body cap (matching the widget's
-// client-side pre-check) via http.MaxBytesReader so a hostile client
-// can't exhaust memory before the multipart parser runs. The MIME
-// gate (image/jpeg or image/png) and a non-empty file are also
-// enforced up front; the imaging processor's own format check is the
-// second line of defence.
+// On success: the response body is a success toast, and the
+// HX-Trigger header carries an `image-uploaded` event with the
+// new storage keys. The widget's JS listens for that event and
+// copies the keys into the form's hidden inputs so they survive
+// until the form is saved.
+//
+// On any failure (bad MIME, oversize, decode error, R2 write
+// failure): the response body is an error toast. There is no
+// HX-Trigger. The widget's hidden inputs are left untouched, so
+// the existing image (if any) is preserved.
+//
+// The 10 MB body cap is enforced via http.MaxBytesReader so a
+// hostile client can't exhaust memory before the multipart parser
+// runs. The MIME gate (image/jpeg or image/png) is enforced by
+// the imaging processor's own sniff — that's the source of truth
+// for the supported types.
 //
 // On any failure mid-flight (e.g. the second upload to R2 errors
-// after the first succeeded) the route does best-effort cleanup of
-// the partially-written objects so R2 doesn't accumulate orphan
-// files.
+// after the first succeeded) the route does best-effort cleanup
+// of the partially-written objects so R2 doesn't accumulate
+// orphan files.
 func (h *Handler) AdminExerciseImageUpload(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	// 10 MB cap, matching the client-side pre-check. Echo's
-	// default BodyLimit is unset for this route so the cap is
-	// applied here. Using MaxBytesReader (rather than a global
-	// middleware) keeps the limit scoped to the upload route only.
+	// 10 MB cap, matching the widget's client-side pre-check.
 	const maxBody = 10 << 20 // 10 MiB
 	c.Request().Body = http.MaxBytesReader(c.Response().Writer, c.Request().Body, maxBody)
 
@@ -99,23 +109,23 @@ func (h *Handler) AdminExerciseImageUpload(c echo.Context) error {
 	// is 32 MB which is well above our body cap, so 8 MB is
 	// comfortable and keeps the in-memory footprint small.
 	if err := c.Request().ParseMultipartForm(8 << 20); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Could not parse upload (file may exceed 10 MB)")
+		return h.renderToast(c, "error", "Upload failed", "Could not parse upload (file may exceed 10 MB)")
 	}
 
 	file, err := c.FormFile("file")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Missing 'file' field")
+		return h.renderToast(c, "error", "Upload failed", "Missing 'file' field")
 	}
 	if file.Size <= 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "Uploaded file is empty")
+		return h.renderToast(c, "error", "Upload failed", "Uploaded file is empty")
 	}
 	if file.Size > maxBody {
-		return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "File exceeds 10 MB limit")
+		return h.renderToast(c, "error", "Upload failed", "File exceeds 10 MB limit")
 	}
 
 	src, err := file.Open()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Could not read uploaded file")
+		return h.renderToast(c, "error", "Upload failed", "Could not read uploaded file")
 	}
 	defer src.Close()
 
@@ -130,7 +140,7 @@ func (h *Handler) AdminExerciseImageUpload(c echo.Context) error {
 		Format:       imaging.FormatJPEG,
 	})
 	if err != nil {
-		return mapImagingError(err)
+		return h.renderImagingError(c, err)
 	}
 
 	// Re-open the file for the second Process call — the first
@@ -138,7 +148,7 @@ func (h *Handler) AdminExerciseImageUpload(c echo.Context) error {
 	// (it's backed by a temp file in Echo's default config), so
 	// Seek(0) is reliable.
 	if _, seekErr := src.Seek(0, io.SeekStart); seekErr != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Could not re-read uploaded file")
+		return h.renderToast(c, "error", "Upload failed", "Could not re-read uploaded file")
 	}
 	originalRes, err := h.imageProcessor.Process(ctx, src, imaging.ProcessOptions{
 		TargetWidth:  h.imageConfig.OriginalWidth,
@@ -147,7 +157,7 @@ func (h *Handler) AdminExerciseImageUpload(c echo.Context) error {
 		Format:       imaging.FormatJPEG,
 	})
 	if err != nil {
-		return mapImagingError(err)
+		return h.renderImagingError(c, err)
 	}
 
 	// Both variants are JPEG (forced by the imaging package's
@@ -159,7 +169,7 @@ func (h *Handler) AdminExerciseImageUpload(c echo.Context) error {
 
 	displayBody := bytes.NewReader(displayRes.Data)
 	if err := h.imageUploader.PutObject(ctx, displayKey, displayRes.MIMEType, displayBody); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Could not upload display image")
+		return h.renderToast(c, "error", "Upload failed", "Could not upload display image")
 	}
 
 	if err := h.imageUploader.PutObject(ctx, originalKey, originalRes.MIMEType, bytes.NewReader(originalRes.Data)); err != nil {
@@ -168,27 +178,51 @@ func (h *Handler) AdminExerciseImageUpload(c echo.Context) error {
 		if delErr := utils.DeleteObject(displayKey); delErr != nil {
 			c.Logger().Warnf("failed to clean up display image %q after original upload failed: %v", displayKey, delErr)
 		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "Could not upload original image")
+		return h.renderToast(c, "error", "Upload failed", "Could not upload original image")
 	}
 
-	return c.JSON(http.StatusOK, imageUploadResponse{
-		DisplayKey:  displayKey,
-		OriginalKey: originalKey,
+	// Success: render the toast and tell the widget's JS which
+	// keys to copy into the hidden inputs. The HX-Trigger header
+	// is a JSON-encoded event name + detail object; htmx parses
+	// it and fires the event on the triggering element. We listen
+	// on the document in the widget.
+	trigger, err := json.Marshal(map[string]imageUploadedEvent{
+		"image-uploaded": {
+			DisplayKey:  displayKey,
+			OriginalKey: originalKey,
+		},
 	})
+	if err != nil {
+		// Highly unlikely (the struct is a plain string-string
+		// map), but fall back to the toast without the trigger
+		// rather than failing the upload.
+		c.Logger().Warnf("failed to marshal image-uploaded trigger: %v", err)
+		return render(c, views.Toast("success", "Image uploaded", "Ready to save."))
+	}
+	c.Response().Header().Set("HX-Trigger", string(trigger))
+	return render(c, views.Toast("success", "Image uploaded", "Ready to save."))
 }
 
-// mapImagingError translates imaging sentinel errors into the
-// HTTP-equivalent that callers should see. Keeps the route body
-// focused on flow rather than error-mapping noise.
-func mapImagingError(err error) error {
+// renderToast is a small wrapper that renders the shared views.Toast
+// component. Centralised so every failure path reads the same and
+// the comment explaining the flow lives in one place.
+func (h *Handler) renderToast(c echo.Context, category, title, description string) error {
+	return render(c, views.Toast(category, title, description))
+}
+
+// renderImagingError translates an imaging error into the
+// user-facing toast. Keeps the imaging error vocabulary in one
+// place so adding a new imaging error type means changing one
+// switch.
+func (h *Handler) renderImagingError(c echo.Context, err error) error {
 	switch {
 	case err == imaging.ErrUnsupportedFormat, strings.Contains(err.Error(), imaging.ErrUnsupportedFormat.Error()):
-		return echo.NewHTTPError(http.StatusBadRequest, "File must be a JPEG or PNG image")
+		return h.renderToast(c, "error", "Upload failed", "File must be a JPEG or PNG image")
 	case err == imaging.ErrDecodeFailed, strings.Contains(err.Error(), imaging.ErrDecodeFailed.Error()):
-		return echo.NewHTTPError(http.StatusBadRequest, "Image could not be decoded (file may be corrupt)")
+		return h.renderToast(c, "error", "Upload failed", "Image could not be decoded (file may be corrupt)")
 	case err == imaging.ErrInvalidOptions, strings.Contains(err.Error(), imaging.ErrInvalidOptions.Error()):
-		return echo.NewHTTPError(http.StatusInternalServerError, "Image processor misconfigured")
+		return h.renderToast(c, "error", "Upload failed", "Image processor misconfigured")
 	default:
-		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Image processing failed: %v", err))
+		return h.renderToast(c, "error", "Upload failed", fmt.Sprintf("Image processing failed: %v", err))
 	}
 }

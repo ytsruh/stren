@@ -136,42 +136,77 @@ var validPNGBytes = func() []byte {
 	return buf.Bytes()
 }()
 
-func TestAdminExerciseImageUpload_HappyPath(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-	upl := h.imageUploader.(*fakeUploader)
+// uploadTrigger is the JSON detail carried by the HX-Trigger
+// response header on a successful upload. Mirrors the Go type
+// in admin_images.go.
+type uploadTrigger struct {
+	ImageUploaded struct {
+		DisplayKey  string `json:"display_key"`
+		OriginalKey string `json:"original_key"`
+	} `json:"image-uploaded"`
+}
 
-	ct, body := makeJPEGMultipart(t, validJPEGBytes, "", "test.jpg")
+// doUpload runs one upload through the route and returns the
+// recorder. Tests then assert on the response body / headers.
+func doUpload(t *testing.T, h *Handler, e *echo.Echo, fileBytes []byte, contentType, filename string) *httptest.ResponseRecorder {
+	t.Helper()
+	ct, body := makeJPEGMultipart(t, fileBytes, contentType, filename)
 	req := httptest.NewRequest(http.MethodPost, "/admin/exercises/image-upload", bytes.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, ct)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "admin-1", "admin@example.com", "Admin", true)
-
 	if err := h.AdminExerciseImageUpload(c); err != nil {
 		t.Fatalf("upload: %v", err)
 	}
+	return rec
+}
+
+func TestAdminExerciseImageUpload_HappyPath(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+	upl := h.imageUploader.(*fakeUploader)
+
+	rec := doUpload(t, h, e, validJPEGBytes, "", "test.jpg")
+
+	// The route returns HTML, not JSON. On success the body is a
+	// views.Toast with category=success. htmx uses the body as
+	// the swap target's HTML.
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
 	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-category="success"`) {
+		t.Errorf("expected success toast in response body, got: %s", body)
+	}
+	if !strings.Contains(body, "Image uploaded") {
+		t.Errorf("expected toast title in response body, got: %s", body)
+	}
 
-	var resp imageUploadResponse
-	if err := jsonDecode(rec.Body.String(), &resp); err != nil {
-		t.Fatalf("decode response: %v", err)
+	// The HX-Trigger header carries the new storage keys so the
+	// widget's JS can copy them into the form's hidden inputs.
+	trigger := rec.Header().Get("HX-Trigger")
+	if trigger == "" {
+		t.Fatal("expected HX-Trigger header on successful upload")
 	}
-	if resp.DisplayKey == "" {
-		t.Error("DisplayKey is empty")
+	var parsed uploadTrigger
+	if err := json.Unmarshal([]byte(trigger), &parsed); err != nil {
+		t.Fatalf("decode HX-Trigger: %v (raw = %s)", err, trigger)
 	}
-	if resp.OriginalKey == "" {
-		t.Error("OriginalKey is empty")
+	keys := parsed.ImageUploaded
+	if keys.DisplayKey == "" {
+		t.Error("HX-Trigger display_key is empty")
 	}
-	if !strings.HasPrefix(resp.DisplayKey, "exercises/") || !strings.HasSuffix(resp.DisplayKey, ".jpg") {
-		t.Errorf("DisplayKey = %q, want exercises/...jpg", resp.DisplayKey)
+	if keys.OriginalKey == "" {
+		t.Error("HX-Trigger original_key is empty")
 	}
-	if !strings.HasSuffix(resp.OriginalKey, "_original.jpg") {
-		t.Errorf("OriginalKey = %q, want ..._original.jpg", resp.OriginalKey)
+	if !strings.HasPrefix(keys.DisplayKey, "exercises/") || !strings.HasSuffix(keys.DisplayKey, ".jpg") {
+		t.Errorf("DisplayKey = %q, want exercises/...jpg", keys.DisplayKey)
 	}
-	if resp.DisplayKey == resp.OriginalKey {
-		t.Errorf("display and original keys should differ, both = %q", resp.DisplayKey)
+	if !strings.HasSuffix(keys.OriginalKey, "_original.jpg") {
+		t.Errorf("OriginalKey = %q, want ..._original.jpg", keys.OriginalKey)
+	}
+	if keys.DisplayKey == keys.OriginalKey {
+		t.Errorf("display and original keys should differ, both = %q", keys.DisplayKey)
 	}
 
 	// Both variants should have been uploaded to R2.
@@ -179,11 +214,11 @@ func TestAdminExerciseImageUpload_HappyPath(t *testing.T) {
 		t.Errorf("uploads = %d, want 2", got)
 	}
 	display, original := upl.lastTwo()
-	if display.Key != resp.DisplayKey {
-		t.Errorf("display put key = %q, want %q", display.Key, resp.DisplayKey)
+	if display.Key != keys.DisplayKey {
+		t.Errorf("display put key = %q, want %q", display.Key, keys.DisplayKey)
 	}
-	if original.Key != resp.OriginalKey {
-		t.Errorf("original put key = %q, want %q", original.Key, resp.OriginalKey)
+	if original.Key != keys.OriginalKey {
+		t.Errorf("original put key = %q, want %q", original.Key, keys.OriginalKey)
 	}
 	if display.ContentType != "image/jpeg" || original.ContentType != "image/jpeg" {
 		t.Errorf("content types = %q / %q, want image/jpeg / image/jpeg", display.ContentType, original.ContentType)
@@ -196,18 +231,13 @@ func TestAdminExerciseImageUpload_HappyPath(t *testing.T) {
 func TestAdminExerciseImageUpload_PNG(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
-	ct, body := makeJPEGMultipart(t, validPNGBytes, "image/png", "test.png")
-	req := httptest.NewRequest(http.MethodPost, "/admin/exercises/image-upload", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, ct)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "admin-1", "admin@example.com", "Admin", true)
+	rec := doUpload(t, h, e, validPNGBytes, "image/png", "test.png")
 
-	if err := h.AdminExerciseImageUpload(c); err != nil {
-		t.Fatalf("upload PNG: %v", err)
-	}
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `data-category="success"`) {
+		t.Errorf("expected success toast for PNG upload, got: %s", rec.Body.String())
 	}
 }
 
@@ -215,44 +245,31 @@ func TestAdminExerciseImageUpload_RejectsNonImage(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	// A PDF header is sniffed as application/pdf and must be
-	// rejected with 400.
+	// rejected. The route now returns a toast instead of an
+	// echo.HTTPError, so the response body carries the error
+	// toast markup and the status is 200.
 	pdfHeader := []byte("%PDF-1.4\n%¥±ë\n")
-	ct, body := makeJPEGMultipart(t, pdfHeader, "application/pdf", "test.pdf")
-	req := httptest.NewRequest(http.MethodPost, "/admin/exercises/image-upload", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, ct)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "admin-1", "admin@example.com", "Admin", true)
+	rec := doUpload(t, h, e, pdfHeader, "application/pdf", "test.pdf")
 
-	err := h.AdminExerciseImageUpload(c)
-	if err == nil {
-		t.Fatal("expected error, got nil")
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-category="error"`) {
+		t.Errorf("expected error toast in response body, got: %s", body)
 	}
-	he, ok := err.(*echo.HTTPError)
-	if !ok {
-		t.Fatalf("expected *echo.HTTPError, got %T", err)
+	if !strings.Contains(body, "JPEG") && !strings.Contains(body, "image") {
+		t.Errorf("error message should mention JPEG/PNG, got: %s", body)
 	}
-	if he.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", he.Code)
-	}
-	if !strings.Contains(fmt.Sprint(he.Message), "JPEG") && !strings.Contains(fmt.Sprint(he.Message), "image") {
-		t.Errorf("error message = %v, want something mentioning JPEG/PNG", he.Message)
+	if trigger := rec.Header().Get("HX-Trigger"); trigger != "" {
+		t.Errorf("error response should not set HX-Trigger, got: %s", trigger)
 	}
 }
 
 func TestAdminExerciseImageUpload_RejectsEmptyFile(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
-	ct, body := makeJPEGMultipart(t, nil, "image/jpeg", "empty.jpg")
-	req := httptest.NewRequest(http.MethodPost, "/admin/exercises/image-upload", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, ct)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "admin-1", "admin@example.com", "Admin", true)
+	rec := doUpload(t, h, e, nil, "image/jpeg", "empty.jpg")
 
-	err := h.AdminExerciseImageUpload(c)
-	if err == nil {
-		t.Fatal("expected error for empty file, got nil")
+	if !strings.Contains(rec.Body.String(), `data-category="error"`) {
+		t.Errorf("expected error toast for empty file, got: %s", rec.Body.String())
 	}
 }
 
@@ -262,28 +279,14 @@ func TestAdminExerciseImageUpload_RejectsOversize(t *testing.T) {
 	// 11 MB of zero bytes — larger than the 10 MB cap. We use
 	// random bytes (not a real image) because the body cap should
 	// be enforced *before* the imaging package runs, so the bytes
-	// don't have to be a real image.
+	// don't have to be a real image. The error surfaces as a
+	// toast, not an HTTP error.
 	oversize := make([]byte, 11<<20)
-	ct, body := makeJPEGMultipart(t, oversize, "image/jpeg", "huge.jpg")
-	req := httptest.NewRequest(http.MethodPost, "/admin/exercises/image-upload", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, ct)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "admin-1", "admin@example.com", "Admin", true)
+	rec := doUpload(t, h, e, oversize, "image/jpeg", "huge.jpg")
 
-	err := h.AdminExerciseImageUpload(c)
-	if err == nil {
-		t.Fatal("expected error for oversize body, got nil")
-	}
-	he, ok := err.(*echo.HTTPError)
-	if !ok {
-		t.Fatalf("expected *echo.HTTPError, got %T", err)
-	}
-	// Could be 400 (multipart parse error from MaxBytesReader)
-	// or 413 (our explicit size check) — both are valid signals
-	// that the oversize body was rejected.
-	if he.Code != http.StatusBadRequest && he.Code != http.StatusRequestEntityTooLarge {
-		t.Errorf("status = %d, want 400 or 413", he.Code)
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-category="error"`) {
+		t.Errorf("expected error toast for oversize body, got: %s", body)
 	}
 }
 
@@ -293,30 +296,23 @@ func TestAdminExerciseImageUpload_DisplayKeyCollisionWithUUIDs(t *testing.T) {
 	// the storage-key generator being broken.
 	h, _, _, e := setupHandler(t)
 
-	doOne := func() imageUploadResponse {
-		ct, body := makeJPEGMultipart(t, validJPEGBytes, "", "x.jpg")
-		req := httptest.NewRequest(http.MethodPost, "/admin/exercises/image-upload", bytes.NewReader(body))
-		req.Header.Set(echo.HeaderContentType, ct)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		setAuthContext(c, "admin-1", "admin@example.com", "Admin", true)
-		if err := h.AdminExerciseImageUpload(c); err != nil {
-			t.Fatalf("upload: %v", err)
-		}
-		var resp imageUploadResponse
-		if err := jsonDecode(rec.Body.String(), &resp); err != nil {
+	doOne := func() uploadTrigger {
+		rec := doUpload(t, h, e, validJPEGBytes, "", "x.jpg")
+		trigger := rec.Header().Get("HX-Trigger")
+		var parsed uploadTrigger
+		if err := json.Unmarshal([]byte(trigger), &parsed); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		return resp
+		return parsed
 	}
 
 	a := doOne()
 	b := doOne()
-	if a.DisplayKey == b.DisplayKey {
-		t.Errorf("display keys collided: %q", a.DisplayKey)
+	if a.ImageUploaded.DisplayKey == b.ImageUploaded.DisplayKey {
+		t.Errorf("display keys collided: %q", a.ImageUploaded.DisplayKey)
 	}
-	if a.OriginalKey == b.OriginalKey {
-		t.Errorf("original keys collided: %q", a.OriginalKey)
+	if a.ImageUploaded.OriginalKey == b.ImageUploaded.OriginalKey {
+		t.Errorf("original keys collided: %q", a.ImageUploaded.OriginalKey)
 	}
 }
 
@@ -339,20 +335,11 @@ func TestAdminExerciseImageUpload_OriginalUploadFailureCleansUpDisplay(t *testin
 	upl.err = errors.New("simulated original upload failure")
 	upl.mu.Unlock()
 
-	ct, body := makeJPEGMultipart(t, validJPEGBytes, "", "x.jpg")
-	req := httptest.NewRequest(http.MethodPost, "/admin/exercises/image-upload", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, ct)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "admin-1", "admin@example.com", "Admin", true)
+	rec := doUpload(t, h, e, validJPEGBytes, "", "x.jpg")
 
-	err := h.AdminExerciseImageUpload(c)
-	if err == nil {
-		t.Fatal("expected error when original upload fails")
-	}
-	he, ok := err.(*echo.HTTPError)
-	if !ok || he.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %v", err)
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-category="error"`) {
+		t.Errorf("expected error toast on original-upload failure, got: %s", body)
 	}
 	// Only one PutObject should have been recorded (the display
 	// one) before the original upload failed.
@@ -365,9 +352,4 @@ func TestAdminExerciseImageUpload_OriginalUploadFailureCleansUpDisplay(t *testin
 	// The route's best-effort cleanup is handled by utils.DeleteObject
 	// directly. We can't intercept that without a heavier mock, but
 	// the error path has been exercised; that's the main contract.
-}
-
-// jsonDecode is a small helper to keep test code uncluttered.
-func jsonDecode(s string, out interface{}) error {
-	return json.Unmarshal([]byte(s), out)
 }
