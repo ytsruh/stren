@@ -83,7 +83,7 @@ templ ImageUpload(props ImageUploadProps) {
 			<div id={ currentID } class="flex items-start gap-4">
 				<div
 					class="relative w-full max-w-sm overflow-hidden rounded-md border bg-muted"
-					style={ templ.SafeURL(fmt.Sprintf("padding-bottom: %d%%;", aspectPercent)) }
+					style={ fmt.Sprintf("padding-bottom: %d%%;", aspectPercent) }
 				>
 					<img
 						src={ templ.SafeURL(props.CurrentURL) }
@@ -115,7 +115,7 @@ templ ImageUpload(props ImageUploadProps) {
 			<div
 				id={ previewID }
 				class="relative hidden w-full max-w-sm overflow-hidden rounded-md border bg-muted"
-				style={ templ.SafeURL(fmt.Sprintf("padding-bottom: %d%%;", aspectPercent)) }
+				style={ fmt.Sprintf("padding-bottom: %d%%;", aspectPercent) }
 			>
 				<img alt="New image preview" class="absolute inset-0 size-full object-cover"/>
 			</div>

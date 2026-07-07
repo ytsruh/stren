@@ -134,3 +134,45 @@ func TestAdminExerciseForm_Edit_UploadEndpointHardCoded(t *testing.T) {
 		t.Errorf("expected /admin/exercises/image-upload endpoint, got html: %s", html)
 	}
 }
+
+func TestAdminExerciseForm_PreviewAspectMatchesCard(t *testing.T) {
+	// The exercise image is used on the history card with
+	// `w-full h-48 object-cover` inside a max-w-3xl container
+	// (768px), giving a visible aspect of 768:192 = 4:1. The
+	// admin form's preview must match that aspect so the admin
+	// sees roughly what users will see — not the raw 4:3 file
+	// aspect, which renders as a far taller rectangle.
+	for _, tc := range []struct {
+		name   string
+		form   AdminExerciseFormData
+	}{
+		{
+			name: "new form",
+			form: AdminExerciseFormData{IsEdit: false},
+		},
+		{
+			name: "edit form with image",
+			form: AdminExerciseFormData{
+				IsEdit:           true,
+				Exercise:         &models.Exercise{ID: "ex-1", Name: "Squat", ImgURL: "exercises/abc.jpg"},
+			},
+		},
+		{
+			name: "edit form without image",
+			form: AdminExerciseFormData{
+				IsEdit:   true,
+				Exercise: &models.Exercise{ID: "ex-1", Name: "Squat"},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			html := renderToString(t, AdminExerciseForm(tc.form, "Admin", true, true))
+			if !strings.Contains(html, "padding-bottom: 25%") {
+				t.Errorf("expected preview to use 4:1 aspect (padding-bottom: 25%%), got html:\n%s", html)
+			}
+			if strings.Contains(html, "padding-bottom: 75%") {
+				t.Errorf("preview still using 4:3 aspect (padding-bottom: 75%%), got html:\n%s", html)
+			}
+		})
+	}
+}
