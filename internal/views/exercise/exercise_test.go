@@ -118,6 +118,38 @@ func TestEntryForm_New(t *testing.T) {
 	if !strings.Contains(html, `name="sets[0][weight]"`) {
 		t.Error(`expected starter row with name="sets[0][weight]"`)
 	}
+	// Mobile keyboard hints: reps + rest are integers (numberpad, no
+	// decimal point), weight accepts decimals (numberpad with a "." key).
+	// Lock the inputmode on the visible Set 1 row so the user can type
+	// 2.5 kg on mobile.
+	visibleRepsPattern := `inputmode="numeric" name="sets\[0\]\[reps\]"`
+	if !regexp.MustCompile(visibleRepsPattern).MatchString(html) {
+		t.Errorf("expected visible Set 1 reps input to carry %q", visibleRepsPattern)
+	}
+	visibleWeightPattern := `inputmode="decimal" name="sets\[0\]\[weight\]"`
+	if !regexp.MustCompile(visibleWeightPattern).MatchString(html) {
+		t.Errorf("expected visible Set 1 weight input to carry %q", visibleWeightPattern)
+	}
+	visibleRestPattern := `inputmode="numeric" name="sets\[0\]\[rest_time\]"`
+	if !regexp.MustCompile(visibleRestPattern).MatchString(html) {
+		t.Errorf("expected visible Set 1 rest input to carry %q", visibleRestPattern)
+	}
+	// The hidden #entry-set-template must mirror the visible row's
+	// inputmode values. If they drift, the first row uses the numberpad
+	// and later cloned rows fall back to the full keyboard — the original
+	// bug we're guarding against.
+	tplRepsPattern := `inputmode="numeric" name="sets\[__INDEX__\]\[reps\]"`
+	if !regexp.MustCompile(tplRepsPattern).MatchString(html) {
+		t.Errorf("expected clone template reps input to carry %q", tplRepsPattern)
+	}
+	tplWeightPattern := `inputmode="decimal" name="sets\[__INDEX__\]\[weight\]"`
+	if !regexp.MustCompile(tplWeightPattern).MatchString(html) {
+		t.Errorf("expected clone template weight input to carry %q", tplWeightPattern)
+	}
+	tplRestPattern := `inputmode="numeric" name="sets\[__INDEX__\]\[rest_time\]"`
+	if !regexp.MustCompile(tplRestPattern).MatchString(html) {
+		t.Errorf("expected clone template rest input to carry %q", tplRestPattern)
+	}
 	// Remove button is wired up via data-remove-set.
 	if !strings.Contains(html, `data-remove-set`) {
 		t.Error("expected remove-set buttons on rows")
@@ -193,6 +225,21 @@ func TestEditEntryForm(t *testing.T) {
 	}
 	if !strings.Contains(html, `name="created_at"`) {
 		t.Error("expected datetime input for edit mode")
+	}
+	// Mobile keyboard hints must match the new-entry form: reps + rest
+	// get the integer numberpad, weight gets the decimal numberpad so
+	// editing an existing 2.5 kg entry on mobile is possible.
+	editRepsPattern := `inputmode="numeric" id="reps"`
+	if !regexp.MustCompile(editRepsPattern).MatchString(html) {
+		t.Errorf("expected edit form reps input to carry %q", editRepsPattern)
+	}
+	editWeightPattern := `inputmode="decimal" id="weight"`
+	if !regexp.MustCompile(editWeightPattern).MatchString(html) {
+		t.Errorf("expected edit form weight input to carry %q", editWeightPattern)
+	}
+	editRestPattern := `inputmode="numeric" id="rest_time"`
+	if !regexp.MustCompile(editRestPattern).MatchString(html) {
+		t.Errorf("expected edit form rest_time input to carry %q", editRestPattern)
 	}
 }
 

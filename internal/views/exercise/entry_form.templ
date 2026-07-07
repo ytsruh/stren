@@ -56,7 +56,7 @@ templ entrySetRow(index int, weightUnit string) {
 			<input
 				class="input"
 				type="number"
-				inputmode="numeric"
+				inputmode="decimal"
 				name={ fmt.Sprintf("sets[%d][weight]", index) }
 				step="0.5"
 				min="0"
@@ -88,6 +88,12 @@ templ entrySetRow(index int, weightUnit string) {
 // and the unit shown in the form header (see EntryForm) gives the user the
 // correct context. Layout matches entrySetRow so cloned rows look identical
 // to the starter rows.
+//
+// IMPORTANT: this template must stay in lockstep with entrySetRow — every
+// input attribute the visible row sets (type, inputmode, step, min, max,
+// required) must be repeated here. If they drift, the first visible row and
+// later cloned rows will render with different mobile keyboards, which is
+// exactly the bug inputmode guards against.
 templ entrySetRowPlaceholder() {
 	<div class="grid gap-3 sm:grid-cols-[auto_1fr_1fr_1fr_auto] sm:items-end sm:gap-3" data-set-row>
 		<div class="flex items-center justify-between sm:contents">
@@ -98,15 +104,15 @@ templ entrySetRowPlaceholder() {
 		</div>
 		<div class="grid gap-2">
 			<label class="text-sm">Reps</label>
-			<input class="input" type="number" name="sets[__INDEX__][reps]" min="1" placeholder="8" required/>
+			<input class="input" type="number" inputmode="numeric" name="sets[__INDEX__][reps]" min="1" placeholder="8" required/>
 		</div>
 		<div class="grid gap-2">
 			<label class="text-sm">Weight (kg)</label>
-			<input class="input" type="number" name="sets[__INDEX__][weight]" step="0.5" min="0" placeholder="0.0" required/>
+			<input class="input" type="number" inputmode="decimal" name="sets[__INDEX__][weight]" step="0.5" min="0" placeholder="0.0" required/>
 		</div>
 		<div class="grid gap-2">
 			<label class="text-sm">Rest (s)</label>
-			<input class="input" type="number" name="sets[__INDEX__][rest_time]" min="0" max="3600" placeholder="0"/>
+			<input class="input" type="number" inputmode="numeric" name="sets[__INDEX__][rest_time]" min="0" max="3600" placeholder="0"/>
 		</div>
 	</div>
 }
@@ -327,6 +333,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 						<input
 							class="input"
 							type="number"
+							inputmode="numeric"
 							id="reps"
 							name="reps"
 							min="1"
@@ -340,6 +347,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 						<input
 							class="input"
 							type="number"
+							inputmode="decimal"
 							id="weight"
 							name="weight"
 							step="0.5"
@@ -354,6 +362,7 @@ templ EditEntryForm(entry *models.ExerciseEntry, userName string, isAuthenticate
 						<input
 							class="input"
 							type="number"
+							inputmode="numeric"
 							id="rest_time"
 							name="rest_time"
 							min="0"
