@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -17,10 +18,23 @@ import (
 	"stren/internal/imaging"
 	"stren/internal/models"
 	"stren/internal/push"
+	"stren/internal/reminders"
 	"stren/internal/routes"
 	"stren/internal/utils"
 	"stren/internal/views"
 )
+
+// weightReminderCronSpec is the cron expression for the
+// weekly "log your weight" reminder. "0 9 * * 0" is
+// minute=0, hour=9, day-of-month=*, month=*, day-of-week=0
+// (Sunday). Interpreted in UTC by the cron wrapper so
+// the schedule is the same regardless of where the
+// server happens to be deployed.
+//
+// Per project policy (AGENTS.md) the spec is hard-coded
+// rather than driven by an env var: the schedule is a
+// product decision, not a per-deployment knob.
+const weightReminderCronSpec = "0 9 * * 0"
 
 func main() {
 	// Load and validate environment variables on startup
@@ -99,8 +113,26 @@ func main() {
 	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(weightRepo, r2PhotoGetter{})
 	pushCtrl := controllers.NewPushController(pushRepo)
-	adminNotificationsCtrl := controllers.NewAdminNotificationsController(pushService)
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(userRepo, authTokenRepo, emailService)
+
+	// Initialize the weekly weight-reminder orchestrator here
+	// (above the admin notifications controller it is wired
+	// into) so the controller constructor can take a non-nil
+	// pointer. The orchestrator's own scheduler is started
+	// further down, after the Echo routes are registered, so
+	// an init failure here is the same as an init failure
+	// there (log.Fatal).
+	weightReminder, err := reminders.NewWeightReminder(
+		adminUserRepo,
+		emailService,
+		pushService,
+		reminders.WeightReminderConfig{},
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize weight reminder: %v", err)
+	}
+
+	adminNotificationsCtrl := controllers.NewAdminNotificationsController(pushService, weightReminder)
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
@@ -151,6 +183,33 @@ func main() {
 
 	// Register routes
 	h.RegisterRoutes(e)
+
+	// Start the weekly weight-reminder scheduler. The
+	// orchestrator was constructed above and is also
+	// shared with the admin notifications controller
+	// (the "send weight reminder" button). The cron
+	// wrapper is the only place in the codebase that
+	// imports the third-party scheduling library, so
+	// a future "swap for a queue / system cron" change
+	// is a one-package diff. A bad spec (e.g. a typo
+	// in "0 9 * * 0") fails startup rather than
+	// silently never firing.
+	scheduler, err := reminders.NewCronScheduler(
+		weightReminderCronSpec,
+		time.UTC,
+		// The cron job discards the RunResult — every
+		// useful field is already written to the server
+		// log. The admin "send weight reminder" route
+		// calls Run directly and renders the result
+		// into a result card; the cron path
+		// intentionally does not duplicate that.
+		func(ctx context.Context) { _, _ = weightReminder.Run(ctx) },
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize reminder scheduler: %v", err)
+	}
+	scheduler.Start()
+	defer scheduler.Stop()
 
 	// Start server
 	localIP := getLocalIP()

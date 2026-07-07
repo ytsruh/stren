@@ -118,6 +118,32 @@ func (s *Service) SendWelcome(ctx context.Context, user *models.User) error {
 	})
 }
 
+// SendWeightReminder delivers the weekly "log your weight"
+// reminder email. The body is the templated message that
+// accompanies the push notification fired by the same
+// scheduled job; the email is the fallback for users who
+// have not enabled push notifications.
+//
+// The caller (the reminders package) is expected to fire
+// this from a goroutine with a recover so a single SMTP
+// failure does not take the whole batch down.
+func (s *Service) SendWeightReminder(ctx context.Context, user *models.User) error {
+	if user == nil {
+		return errors.New("email: SendWeightReminder: user is nil")
+	}
+	if user.Email == "" {
+		return errors.New("email: SendWeightReminder: user.Email is empty")
+	}
+
+	html, text := emailtmpl.RenderWeightReminder(user.Name, s.baseURL)
+	return s.sender.Send(ctx, Message{
+		To:      user.Email,
+		Subject: "Sunday weigh-in reminder",
+		HTML:    html,
+		Text:    text,
+	})
+}
+
 // SendPasswordReset mints a fresh password-reset token via the
 // tokenRepo and delivers the email. The raw token only ever lives
 // in the email link — the database stores the sha256 hash.

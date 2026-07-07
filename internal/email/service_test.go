@@ -197,6 +197,81 @@ func TestService_SendWelcome_PropagatesSenderError(t *testing.T) {
 	}
 }
 
+func TestService_SendWeightReminder_HappyPath(t *testing.T) {
+	svc, sender := newTestService(t)
+
+	err := svc.SendWeightReminder(context.Background(), &models.User{
+		Name:  "Alice",
+		Email: "alice@example.com",
+	})
+	if err != nil {
+		t.Fatalf("SendWeightReminder: %v", err)
+	}
+	got := sender.last()
+	if got == nil {
+		t.Fatal("sender received no message")
+	}
+	if got.To != "alice@example.com" {
+		t.Errorf("To = %q, want alice@example.com", got.To)
+	}
+	if got.Subject != "Sunday weigh-in reminder" {
+		t.Errorf("Subject = %q, want %q", got.Subject, "Sunday weigh-in reminder")
+	}
+	if !strings.Contains(got.HTML, "Alice") {
+		t.Errorf("HTML missing user name: %q", got.HTML)
+	}
+	// The CTA must point at the configured baseURL + the new
+	// weight entry route so the recipient lands directly on the
+	// new-entry form (where the photo upload already lives).
+	if !strings.Contains(got.HTML, testBaseURL+"/weight/new") {
+		t.Errorf("HTML missing dashboard link to %q/weight/new: %q", testBaseURL, got.HTML)
+	}
+	if !strings.Contains(got.Text, testBaseURL+"/weight/new") {
+		t.Errorf("text missing dashboard link to %q/weight/new: %q", testBaseURL, got.Text)
+	}
+	// The footer link must still point at the baseURL, not at a
+	// hard-coded production value.
+	if !strings.Contains(got.HTML, testBaseURL) {
+		t.Errorf("HTML missing baseURL %q", testBaseURL)
+	}
+}
+
+func TestService_SendWeightReminder_ValidatesInputs(t *testing.T) {
+	// Both nil and empty-email cases must short-circuit before
+	// the sender is touched. The sender would be expensive
+	// (SMTP, network) and is irrelevant for these errors.
+	svc, sender := newTestService(t)
+
+	if err := svc.SendWeightReminder(context.Background(), nil); err == nil {
+		t.Error("expected error for nil user")
+	}
+	if err := svc.SendWeightReminder(context.Background(), &models.User{Name: "n"}); err == nil {
+		t.Error("expected error for empty email")
+	}
+	if len(sender.messages) != 0 {
+		t.Errorf("sender received %d messages, want 0", len(sender.messages))
+	}
+}
+
+func TestService_SendWeightReminder_PropagatesSenderError(t *testing.T) {
+	// The Sender's error must surface verbatim so the
+	// reminders package's goroutine can log it. Swallowing
+	// the error would hide SMTP outages.
+	wantErr := errors.New("smtp connection refused")
+	sender := &recordingSender{err: wantErr}
+	svc, err := NewService(sender, testBaseURL)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	err = svc.SendWeightReminder(context.Background(), &models.User{
+		Name: "Alice", Email: "alice@example.com",
+	})
+	if !errors.Is(err, wantErr) {
+		t.Errorf("err = %v, want %v", err, wantErr)
+	}
+}
+
 func TestService_SendPasswordReset_HappyPath(t *testing.T) {
 	// The Service must: mint a token, persist its hash via the
 	// repo, build the URL, render the email, and send it. We

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"stren/internal/push"
+	"stren/internal/reminders"
 )
 
 // Constraints on the user-supplied notification fields. Kept in one
@@ -23,30 +24,35 @@ const (
 // the route handler can switch on them and pick the right HTMX
 // response (toast, error card, etc.).
 var (
-	ErrNotificationTitleEmpty = errors.New("title is required")
-	ErrNotificationTitleLong  = errors.New("title must be at most 80 characters")
-	ErrNotificationBodyEmpty  = errors.New("message is required")
-	ErrNotificationBodyLong   = errors.New("message must be at most 500 characters")
-	ErrNotificationURLLong    = errors.New("URL must be at most 2000 characters")
-	ErrPushNotConfigured      = errors.New("push notifications are not configured on this server")
+	ErrNotificationTitleEmpty    = errors.New("title is required")
+	ErrNotificationTitleLong     = errors.New("title must be at most 80 characters")
+	ErrNotificationBodyEmpty     = errors.New("message is required")
+	ErrNotificationBodyLong      = errors.New("message must be at most 500 characters")
+	ErrNotificationURLLong       = errors.New("URL must be at most 2000 characters")
+	ErrPushNotConfigured         = errors.New("push notifications are not configured on this server")
+	ErrWeightReminderNotConfigured = errors.New("weight reminder is not configured on this server")
 )
 
-// AdminNotificationsController handles the admin-side broadcast form.
-// It wraps the push.Service and applies simple input validation. The
-// fan-out itself (concurrency, retries, dead-subscription pruning) is
-// the service's job — the controller's only responsibility is parsing
-// the form and translating the result into something the route can
-// render.
+// AdminNotificationsController handles the admin-side broadcast form
+// and the admin "send weekly weight reminder" button. Both
+// orchestrate through their respective services; the controller's
+// only responsibility is parsing the form (for the broadcast) and
+// translating the orchestrator's result into something the route
+// can render.
 type AdminNotificationsController struct {
-	service *push.Service
+	service         *push.Service
+	weightReminder  *reminders.WeightReminder
 }
 
 // NewAdminNotificationsController returns a controller bound to the
-// given push service. service may be nil if the server is running
-// without VAPID keys (e.g. unit tests) — the controller checks for
-// nil before use and returns a friendly error.
-func NewAdminNotificationsController(service *push.Service) *AdminNotificationsController {
-	return &AdminNotificationsController{service: service}
+// given push service and weight reminder orchestrator. service may
+// be nil if the server is running without VAPID keys (e.g. unit
+// tests) — the controller checks for nil before use and returns a
+// friendly error. weightReminder may also be nil; the
+// SendWeightReminder method returns ErrWeightReminderNotConfigured
+// in that case.
+func NewAdminNotificationsController(service *push.Service, weightReminder *reminders.WeightReminder) *AdminNotificationsController {
+	return &AdminNotificationsController{service: service, weightReminder: weightReminder}
 }
 
 // BroadcastInput is the parsed body of the admin send form.
@@ -96,4 +102,27 @@ func (c *AdminNotificationsController) Broadcast(ctx context.Context, in Broadca
 		Body:  strings.TrimSpace(in.Body),
 		URL:   strings.TrimSpace(in.URL),
 	})
+}
+
+// SendWeightReminder fires the same orchestrator the cron job
+// uses on Sunday morning, on demand. The admin can use this to
+// rehearsal-test the full SMTP + push pipeline end-to-end
+// without waiting until Sunday.
+//
+// Returns the orchestrator's RunResult so the route can render
+// a result card showing email/push counts and any failed
+// email addresses. The "attempted" return mirrors the
+// orchestrator's contract: false when the user list was
+// unreadable (ListError set on the result).
+//
+// Returns ErrWeightReminderNotConfigured when the orchestrator
+// is nil (e.g. the reminders package failed to initialise at
+// startup — a separate path from the orchestrator's own
+// error returns).
+func (c *AdminNotificationsController) SendWeightReminder(ctx context.Context) (reminders.RunResult, bool, error) {
+	if c.weightReminder == nil {
+		return reminders.RunResult{}, false, ErrWeightReminderNotConfigured
+	}
+	result, attempted := c.weightReminder.Run(ctx)
+	return result, attempted, nil
 }

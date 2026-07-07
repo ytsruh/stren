@@ -20,8 +20,12 @@ func NewUserAdminRepository(dbConn *db.DB) *UserAdminRepository {
 }
 
 // ListUsers retrieves all users ordered by creation date (newest first).
-func (r *UserAdminRepository) ListUsers() ([]User, error) {
-	ctx := context.Background()
+// The context is passed through to the underlying sqlc query so a
+// caller-driven cancellation (e.g. the weekly reminder's parent
+// context) propagates to the database. Production code that does
+// not have a request context to thread through can pass
+// context.Background().
+func (r *UserAdminRepository) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := r.queries.ListUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)

@@ -17,7 +17,7 @@ import (
 // AdminListUsers renders the admin page listing all users.
 func (h *Handler) AdminListUsers(c echo.Context) error {
 	claims := GetClaims(c)
-	users, err := h.adminUserCtrl.ListUsers()
+	users, err := h.adminUserCtrl.ListUsers(c.Request().Context())
 	if err != nil {
 		return err
 	}

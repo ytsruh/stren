@@ -452,7 +452,7 @@ func newMockAdminUserRepository() *mockAdminUserRepository {
 	return &mockAdminUserRepository{}
 }
 
-func (m *mockAdminUserRepository) ListUsers() ([]models.User, error) {
+func (m *mockAdminUserRepository) ListUsers(_ context.Context) ([]models.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.users, nil
@@ -735,7 +735,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(mockWeight, nil)
 	pushCtrl := controllers.NewPushController(mockPush)
-	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil)
+	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil, nil)
 	validator := utils.NewValidator()
 	// The default test wiring uses a fake image processor and
 	// uploader so the upload route can be exercised without

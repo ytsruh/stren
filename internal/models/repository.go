@@ -82,7 +82,7 @@ type UserRepo interface {
 
 // AdminUserRepo defines the interface for admin user operations.
 type AdminUserRepo interface {
-	ListUsers() ([]User, error)
+	ListUsers(ctx context.Context) ([]User, error)
 }
 
 // Compile-time check to ensure AdminUserRepository implements AdminUserRepo.

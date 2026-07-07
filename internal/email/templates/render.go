@@ -99,6 +99,21 @@ func RenderWelcome(name, baseURL string) (html, text string) {
 	return buf.String(), welcomeText(name, baseURL)
 }
 
+// RenderWeightReminder renders the weekly "log your weight"
+// reminder email. The baseURL is threaded into the dashboard
+// button (which points at /weight/new) and the footer's
+// "view on the web" link. Same fallback behavior as
+// RenderWelcome: a templ render error returns the plaintext
+// body and an empty HTML body so the caller can still send a
+// usable email.
+func RenderWeightReminder(name, baseURL string) (html, text string) {
+	var buf bytes.Buffer
+	if err := WeightReminderEmail(name, baseURL).Render(context.Background(), &buf); err != nil {
+		return "", weightReminderText(name, baseURL)
+	}
+	return buf.String(), weightReminderText(name, baseURL)
+}
+
 // RenderPasswordReset renders the password-reset email. Takes
 // the raw token (not the hashed one) and the baseURL, and
 // builds the URL internally — the URL is the only place the
@@ -138,6 +153,21 @@ func welcomeText(name, baseURL string) string {
 			"Head to your dashboard to add your first entry:\n%s\n\n"+
 			"— The Stren team\n",
 		name, baseURL+"/",
+	)
+}
+
+// weightReminderText is the plaintext body of the weekly
+// "log your weight" reminder email. Kept in Go (not a .templ
+// file) because the body is short and templ would be
+// overkill. The dashboard link points at /weight/new so the
+// recipient lands directly on the new-entry form.
+func weightReminderText(name, baseURL string) string {
+	return fmt.Sprintf(
+		"Hi %s,\n\n"+
+			"It's Sunday — time to log your weight for the week.\n\n"+
+			"A single entry a week is the most reliable way to spot a trend without making the scale a daily event. Tap below to add today's reading, and feel free to add a photo if you want to see your progress over time:\n%s\n\n"+
+			"— The Stren team\n",
+		name, baseURL+"/weight/new",
 	)
 }
 

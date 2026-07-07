@@ -172,6 +172,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	admin.GET("/users", h.AdminListUsers)
 	admin.GET("/notifications", h.AdminNotificationsForm)
 	admin.POST("/notifications/send", h.AdminNotificationsSend)
+	admin.POST("/notifications/send-weight-reminder", h.AdminNotificationsSendWeightReminder)
 
 	// API routes for htmx
 	e.GET("/api/exercises", h.ListExercisesJSON)

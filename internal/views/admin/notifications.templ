@@ -1,15 +1,30 @@
 package admin
 
 import (
+	"time"
+
 	"stren/internal/push"
+	"stren/internal/reminders"
 	"stren/internal/views"
 	"stren/internal/views/components"
 )
 
 // AdminNotificationsPage renders the admin "Notifications" page. It
-// has a single "Send" form (HTMX posting to /admin/notifications/send)
-// and a result panel that the HTMX response swaps into. The initial
-// state shows a placeholder; the result state summarises the broadcast.
+// has two HTMX-driven actions:
+//
+//   - A "Send" form that posts to /admin/notifications/send and
+//     broadcasts a custom push notification to every subscribed
+//     device.
+//   - A "Send weekly weight reminder" button that posts to
+//     /admin/notifications/send-weight-reminder and fires the same
+//     orchestrator the Sunday 09:00 UTC cron job uses. The button
+//     is the rehearsal-test entry point: the admin can verify the
+//     end-to-end SMTP + push pipeline on demand.
+//
+// Both actions share the same #send-result target so the page has
+// one result region. The form clears itself on the
+// admin-notification-sent HX-Trigger (broadcast only); the
+// weight-reminder button is a one-shot and is not inside a form.
 templ AdminNotificationsPage(userName string, isAdmin bool) {
 	@views.Layout(views.PageData{Title: "Notifications", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/admin/notifications"}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Notifications"})
@@ -47,6 +62,29 @@ templ AdminNotificationsPage(userName string, isAdmin bool) {
 				</span>
 			</button>
 		</form>
+		<div class="mt-8 pt-6 border-t">
+			<h2 class="text-base font-semibold">Scheduled reminders</h2>
+			<p class="text-sm text-muted-foreground my-3">The weekly "Sunday weigh-in" reminder fires automatically every Sunday at 09:00 UTC. Use the button below to send it on demand — same SMTP and push pipeline the cron uses, so it doubles as a pre-production test.</p>
+			<button
+				type="button"
+				id="weight-reminder-button"
+				class="btn-primary relative inline-flex"
+				hx-post="/admin/notifications/send-weight-reminder"
+				hx-target="#send-result"
+				hx-swap="innerHTML"
+				hx-indicator="#weight-reminder-spinner"
+				hx-disabled-elt="this"
+				hx-confirm="Send the weekly weight reminder to every user now? This delivers a real email and a real push."
+			>
+				<span class="btn-text flex items-center gap-2">
+					@components.Icon(components.IconProps{Name: "bell", Size: 18})
+					Send weekly weight reminder
+				</span>
+				<span id="weight-reminder-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+					@components.Icon(components.IconProps{Name: "loader", Size: 18})
+				</span>
+			</button>
+		</div>
 		<div id="send-result" class="mt-6">
 			@components.Card(components.CardProps{}) {
 				@components.CardSection(components.CardSectionProps{}) {
@@ -54,6 +92,7 @@ templ AdminNotificationsPage(userName string, isAdmin bool) {
 				}
 			}
 		</div>
+		@WeightReminderConfirmScript()
 	}
 }
 
@@ -111,6 +150,139 @@ templ AdminNotificationError(message string) {
 	}
 }
 
+// AdminWeightReminderResult renders the result card after a
+// weight-reminder run. Mirrors the shape of AdminNotificationResult
+// so the admin sees a consistent card style regardless of which
+// button was clicked.
+//
+// The body of the card shows: total users, emails sent / failed
+// (with the failed addresses listed inline, capped to the first
+// few so the card stays compact), push sent / deleted / failed,
+// and the run's wall-clock duration.
+//
+// Email-failed addresses are surfaced inline so the operator can
+// spot a pattern (one specific SMTP error, a user with an
+// invalid address) without grepping the server log. The slice is
+// capped at maxWeightReminderFailedAddresses with a "see server
+// log" hint for the rest, matching the truncate-elsewhere-in-the
+// pattern used by push errors.
+templ AdminWeightReminderResult(result reminders.RunResult) {
+	@components.Card(components.CardProps{}) {
+		@components.CardSection(components.CardSectionProps{}) {
+			<h3 class="mb-2">Weekly weight reminder sent</h3>
+			<dl class="grid grid-cols-2 gap-2 text-sm">
+				<dt class="text-muted-foreground">Users:</dt>
+				<dd>{ itoa(result.Users) }</dd>
+				<dt class="text-muted-foreground">Emails sent:</dt>
+				<dd>{ itoa(result.EmailsSent) }</dd>
+				if result.EmailsFailed > 0 {
+					<dt class="text-destructive">Emails failed:</dt>
+					<dd class="text-destructive">{ itoa(result.EmailsFailed) }</dd>
+				}
+				<dt class="text-muted-foreground">Push sent:</dt>
+				<dd>{ itoa(result.PushSent) }</dd>
+				if result.PushDeleted > 0 {
+					<dt class="text-muted-foreground">Dead subscriptions pruned:</dt>
+					<dd>{ itoa(result.PushDeleted) }</dd>
+				}
+				if result.PushFailed > 0 {
+					<dt class="text-destructive">Push failed:</dt>
+					<dd class="text-destructive">{ itoa(result.PushFailed) }</dd>
+				}
+				<dt class="text-muted-foreground">Duration:</dt>
+				<dd>{ formatDuration(result.Duration) }</dd>
+			</dl>
+			if len(result.EmailsFailedAddresses) > 0 {
+				<details class="mt-4" open?={ len(result.EmailsFailedAddresses) <= maxWeightReminderFailedAddresses }>
+					<summary class="text-sm text-muted-foreground cursor-pointer">Failed email addresses ({ itoa(len(result.EmailsFailedAddresses)) })</summary>
+					<ul class="mt-2 text-sm space-y-1">
+						for _, addr := range result.EmailsFailedAddresses {
+							if len(addr) > 0 {
+								<li class="text-destructive">{ addr }</li>
+							}
+						}
+					</ul>
+					if len(result.EmailsFailedAddresses) > maxWeightReminderFailedAddresses {
+						<p class="text-sm text-muted-foreground mt-2">Showing all { itoa(len(result.EmailsFailedAddresses)) } addresses. See the server log for the full per-user error message.</p>
+					}
+				</details>
+			}
+			if result.PushError != "" {
+				<p class="text-sm text-destructive mt-3">Push service error: { result.PushError }</p>
+			}
+		}
+	}
+}
+
+// maxWeightReminderFailedAddresses caps the number of failed
+// email addresses rendered inline in the weight-reminder result
+// card. Larger lists get a "see server log" hint instead of
+// dumping every address into the toast, so the card stays a
+// useful at-a-glance summary regardless of user count. The cap
+// is small on purpose: the operator's job is to spot a pattern
+// (e.g. one specific SMTP error), not to read the whole list.
+const maxWeightReminderFailedAddresses = 10
+
+// WeightReminderConfirmScript swaps the global confirm dialog's
+// OK button from the destructive (red) default to the
+// non-destructive (primary) variant when the weight-reminder
+// button is what fired the dialog. The pattern mirrors
+// WeightExportScript in internal/views/weight/list.templ: the
+// dialog is defined in layout.templ with btn-destructive as the
+// safe-looking-but-wrong default for non-destructive actions, and
+// each non-destructive caller has to swap it back per show.
+//
+// `open?={...}` on the details element above means the failed
+// addresses list is collapsed only when there are more than the
+// cap, so the operator can scan a short list without an extra
+// click. This script only runs once per page load and is a
+// no-op if the button is not present.
+templ WeightReminderConfirmScript() {
+	<script>
+		(function() {
+			var btn = document.getElementById('weight-reminder-button');
+			if (!btn) return;
+
+			btn.addEventListener('htmx:confirm', function(evt) {
+				// htmx fires htmx:confirm before showing the
+				// dialog. Prevent the default (which would
+				// show the dialog unmodified) and rebuild it
+				// with a non-destructive OK button, the same
+				// way the weight export does.
+				evt.preventDefault();
+				var dialog = document.getElementById('confirm-dialog');
+				if (!dialog || typeof dialog.showModal !== 'function') {
+					// Fallback: native confirm. A browser
+					// without <dialog> support is unlikely
+					// in practice, but the fallback keeps
+					// the test path simple.
+					if (window.confirm(evt.detail.question)) {
+						evt.detail.issueRequest(true);
+					}
+					return;
+				}
+				var message = document.getElementById('confirm-message');
+				if (message) {
+					message.textContent = evt.detail.question;
+				}
+				var ok = document.getElementById('confirm-ok');
+				if (ok) {
+					var originalOkClass = ok.className;
+					ok.className = ok.className.replace(/\bbtn-destructive\b/, 'btn');
+					ok.onclick = function() {
+						dialog.close();
+						evt.detail.issueRequest(true);
+					};
+					dialog.addEventListener('close', function restoreOkClass() {
+						ok.className = originalOkClass;
+					}, { once: true });
+				}
+				dialog.showModal();
+			});
+		})();
+	</script>
+}
+
 // itoa is a tiny helper so the templ can render int fields without
 // importing strconv into the generated file. Negative numbers are not
 // expected (counters are non-negative) so we keep the implementation
@@ -125,4 +297,30 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(digits)
+}
+
+// formatDuration renders a time.Duration as a short, human-readable
+// string for the result card. Lives in Go (not in the templ) so
+// the templ file stays focused on markup. The output is a single
+// unit (e.g. "1.2s", "850ms") — anything under a second is
+// reported in milliseconds, anything at or above in seconds with
+// one decimal. Rounded (not truncated) so 949ms reads as 949ms
+// rather than 900ms.
+func formatDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	if d < time.Second {
+		return itoa(int(d.Milliseconds())) + "ms"
+	}
+	// Seconds with one decimal. d.Seconds() is a float64;
+	// multiplying by 10 and rounding keeps the visible
+	// precision predictable.
+	deciseconds := int(d.Seconds() * 10)
+	whole := deciseconds / 10
+	frac := deciseconds % 10
+	if frac < 0 {
+		frac = -frac
+	}
+	return itoa(whole) + "." + string(rune('0'+frac)) + "s"
 }

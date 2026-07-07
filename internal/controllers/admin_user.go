@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"context"
+
 	"stren/internal/models"
 )
 
@@ -15,6 +17,6 @@ func NewAdminUserController(repo models.AdminUserRepo) *AdminUserController {
 }
 
 // ListUsers returns all users ordered by creation date (newest first).
-func (uc *AdminUserController) ListUsers() ([]models.User, error) {
-	return uc.repo.ListUsers()
+func (uc *AdminUserController) ListUsers(ctx context.Context) ([]models.User, error) {
+	return uc.repo.ListUsers(ctx)
 }
