@@ -9,7 +9,7 @@ import (
 )
 
 // exerciseNavActiveHistory is the active value for ExerciseNav that
-// highlights the History (entries) tab.
+// highlights the History (exercise entries) tab.
 const exerciseNavActiveHistory = "history"
 
 // exerciseNavActiveChart is the active value for ExerciseNav that
@@ -73,24 +73,24 @@ templ ExerciseNav(exerciseID string, active string) {
 // exercise. The view uses the shared Layout and the centered ExerciseNav
 // so the user can switch to the History or Advanced sub-views.
 //
-// chartEntries is the user's full set of entries for the exercise, fed
-// by EntryController.GetAllEntriesForChart. The view aggregates to
-// "heaviest weight per calendar day" and plots it as a single line.
-// When there are fewer than 2 unique days, a friendly empty-state
-// message is rendered in place of the chart.
+// chartExerciseEntries is the user's full set of exercise entries for the
+// exercise, fed by ExerciseEntryController.GetAllExerciseEntriesForChart.
+// The view aggregates to "heaviest weight per calendar day" and plots it
+// as a single line. When there are fewer than 2 unique days, a friendly
+// empty-state message is rendered in place of the chart.
 //
 // weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
 // dataset label so the chart legend matches the user's setting.
-templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
+templ ExerciseChart(exercise *models.Exercise, chartExerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@ExerciseNav(exercise.ID, exerciseNavActiveChart)
 		<header class="mb-4">
 			<h1 class="text-xl font-semibold">{ exercise.Name } Progression</h1>
 		</header>
 		<div class="card p-4">
-			if chartHasEnoughData(chartEntries) {
+			if chartHasEnoughData(chartExerciseEntries) {
 				<div class="h-[60vh] min-h-96">
-					@components.Chart(chartDataForExerciseFull(chartEntries, exercise.Name, "Max weight per training day", weightUnit))
+					@components.Chart(chartDataForExerciseFull(chartExerciseEntries, exercise.Name, "Max weight per training day", weightUnit))
 				</div>
 			} else {
 				<p class="text-muted-foreground text-center py-12">
@@ -108,25 +108,25 @@ templ ExerciseChart(exercise *models.Exercise, chartEntries []models.ExerciseEnt
 // Layout and the centered ExerciseNav so the user can switch to the
 // History or Chart sub-views.
 //
-// chartEntries is the user's full set of entries for the exercise, fed
-// by EntryController.GetAllEntriesForChart. Unlike the line chart, this
-// view does not aggregate — overlapping (reps, weight) points are
-// rendered as separate translucent dots so no set is hidden. With
-// fewer than 2 entries the view shows a short empty-state message
-// instead of a chart.
+// chartExerciseEntries is the user's full set of exercise entries for the
+// exercise, fed by ExerciseEntryController.GetAllExerciseEntriesForChart.
+// Unlike the line chart, this view does not aggregate — overlapping
+// (reps, weight) points are rendered as separate translucent dots so no
+// set is hidden. With fewer than 2 exercise entries the view shows a
+// short empty-state message instead of a chart.
 //
 // weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
 // y-axis label.
-templ ExerciseChartAdvanced(exercise *models.Exercise, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
+templ ExerciseChartAdvanced(exercise *models.Exercise, chartExerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@ExerciseNav(exercise.ID, exerciseNavActiveAdvanced)
 		<header class="mb-4">
 			<h1 class="text-xl font-semibold">{ exercise.Name } Volume</h1>
 		</header>
 		<div class="card p-4">
-			if chartScatterHasEnoughData(chartEntries) {
+			if chartScatterHasEnoughData(chartExerciseEntries) {
 				<div class="h-[60vh] min-h-96">
-					@components.ScatterChart(chartDataForExerciseScatter(chartEntries, exercise.Name, "Every set plotted by reps and weight", weightUnit))
+					@components.ScatterChart(chartDataForExerciseScatter(chartExerciseEntries, exercise.Name, "Every set plotted by reps and weight", weightUnit))
 				</div>
 			} else {
 				<p class="text-muted-foreground text-center py-12">
@@ -137,36 +137,37 @@ templ ExerciseChartAdvanced(exercise *models.Exercise, chartEntries []models.Exe
 	}
 }
 
-// chartHasEnoughData reports whether the given entry slice has at least
-// 2 unique calendar days of data — the threshold Chart.js needs to draw
-// a meaningful line. Multiple sets on the same day collapse to one point.
-func chartHasEnoughData(entries []models.ExerciseEntry) bool {
+// chartHasEnoughData reports whether the given exercise entry slice has at
+// least 2 unique calendar days of data — the threshold Chart.js needs to
+// draw a meaningful line. Multiple sets on the same day collapse to one
+// point.
+func chartHasEnoughData(exerciseEntries []models.ExerciseEntry) bool {
 	seen := make(map[string]struct{})
-	for _, e := range entries {
+	for _, e := range exerciseEntries {
 		key := e.CreatedAt.Format("2006-01-02")
 		seen[key] = struct{}{}
 	}
 	return len(seen) >= 2
 }
 
-// chartScatterHasEnoughData reports whether the given entry slice has
-// at least 2 sets to plot on the scatter chart. Unlike chartHasEnoughData
-// the scatter view does NOT collapse by day — every set is a dot, so the
-// threshold is just len(entries) >= 2.
-func chartScatterHasEnoughData(entries []models.ExerciseEntry) bool {
-	return len(entries) >= 2
+// chartScatterHasEnoughData reports whether the given exercise entry slice
+// has at least 2 sets to plot on the scatter chart. Unlike
+// chartHasEnoughData the scatter view does NOT collapse by day — every
+// set is a dot, so the threshold is just len(exerciseEntries) >= 2.
+func chartScatterHasEnoughData(exerciseEntries []models.ExerciseEntry) bool {
+	return len(exerciseEntries) >= 2
 }
 
-// chartDataForExerciseFull aggregates a user's full entry set for a
-// single exercise into the Chart.js line/area series used by the
-// dedicated /chart view. Entries are grouped by calendar day and reduced
-// to the heaviest weight of that day, so the line reads as a
+// chartDataForExerciseFull aggregates a user's full exercise entry set for
+// a single exercise into the Chart.js line/area series used by the
+// dedicated /chart view. Exercise entries are grouped by calendar day and
+// reduced to the heaviest weight of that day, so the line reads as a
 // PR-over-time view rather than a noisy per-set series. Days are sorted
 // ascending so the line runs left-to-right.
 //
 // Unlike the small chart on the History view (see chartDataForExercise
 // in history.templ), this helper:
-//   - is fed the full entry set, not a 30-entry slice
+//   - is fed the full exercise entry set, not a 30-entry slice
 //   - uses a distinct canvas id (`exercise-chart`) so the History view's
 //     smaller chart and the full-width chart can never collide if both
 //     are ever loaded on the same page
@@ -175,8 +176,8 @@ func chartScatterHasEnoughData(entries []models.ExerciseEntry) bool {
 //
 // weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
 // dataset label.
-func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName string, chartTitle string, weightUnit string) components.ChartProps {
-	days := aggregateEntriesByDay(entries)
+func chartDataForExerciseFull(exerciseEntries []models.ExerciseEntry, exerciseName string, chartTitle string, weightUnit string) components.ChartProps {
+	days := aggregateExerciseEntriesByDay(exerciseEntries)
 	labels, values := dayLabelsAndValues(days, "02 Jan")
 	return components.ChartProps{
 		ID:     "exercise-chart",
@@ -188,25 +189,26 @@ func chartDataForExerciseFull(entries []models.ExerciseEntry, exerciseName strin
 	}
 }
 
-// chartDataForExerciseScatter converts a user's full entry set for a
-// single exercise into the Chart.js scatter series used by the dedicated
-// /chart/advanced view. Unlike chartDataForExerciseFull the scatter view
-// does NOT collapse by day — every set is its own (reps, weight) point
-// so the user can see set-by-set volume patterns. The date is carried
-// alongside each point and surfaced in the hover tooltip.
+// chartDataForExerciseScatter converts a user's full exercise entry set
+// for a single exercise into the Chart.js scatter series used by the
+// dedicated /chart/advanced view. Unlike chartDataForExerciseFull the
+// scatter view does NOT collapse by day — every set is its own (reps,
+// weight) point so the user can see set-by-set volume patterns. The date
+// is carried alongside each point and surfaced in the hover tooltip.
 //
-// Entries are NOT sorted — the scatter chart does not need them in any
-// particular order, and Chart.js positions points by (x, y) regardless
-// of array order. A distinct canvas id (`exercise-chart-advanced`) keeps
-// it from colliding with the line chart on the /chart view. The chart
-// does not hide axis tick labels — the full-width layout has room for
-// them, and integer rep ticks help the user read set counts at a glance.
+// Exercise entries are NOT sorted — the scatter chart does not need them
+// in any particular order, and Chart.js positions points by (x, y)
+// regardless of array order. A distinct canvas id
+// (`exercise-chart-advanced`) keeps it from colliding with the line chart
+// on the /chart view. The chart does not hide axis tick labels — the
+// full-width layout has room for them, and integer rep ticks help the
+// user read set counts at a glance.
 //
 // weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
 // y-axis label.
-func chartDataForExerciseScatter(entries []models.ExerciseEntry, exerciseName string, chartTitle string, weightUnit string) components.ScatterChartProps {
-	points := make([]components.ScatterPoint, 0, len(entries))
-	for _, e := range entries {
+func chartDataForExerciseScatter(exerciseEntries []models.ExerciseEntry, exerciseName string, chartTitle string, weightUnit string) components.ScatterChartProps {
+	points := make([]components.ScatterPoint, 0, len(exerciseEntries))
+	for _, e := range exerciseEntries {
 		points = append(points, components.ScatterPoint{
 			X:    float64(e.Reps),
 			Y:    e.Weight,

@@ -72,7 +72,7 @@ func WelcomeEmail(name string, baseURL string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = EmailParagraph("Stren helps you log every set, watch your numbers climb, and keep your training consistent. Head to the dashboard any time to add your first entry.").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = EmailParagraph("Stren helps you log every set, watch your numbers climb, and keep your training consistent. Head to the dashboard any time to log your first set.").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

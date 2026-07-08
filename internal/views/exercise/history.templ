@@ -20,14 +20,15 @@ const historySpinnerID = "history-spinner"
 // header, lifetime stats, the weight-progression chart, and the paginated
 // table. The pagination controls swap only the table region via htmx.
 //
-// chartEntries is the most recent slice of entries used to drive the line
-// chart shown next to the stat cards. May be nil or short; the chart
-// renders nothing when fewer than 2 unique calendar days are present.
+// chartExerciseEntries is the most recent slice of exercise entries used to
+// drive the line chart shown next to the stat cards. May be nil or short;
+// the chart renders nothing when fewer than 2 unique calendar days are
+// present.
 //
 // weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
 // stat-card values, the chart's dataset label, and the table's "Weight"
 // column.
-templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPage, chartEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
+templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPage, chartExerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="">
 			<div class="flex items-center justify-between mb-2 gap-4">
@@ -114,13 +115,13 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 				</section>
 			</details>
 		</div>
-		if len(page.Entries) == 0 {
+		if len(page.ExerciseEntries) == 0 {
 			<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
 				<header class="flex max-w-sm flex-col items-center gap-3 text-center">
 					<div class="mb-4 bg-muted text-foreground flex size-12 shrink-0 items-center justify-center rounded-lg">
 						@components.Icon(components.IconProps{Name: "dumbbell", Size: 24})
 					</div>
-					@components.Title(components.TitleProps{Size: "md", Color: "default", Title: "No entries yet"})
+					@components.Title(components.TitleProps{Size: "md", Color: "default", Title: "No sets yet"})
 					<p class="text-muted-foreground text-sm">You haven't logged any sets for { exercise.Name } yet.</p>
 				</header>
 				<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
@@ -134,7 +135,7 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
 				@components.StatCard(components.StatCardProps{Label: "Last Set", Value: models.FormatWeight(page.Stats.LastSet.Weight, weightUnit)})
 				@components.StatCard(components.StatCardProps{Label: "Personal Best", Value: models.FormatWeight(page.Stats.MaxWeight, weightUnit)})
-				{{ chartProps := chartDataForExercise(chartEntries, exercise.Name, weightUnit) }}
+				{{ chartProps := chartDataForExercise(chartExerciseEntries, exercise.Name, weightUnit) }}
 				if len(chartProps.Labels) >= 2 {
 					<div class="col-span-2 card p-2">
 						<div class="h-28 sm:h-32 md:h-48">
@@ -152,12 +153,13 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 	}
 }
 
-// HistoryTable renders the paginated table of entries plus the previous / next
-// controls. It is also the swap target for htmx-driven page changes: the
-// outer wrapper carries an id so the response replaces it via outerHTML.
+// HistoryTable renders the paginated table of exercise entries plus the
+// previous / next controls. It is also the swap target for htmx-driven page
+// changes: the outer wrapper carries an id so the response replaces it via
+// outerHTML.
 //
-// weightUnit is forwarded to entry.FormattedWeight so each row's "Weight"
-// cell is labelled with the user's preferred unit.
+// weightUnit is forwarded to exerciseEntry.FormattedWeight so each row's
+// "Weight" cell is labelled with the user's preferred unit.
 templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage, weightUnit string) {
 	<div id={ historyTableWrapID } class="mb-4">
 		<div class="overflow-x-auto">
@@ -172,15 +174,15 @@ templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage, weightUn
 					</tr>
 				</thead>
 				<tbody>
-					for _, entry := range page.Entries {
-						<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
-							<td>{ entry.FormattedDate() }</td>
-							<td>{ fmt.Sprintf("%d", entry.Reps) }</td>
-							<td>{ entry.FormattedWeight(weightUnit) }</td>
-							<td>{ entry.Notes }</td>
+					for _, exerciseEntry := range page.ExerciseEntries {
+						<tr id={ fmt.Sprintf("exercise-entry-%s", exerciseEntry.ID) }>
+							<td>{ exerciseEntry.FormattedDate() }</td>
+							<td>{ fmt.Sprintf("%d", exerciseEntry.Reps) }</td>
+							<td>{ exerciseEntry.FormattedWeight(weightUnit) }</td>
+							<td>{ exerciseEntry.Notes }</td>
 							<td>
 								<a
-									href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
+									href={ templ.SafeURL(fmt.Sprintf("/exercise-entries/%s/edit", exerciseEntry.ID)) }
 									class="btn-outline p-2"
 									title="Edit"
 								>
@@ -209,24 +211,25 @@ templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage, weightUn
 	</div>
 }
 
-// chartDataForExercise converts a slice of recent entries into the generic
-// Chart props expected by components.Chart. Entries are grouped by calendar
-// day and reduced to the heaviest weight of that day so the line reads as a
-// PR-over-time view (rather than a noisy per-set series). Days are sorted
-// ascending so the line runs left-to-right.
+// chartDataForExercise converts a slice of recent exercise entries into the
+// generic Chart props expected by components.Chart. Exercise entries are
+// grouped by calendar day and reduced to the heaviest weight of that day so
+// the line reads as a PR-over-time view (rather than a noisy per-set series).
+// Days are sorted ascending so the line runs left-to-right.
 //
-// The chart's title reports how many raw entries fed it (e.g. "Last 30 Sets")
-// so the user can tell at a glance how much history the line represents. The
-// chart component itself renders nothing when there are fewer than 2 labels.
+// The chart's title reports how many raw exercise entries fed it (e.g.
+// "Last 30 Sets") so the user can tell at a glance how much history the
+// line represents. The chart component itself renders nothing when there
+// are fewer than 2 labels.
 //
 // weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
 // dataset label so the chart legend matches the user's setting.
-func chartDataForExercise(entries []models.ExerciseEntry, exerciseName string, weightUnit string) components.ChartProps {
-	days := aggregateEntriesByDay(entries)
+func chartDataForExercise(exerciseEntries []models.ExerciseEntry, exerciseName string, weightUnit string) components.ChartProps {
+	days := aggregateExerciseEntriesByDay(exerciseEntries)
 	labels, values := dayLabelsAndValues(days, "02 Jan")
 	return components.ChartProps{
 		ID:     "exercise-history-chart",
-		Title:  fmt.Sprintf("Last %d Sets", len(entries)),
+		Title:  fmt.Sprintf("Last %d Sets", len(exerciseEntries)),
 		Labels: labels,
 		Datasets: []components.ChartDataset{
 			{Label: fmt.Sprintf("%s (%s)", exerciseName, weightUnit), Values: values},

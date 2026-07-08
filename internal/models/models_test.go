@@ -58,8 +58,8 @@ func TestExerciseEntry_FormattedWeight(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entry := &ExerciseEntry{Weight: tt.weight}
-			got := entry.FormattedWeight(tt.unit)
+			exerciseEntry := &ExerciseEntry{Weight: tt.weight}
+			got := exerciseEntry.FormattedWeight(tt.unit)
 			if got != tt.expected {
 				t.Errorf("FormattedWeight(%q) = %q, want %q", tt.unit, got, tt.expected)
 			}
@@ -162,8 +162,8 @@ func TestExerciseEntry_FormattedDate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entry := &ExerciseEntry{CreatedAt: tt.input}
-			got := entry.FormattedDate()
+			exerciseEntry := &ExerciseEntry{CreatedAt: tt.input}
+			got := exerciseEntry.FormattedDate()
 			if got != tt.expected {
 				t.Errorf("FormattedDate() = %q, want %q", got, tt.expected)
 			}

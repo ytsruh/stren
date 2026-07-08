@@ -106,7 +106,7 @@ func main() {
 
 	// Initialize controllers
 	authCtrl := controllers.NewAuthController(userRepo, jwtService, emailService)
-	entryCtrl := controllers.NewEntryController(repo)
+	exerciseEntryCtrl := controllers.NewExerciseEntryController(repo)
 	adminCtrl := controllers.NewAdminController(repo)
 	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
@@ -139,7 +139,7 @@ func main() {
 	h := routes.NewHandler(
 		authCtrl,
 		authRecoveryCtrl,
-		entryCtrl,
+		exerciseEntryCtrl,
 		adminCtrl,
 		adminUserCtrl,
 		feedbackCtrl,

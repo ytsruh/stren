@@ -150,7 +150,7 @@ func welcomeText(name, baseURL string) string {
 	return fmt.Sprintf(
 		"Hi %s,\n\n"+
 			"Welcome to Stren. Stren helps you log every set, watch your numbers climb, and keep your training consistent.\n\n"+
-			"Head to your dashboard to add your first entry:\n%s\n\n"+
+			"Head to your dashboard to log your first set:\n%s\n\n"+
 			"— The Stren team\n",
 		name, baseURL+"/",
 	)

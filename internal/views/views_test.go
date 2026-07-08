@@ -53,7 +53,7 @@ func TestEmptyState(t *testing.T) {
 	if !strings.Contains(html, "No workouts in the last 7 days") {
 		t.Error("expected empty state heading")
 	}
-	if !strings.Contains(html, "Add Entry") {
+	if !strings.Contains(html, "Add Set") {
 		t.Error("expected call-to-action button")
 	}
 }

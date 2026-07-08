@@ -26,8 +26,8 @@ func TestIsPublicRoute(t *testing.T) {
 		{"/sw.js", true},
 		{"/favicon.ico", true},
 		{"/", false},
-		{"/entries", false},
-		{"/entries/new", false},
+		{"/exercise-entries", false},
+		{"/exercise-entries/new", false},
 		{"/exercises/Squat", false},
 		{"/api/exercises", false},
 	}
@@ -43,7 +43,7 @@ func TestIsPublicRoute(t *testing.T) {
 
 func TestRedirectToLogin_NonHTMX(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -62,7 +62,7 @@ func TestRedirectToLogin_NonHTMX(t *testing.T) {
 
 func TestRedirectToLogin_HTMX(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -109,7 +109,7 @@ func TestAuthMiddleware_MissingCookie(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -135,7 +135,7 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
 		Value: "invalid-token",
@@ -167,7 +167,7 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
 		Value: token,
@@ -211,7 +211,7 @@ if claims.UserID != "user-42" {
 
 func TestGetClaims_Missing(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -223,7 +223,7 @@ func TestGetClaims_Missing(t *testing.T) {
 
 func TestGetClaims_Present(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -260,7 +260,7 @@ func TestAuthMiddleware_ValidToken_HTMX(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.Header.Set("HX-Request", "true")
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
@@ -289,7 +289,7 @@ func TestAuthMiddleware_MissingCookie_HTMX(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)

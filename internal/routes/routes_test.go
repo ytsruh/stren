@@ -30,23 +30,23 @@ import (
 )
 
 type mockRepository struct {
-	mu        sync.Mutex
-	exercises []models.Exercise
-	entries   []models.ExerciseEntry
+	mu              sync.Mutex
+	exercises       []models.Exercise
+	exerciseEntries []models.ExerciseEntry
 
 	errCreate                       error
 	errGetByName                    error
 	errGetByID                      error
 	errUpdate                       error
 	errList                         error
-	errCreateEntry                  error
-	errGetEntry                     error
-	errUpdateEntry                  error
-	errUpdateEntryWithDate          error
-	errDeleteEntry                  error
-	errListEntries                  error
-	errGetEntriesByExercisePaginated error
-	errGetEntriesByDateRange        error
+	errCreateExerciseEntry                  error
+	errGetExerciseEntry                     error
+	errUpdateExerciseEntry                  error
+	errUpdateExerciseEntryWithDate          error
+	errDeleteExerciseEntry                  error
+	errListExerciseEntries                  error
+	errGetExerciseEntriesByExercisePaginated error
+	errGetExerciseEntriesByDateRange        error
 	errGetExerciseByID              error
 	errGetMaxWeightByExercise       error
 	errGetLastSetByExercise         error
@@ -165,9 +165,9 @@ func (m *mockRepository) List() ([]models.Exercise, error) {
 	return result, nil
 }
 
-func (m *mockRepository) CreateEntry(entry *models.ExerciseEntry) error {
-	if m.errCreateEntry != nil {
-		return m.errCreateEntry
+func (m *mockRepository) CreateExerciseEntry(entry *models.ExerciseEntry) error {
+	if m.errCreateExerciseEntry != nil {
+		return m.errCreateExerciseEntry
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -185,17 +185,17 @@ func (m *mockRepository) CreateEntry(entry *models.ExerciseEntry) error {
 	}
 	entry.ExerciseID = exerciseID
 	entry.ID = "entry-" + entry.ExerciseName
-	m.entries = append(m.entries, *entry)
+	m.exerciseEntries = append(m.exerciseEntries, *entry)
 	return nil
 }
 
-func (m *mockRepository) GetEntry(id string, userID string) (*models.ExerciseEntry, error) {
-	if m.errGetEntry != nil {
-		return nil, m.errGetEntry
+func (m *mockRepository) GetExerciseEntry(id string, userID string) (*models.ExerciseEntry, error) {
+	if m.errGetExerciseEntry != nil {
+		return nil, m.errGetExerciseEntry
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, e := range m.entries {
+	for _, e := range m.exerciseEntries {
 		if e.ID == id && e.UserID == userID {
 			cp := e
 			return &cp, nil
@@ -204,59 +204,59 @@ func (m *mockRepository) GetEntry(id string, userID string) (*models.ExerciseEnt
 	return nil, nil
 }
 
-func (m *mockRepository) UpdateEntry(entry *models.ExerciseEntry, userID string) error {
-	if m.errUpdateEntry != nil {
-		return m.errUpdateEntry
+func (m *mockRepository) UpdateExerciseEntry(entry *models.ExerciseEntry, userID string) error {
+	if m.errUpdateExerciseEntry != nil {
+		return m.errUpdateExerciseEntry
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for i, e := range m.entries {
+	for i, e := range m.exerciseEntries {
 		if e.ID == entry.ID && e.UserID == userID {
-			m.entries[i] = *entry
+			m.exerciseEntries[i] = *entry
 			return nil
 		}
 	}
 	return nil
 }
 
-func (m *mockRepository) UpdateEntryWithDate(entry *models.ExerciseEntry, userID string) error {
-	if m.errUpdateEntryWithDate != nil {
-		return m.errUpdateEntryWithDate
+func (m *mockRepository) UpdateExerciseEntryWithDate(entry *models.ExerciseEntry, userID string) error {
+	if m.errUpdateExerciseEntryWithDate != nil {
+		return m.errUpdateExerciseEntryWithDate
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for i, e := range m.entries {
+	for i, e := range m.exerciseEntries {
 		if e.ID == entry.ID && e.UserID == userID {
-			m.entries[i] = *entry
+			m.exerciseEntries[i] = *entry
 			return nil
 		}
 	}
 	return nil
 }
 
-func (m *mockRepository) DeleteEntry(id string, userID string) error {
-	if m.errDeleteEntry != nil {
-		return m.errDeleteEntry
+func (m *mockRepository) DeleteExerciseEntry(id string, userID string) error {
+	if m.errDeleteExerciseEntry != nil {
+		return m.errDeleteExerciseEntry
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for i, e := range m.entries {
+	for i, e := range m.exerciseEntries {
 		if e.ID == id && e.UserID == userID {
-			m.entries = append(m.entries[:i], m.entries[i+1:]...)
+			m.exerciseEntries = append(m.exerciseEntries[:i], m.exerciseEntries[i+1:]...)
 			return nil
 		}
 	}
 	return nil
 }
 
-func (m *mockRepository) ListEntries(userID string, limit int) ([]models.ExerciseEntry, error) {
-	if m.errListEntries != nil {
-		return nil, m.errListEntries
+func (m *mockRepository) ListExerciseEntries(userID string, limit int) ([]models.ExerciseEntry, error) {
+	if m.errListExerciseEntries != nil {
+		return nil, m.errListExerciseEntries
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var result []models.ExerciseEntry
-	for _, e := range m.entries {
+	for _, e := range m.exerciseEntries {
 		if e.UserID == userID {
 			result = append(result, e)
 		}
@@ -267,14 +267,14 @@ func (m *mockRepository) ListEntries(userID string, limit int) ([]models.Exercis
 	return result, nil
 }
 
-func (m *mockRepository) GetEntriesByExercisePaginated(exerciseID string, userID string, limit, offset int) ([]models.ExerciseEntry, error) {
-	if m.errGetEntriesByExercisePaginated != nil {
-		return nil, m.errGetEntriesByExercisePaginated
+func (m *mockRepository) GetExerciseEntriesByExercisePaginated(exerciseID string, userID string, limit, offset int) ([]models.ExerciseEntry, error) {
+	if m.errGetExerciseEntriesByExercisePaginated != nil {
+		return nil, m.errGetExerciseEntriesByExercisePaginated
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var all []models.ExerciseEntry
-	for _, e := range m.entries {
+	for _, e := range m.exerciseEntries {
 		if e.ExerciseID == exerciseID && e.UserID == userID {
 			all = append(all, e)
 		}
@@ -296,7 +296,7 @@ func (m *mockRepository) GetMaxWeightByExercise(exerciseID string, userID string
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var max float64
-	for _, e := range m.entries {
+	for _, e := range m.exerciseEntries {
 		if e.ExerciseID == exerciseID && e.UserID == userID && e.Weight > max {
 			max = e.Weight
 		}
@@ -311,26 +311,26 @@ func (m *mockRepository) GetLastSetByExercise(exerciseID string, userID string) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var last *models.ExerciseEntry
-	for i, e := range m.entries {
+	for i, e := range m.exerciseEntries {
 		if e.ExerciseID != exerciseID || e.UserID != userID {
 			continue
 		}
 		if last == nil || e.CreatedAt.After(last.CreatedAt) {
-			cp := m.entries[i]
+			cp := m.exerciseEntries[i]
 			last = &cp
 		}
 	}
 	return last, nil
 }
 
-func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID string) ([]models.ExerciseEntry, error) {
-	if m.errGetEntriesByDateRange != nil {
-		return nil, m.errGetEntriesByDateRange
+func (m *mockRepository) GetExerciseEntriesByDateRange(start, end time.Time, userID string) ([]models.ExerciseEntry, error) {
+	if m.errGetExerciseEntriesByDateRange != nil {
+		return nil, m.errGetExerciseEntriesByDateRange
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var result []models.ExerciseEntry
-	for _, e := range m.entries {
+	for _, e := range m.exerciseEntries {
 		if !e.CreatedAt.Before(start) && !e.CreatedAt.After(end) && e.UserID == userID {
 			result = append(result, e)
 		}
@@ -338,15 +338,15 @@ func (m *mockRepository) GetEntriesByDateRange(start, end time.Time, userID stri
 	return result, nil
 }
 
-func (m *mockRepository) ListEntriesLast7Days(userID string) ([]models.ExerciseEntry, error) {
-	if m.errListEntries != nil {
-		return nil, m.errListEntries
+func (m *mockRepository) ListExerciseEntriesLast7Days(userID string) ([]models.ExerciseEntry, error) {
+	if m.errListExerciseEntries != nil {
+		return nil, m.errListExerciseEntries
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
 	var result []models.ExerciseEntry
-	for _, e := range m.entries {
+	for _, e := range m.exerciseEntries {
 		if e.CreatedAt.After(sevenDaysAgo) && e.UserID == userID {
 			result = append(result, e)
 		}
@@ -728,7 +728,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	}
 	authCtrl := controllers.NewAuthController(mockUser, jwtService, nil)
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(mockUser, newMockAuthTokenRepo(), nil)
-	entryCtrl := controllers.NewEntryController(mock)
+	entryCtrl := controllers.NewExerciseEntryController(mock)
 	adminCtrl := controllers.NewAdminController(mock)
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
@@ -785,7 +785,7 @@ func chdirToProjectRoot(t *testing.T) {
 
 func TestDashboard(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
@@ -807,7 +807,7 @@ func TestDashboard(t *testing.T) {
 
 func TestDashboard_RepositoryError(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.errListEntries = errors.New("db error")
+	mock.errListExerciseEntries = errors.New("db error")
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -823,12 +823,12 @@ func TestDashboard_RepositoryError(t *testing.T) {
 func TestNewEntryForm(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/entries/new", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/new", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.NewEntryForm(c); err != nil {
+	if err := h.NewExerciseEntryForm(c); err != nil {
 		t.Fatalf("NewEntryForm failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -849,7 +849,7 @@ func TestNewEntryForm_Preselected(t *testing.T) {
 	c.SetParamValues("ex-1")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.NewEntryForm(c); err != nil {
+	if err := h.NewExerciseEntryForm(c); err != nil {
 		t.Fatalf("NewEntryForm failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -874,7 +874,7 @@ func TestNewEntryForm_PreselectedInvalid(t *testing.T) {
 	c.SetParamValues("non-existent")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.NewEntryForm(c); err != nil {
+	if err := h.NewExerciseEntryForm(c); err != nil {
 		t.Fatalf("NewEntryForm failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -886,7 +886,7 @@ func TestNewEntryForm_PreselectedInvalid(t *testing.T) {
 	}
 }
 
-func TestCreateEntry(t *testing.T) {
+func TestCreateExerciseEntry(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
 	form := url.Values{}
@@ -894,13 +894,13 @@ func TestCreateEntry(t *testing.T) {
 	form.Set("sets[0][reps]", "5")
 	form.Set("sets[0][weight]", "100")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusSeeOther {
@@ -919,14 +919,14 @@ func TestCreateEntry_HTMX(t *testing.T) {
 	form.Set("sets[0][reps]", "5")
 	form.Set("sets[0][weight]", "100")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -936,8 +936,8 @@ func TestCreateEntry_HTMX(t *testing.T) {
 		t.Fatalf("expected HX-Trigger to be set, got %q", hxTrigger)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Entry saved") {
-		t.Fatalf("expected toast with 'Entry saved', got body: %s", body)
+	if !strings.Contains(body, "Set saved") {
+		t.Fatalf("expected toast with 'Set saved', got body: %s", body)
 	}
 }
 
@@ -953,14 +953,14 @@ func TestCreateEntry_HTMX_MultipleSets(t *testing.T) {
 	form.Set("sets[2][reps]", "5")
 	form.Set("sets[2][weight]", "95")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -980,13 +980,13 @@ func TestCreateEntry_InvalidReps(t *testing.T) {
 	form.Set("sets[0][reps]", "abc")
 	form.Set("sets[0][weight]", "100")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1006,13 +1006,13 @@ func TestCreateEntry_InvalidWeight(t *testing.T) {
 	form.Set("sets[0][reps]", "5")
 	form.Set("sets[0][weight]", "-10")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1031,13 +1031,13 @@ func TestCreateEntry_NoSets(t *testing.T) {
 	form.Set("exercise_id", "ex-1")
 	// sets[0][reps] is intentionally absent — user submitted no valid sets
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1055,18 +1055,18 @@ func TestCreateEntry_TooManySets(t *testing.T) {
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
 	// MaxSetsPerEntry + 1 rows
-	for i := 0; i <= views.MaxSetsPerEntry; i++ {
+	for i := 0; i <= views.MaxSetsPerExerciseEntry; i++ {
 		form.Set(fmt.Sprintf("sets[%d][reps]", i), "5")
 		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1086,13 +1086,13 @@ func TestCreateEntry_MissingExercise(t *testing.T) {
 	form.Set("sets[0][reps]", "5")
 	form.Set("sets[0][weight]", "100")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1106,20 +1106,20 @@ func TestCreateEntry_MissingExercise(t *testing.T) {
 
 func TestCreateEntry_RepositoryError(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.errCreateEntry = errors.New("db error")
+	mock.errCreateExerciseEntry = errors.New("db error")
 
 	form := url.Values{}
 	form.Set("exercise_id", "ex-1")
 	form.Set("sets[0][reps]", "5")
 	form.Set("sets[0][weight]", "100")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1147,14 +1147,14 @@ func TestCreateEntry_HTMX_WithCustomDate(t *testing.T) {
 	form.Set("sets[1][reps]", "5")
 	form.Set("sets[1][weight]", "95")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1162,10 +1162,10 @@ func TestCreateEntry_HTMX_WithCustomDate(t *testing.T) {
 	}
 
 	want := time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC)
-	if len(mock.entries) != 2 {
-		t.Fatalf("expected 2 entries in mock, got %d", len(mock.entries))
+	if len(mock.exerciseEntries) != 2 {
+		t.Fatalf("expected 2 entries in mock, got %d", len(mock.exerciseEntries))
 	}
-	for i, got := range mock.entries {
+	for i, got := range mock.exerciseEntries {
 		if !got.CreatedAt.Equal(want) {
 			t.Errorf("entry %d: expected CreatedAt %v, got %v", i, want, got.CreatedAt)
 		}
@@ -1186,14 +1186,14 @@ func TestCreateEntry_HTMX_EmptyDateFallsBackToNow(t *testing.T) {
 	form.Set("sets[0][reps]", "5")
 	form.Set("sets[0][weight]", "100")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1201,10 +1201,10 @@ func TestCreateEntry_HTMX_EmptyDateFallsBackToNow(t *testing.T) {
 	}
 
 	after := time.Now()
-	if len(mock.entries) != 1 {
-		t.Fatalf("expected 1 entry in mock, got %d", len(mock.entries))
+	if len(mock.exerciseEntries) != 1 {
+		t.Fatalf("expected 1 entry in mock, got %d", len(mock.exerciseEntries))
 	}
-	got := mock.entries[0].CreatedAt
+	got := mock.exerciseEntries[0].CreatedAt
 	// Allow a 5-second window for the fallback to be considered "now".
 	if got.Before(before.Add(-5*time.Second)) || got.After(after.Add(5*time.Second)) {
 		t.Errorf("expected CreatedAt near now (%v..%v), got %v", before, after, got)
@@ -1222,14 +1222,14 @@ func TestCreateEntry_InvalidDateFormat(t *testing.T) {
 	form.Set("sets[0][reps]", "5")
 	form.Set("sets[0][weight]", "100")
 
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.CreateEntry(c); err != nil {
+	if err := h.CreateExerciseEntry(c); err != nil {
 		t.Fatalf("CreateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1239,25 +1239,25 @@ func TestCreateEntry_InvalidDateFormat(t *testing.T) {
 	if !strings.Contains(body, "Invalid date format") {
 		t.Errorf("expected error message 'Invalid date format', got %q", body)
 	}
-	if len(mock.entries) != 0 {
-		t.Errorf("expected no entries persisted on parse error, got %d", len(mock.entries))
+	if len(mock.exerciseEntries) != 0 {
+		t.Errorf("expected no entries persisted on parse error, got %d", len(mock.exerciseEntries))
 	}
 }
 
 func TestEditEntryForm(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/entries/entry-1/edit", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/exercise-entry-1/edit", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("entry-1")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.EditEntryForm(c); err != nil {
+	if err := h.EditExerciseEntryForm(c); err != nil {
 		t.Fatalf("EditEntryForm failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1271,14 +1271,14 @@ func TestEditEntryForm(t *testing.T) {
 func TestEditEntryForm_NotFound(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/entries/non-existent/edit", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/non-existent/edit", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("non-existent")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	err := h.EditEntryForm(c)
+	err := h.EditExerciseEntryForm(c)
 	if err == nil {
 		t.Fatal("expected error for missing entry")
 	}
@@ -1290,18 +1290,18 @@ func TestEditEntryForm_NotFound(t *testing.T) {
 
 func TestGetEntry(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/entries/entry-1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/exercise-entry-1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("entry-1")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.GetEntry(c); err != nil {
+	if err := h.GetExerciseEntry(c); err != nil {
 		t.Fatalf("GetEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1315,14 +1315,14 @@ func TestGetEntry(t *testing.T) {
 func TestGetEntry_NotFound(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/entries/non-existent", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/non-existent", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("non-existent")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	err := h.GetEntry(c)
+	err := h.GetExerciseEntry(c)
 	if err == nil {
 		t.Fatal("expected error for missing entry")
 	}
@@ -1334,7 +1334,7 @@ func TestGetEntry_NotFound(t *testing.T) {
 
 func TestUpdateEntry(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 
@@ -1344,7 +1344,7 @@ func TestUpdateEntry(t *testing.T) {
 	form.Set("weight", "120")
 	form.Set("created_at", time.Now().Format("2006-01-02T15:04"))
 
-	req := httptest.NewRequest(http.MethodPut, "/entries/entry-1", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPut, "/exercise-entries/exercise-entry-1", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
@@ -1353,7 +1353,7 @@ func TestUpdateEntry(t *testing.T) {
 	c.SetParamValues("entry-1")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.UpdateEntry(c); err != nil {
+	if err := h.UpdateExerciseEntry(c); err != nil {
 		t.Fatalf("UpdateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1367,7 +1367,7 @@ func TestUpdateEntry(t *testing.T) {
 
 func TestUpdateEntry_Redirect(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 
@@ -1376,7 +1376,7 @@ func TestUpdateEntry_Redirect(t *testing.T) {
 	form.Set("reps", "3")
 	form.Set("weight", "120")
 
-	req := httptest.NewRequest(http.MethodPut, "/entries/entry-1", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPut, "/exercise-entries/exercise-entry-1", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -1384,7 +1384,7 @@ func TestUpdateEntry_Redirect(t *testing.T) {
 	c.SetParamValues("entry-1")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.UpdateEntry(c); err != nil {
+	if err := h.UpdateExerciseEntry(c); err != nil {
 		t.Fatalf("UpdateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusSeeOther {
@@ -1398,7 +1398,7 @@ func TestUpdateEntry_Redirect(t *testing.T) {
 
 func TestUpdateEntry_InvalidDate(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
 
@@ -1408,7 +1408,7 @@ func TestUpdateEntry_InvalidDate(t *testing.T) {
 	form.Set("weight", "120")
 	form.Set("created_at", "not-a-date")
 
-	req := httptest.NewRequest(http.MethodPut, "/entries/entry-1", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPut, "/exercise-entries/exercise-entry-1", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -1416,7 +1416,7 @@ func TestUpdateEntry_InvalidDate(t *testing.T) {
 	c.SetParamValues("entry-1")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.UpdateEntry(c); err != nil {
+	if err := h.UpdateExerciseEntry(c); err != nil {
 		t.Fatalf("UpdateEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusOK {
@@ -1430,25 +1430,25 @@ func TestUpdateEntry_InvalidDate(t *testing.T) {
 
 func TestDeleteEntry(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	req := httptest.NewRequest(http.MethodDelete, "/entries/entry-1", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/exercise-entries/exercise-entry-1", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues("entry-1")
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
 
-	if err := h.DeleteEntry(c); err != nil {
+	if err := h.DeleteExerciseEntry(c); err != nil {
 		t.Fatalf("DeleteEntry failed: %v", err)
 	}
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("expected status 303, got %d", rec.Code)
 	}
-	if len(mock.entries) != 0 {
-		t.Fatalf("expected entry to be deleted, got %d entries", len(mock.entries))
+	if len(mock.exerciseEntries) != 0 {
+		t.Fatalf("expected entry to be deleted, got %d entries", len(mock.exerciseEntries))
 	}
 }
 
@@ -1457,7 +1457,7 @@ func TestExerciseHistory(t *testing.T) {
 	mock.exercises = []models.Exercise{
 		{ID: "uuid-exercise-1", Name: "Squat"},
 	}
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 		{ID: "entry-2", UserID: "user-1", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
 	}
@@ -1497,7 +1497,7 @@ func TestExerciseHistory_PageQuery(t *testing.T) {
 			CreatedAt:  now.Add(time.Duration(i) * time.Minute),
 		})
 	}
-	mock.entries = entries
+	mock.exerciseEntries = entries
 
 	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1?page=2", nil)
 	rec := httptest.NewRecorder()
@@ -1534,7 +1534,7 @@ func TestExerciseHistory_HtmxFragment(t *testing.T) {
 			CreatedAt:  now.Add(time.Duration(i) * time.Minute),
 		})
 	}
-	mock.entries = entries
+	mock.exerciseEntries = entries
 
 	req := httptest.NewRequest(http.MethodGet, "/exercises/uuid-exercise-1?page=2", nil)
 	req.Header.Set("HX-Request", "true")
@@ -1638,7 +1638,7 @@ func TestExerciseChart_Populated(t *testing.T) {
 	}
 	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
 	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: day1},
 		{ID: "e2", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 3, Weight: 105, CreatedAt: day1.Add(8 * time.Hour)},
 		{ID: "e3", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 110, CreatedAt: day2},
@@ -1729,7 +1729,7 @@ func TestExerciseChart_EmptyState(t *testing.T) {
 		{ID: "uuid-exercise-1", Name: "Squat"},
 	}
 	// Single entry, single day — below the 2-day threshold.
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
 	}
 
@@ -1776,7 +1776,7 @@ func TestExerciseChartAdvanced(t *testing.T) {
 	}
 	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
 	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: day1},
 		{ID: "e2", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 105, CreatedAt: day2},
 	}
@@ -1832,7 +1832,7 @@ func TestExerciseChartAdvanced_Populated(t *testing.T) {
 	}
 	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
 	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: day1},
 		{ID: "e2", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 3, Weight: 110, CreatedAt: day1.Add(8 * time.Hour)},
 		{ID: "e3", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 115, CreatedAt: day2},
@@ -1924,7 +1924,7 @@ func TestExerciseChartAdvanced_EmptyState(t *testing.T) {
 		{ID: "uuid-exercise-1", Name: "Squat"},
 	}
 	// Single set — below the 2-set threshold.
-	mock.entries = []models.ExerciseEntry{
+	mock.exerciseEntries = []models.ExerciseEntry{
 		{ID: "e1", ExerciseID: "uuid-exercise-1", UserID: "user-1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
 	}
 
@@ -2067,7 +2067,7 @@ func TestServeManifest(t *testing.T) {
 func newEchoContextWithForm(t *testing.T, form url.Values) echo.Context {
 	t.Helper()
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/entries", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
 	rec := httptest.NewRecorder()
 	return e.NewContext(req, rec)
@@ -2081,9 +2081,9 @@ func TestParseEntryForm_Valid(t *testing.T) {
 	form.Set("notes", "PR")
 
 	c := newEchoContextWithForm(t, form)
-	entry, err := parseEntryForm(c, utils.NewValidator())
+	entry, err := parseExerciseEntryForm(c, utils.NewValidator())
 	if err != nil {
-		t.Fatalf("parseEntryForm failed: %v", err)
+		t.Fatalf("parseExerciseEntryForm failed: %v", err)
 	}
 	if entry.ExerciseName != "" {
 		t.Fatalf("expected exercise name '', got %q", entry.ExerciseName)
@@ -2117,7 +2117,7 @@ func TestParseEntryForm_InvalidReps(t *testing.T) {
 			form.Set("weight", "100")
 
 			c := newEchoContextWithForm(t, form)
-			_, err := parseEntryForm(c, utils.NewValidator())
+			_, err := parseExerciseEntryForm(c, utils.NewValidator())
 			if err == nil {
 				t.Fatal("expected error for invalid reps")
 			}
@@ -2146,7 +2146,7 @@ func TestParseEntryForm_InvalidWeight(t *testing.T) {
 			form.Set("weight", tt.weight)
 
 			c := newEchoContextWithForm(t, form)
-			_, err := parseEntryForm(c, utils.NewValidator())
+			_, err := parseExerciseEntryForm(c, utils.NewValidator())
 			if err == nil {
 				t.Fatal("expected error for invalid weight")
 			}
@@ -2165,9 +2165,9 @@ func TestParseEntrySets_Single(t *testing.T) {
 	form.Set("sets[0][rest_time]", "90")
 
 	c := newEchoContextWithForm(t, form)
-	sets, err := parseEntrySets(c, utils.NewValidator())
+	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err != nil {
-		t.Fatalf("parseEntrySets failed: %v", err)
+		t.Fatalf("parseExerciseEntrySets failed: %v", err)
 	}
 	if len(sets) != 1 {
 		t.Fatalf("expected 1 set, got %d", len(sets))
@@ -2187,9 +2187,9 @@ func TestParseEntrySets_Multiple(t *testing.T) {
 	form.Set("sets[2][weight]", "95")
 
 	c := newEchoContextWithForm(t, form)
-	sets, err := parseEntrySets(c, utils.NewValidator())
+	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err != nil {
-		t.Fatalf("parseEntrySets failed: %v", err)
+		t.Fatalf("parseExerciseEntrySets failed: %v", err)
 	}
 	if len(sets) != 3 {
 		t.Fatalf("expected 3 sets, got %d", len(sets))
@@ -2208,9 +2208,9 @@ func TestParseEntrySets_SkipsEmptyRows(t *testing.T) {
 	form.Set("sets[2][weight]", "100")
 
 	c := newEchoContextWithForm(t, form)
-	sets, err := parseEntrySets(c, utils.NewValidator())
+	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err != nil {
-		t.Fatalf("parseEntrySets failed: %v", err)
+		t.Fatalf("parseExerciseEntrySets failed: %v", err)
 	}
 	if len(sets) != 2 {
 		t.Fatalf("expected 2 sets (empty row skipped), got %d", len(sets))
@@ -2228,9 +2228,9 @@ func TestParseEntrySets_PreservesOrder(t *testing.T) {
 	form.Set("sets[1][weight]", "95")
 
 	c := newEchoContextWithForm(t, form)
-	sets, err := parseEntrySets(c, utils.NewValidator())
+	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err != nil {
-		t.Fatalf("parseEntrySets failed: %v", err)
+		t.Fatalf("parseExerciseEntrySets failed: %v", err)
 	}
 	if len(sets) != 3 {
 		t.Fatalf("expected 3 sets, got %d", len(sets))
@@ -2246,9 +2246,9 @@ func TestParseEntrySets_PreservesOrder(t *testing.T) {
 func TestParseEntrySets_NoSets(t *testing.T) {
 	form := url.Values{}
 	c := newEchoContextWithForm(t, form)
-	sets, err := parseEntrySets(c, utils.NewValidator())
+	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err != nil {
-		t.Fatalf("parseEntrySets failed: %v", err)
+		t.Fatalf("parseExerciseEntrySets failed: %v", err)
 	}
 	if len(sets) != 0 {
 		t.Errorf("expected 0 sets, got %d", len(sets))
@@ -2261,9 +2261,9 @@ func TestParseEntrySets_EmptyRepsTreatedAsBlank(t *testing.T) {
 	form.Set("sets[0][weight]", "100")
 
 	c := newEchoContextWithForm(t, form)
-	sets, err := parseEntrySets(c, utils.NewValidator())
+	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err != nil {
-		t.Fatalf("parseEntrySets failed: %v", err)
+		t.Fatalf("parseExerciseEntrySets failed: %v", err)
 	}
 	if len(sets) != 0 {
 		t.Errorf("expected whitespace reps to be skipped, got %d sets", len(sets))
@@ -2273,13 +2273,13 @@ func TestParseEntrySets_EmptyRepsTreatedAsBlank(t *testing.T) {
 func TestParseEntrySets_TooManySets(t *testing.T) {
 	form := url.Values{}
 	// Submit MaxSetsPerEntry + 1 rows (all non-empty) to trigger the cap.
-	for i := 0; i <= views.MaxSetsPerEntry; i++ {
+	for i := 0; i <= views.MaxSetsPerExerciseEntry; i++ {
 		form.Set(fmt.Sprintf("sets[%d][reps]", i), "5")
 		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
 	}
 
 	c := newEchoContextWithForm(t, form)
-	_, err := parseEntrySets(c, utils.NewValidator())
+	_, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err == nil {
 		t.Fatal("expected error for too many sets")
 	}
@@ -2294,16 +2294,16 @@ func TestParseEntrySets_TooManySets(t *testing.T) {
 
 func TestParseEntrySets_EmptyRowsCountTowardCap(t *testing.T) {
 	// A malicious client could send sets[0..99999] with empty reps. Even though
-	// parseEntrySets would skip them on processing, the count of submitted
+	// parseExerciseEntrySets would skip them on processing, the count of submitted
 	// indices should still trip the cap before we waste cycles.
 	form := url.Values{}
-	for i := 0; i <= views.MaxSetsPerEntry; i++ {
+	for i := 0; i <= views.MaxSetsPerExerciseEntry; i++ {
 		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
 		// No reps on any row.
 	}
 
 	c := newEchoContextWithForm(t, form)
-	_, err := parseEntrySets(c, utils.NewValidator())
+	_, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err == nil {
 		t.Fatal("expected error when too many empty rows submitted")
 	}
@@ -2319,7 +2319,7 @@ func TestParseEntrySets_InvalidReps(t *testing.T) {
 	form.Set("sets[0][weight]", "100")
 
 	c := newEchoContextWithForm(t, form)
-	_, err := parseEntrySets(c, utils.NewValidator())
+	_, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err == nil {
 		t.Fatal("expected error for non-numeric reps")
 	}
@@ -2338,7 +2338,7 @@ func TestParseEntrySets_InvalidWeight(t *testing.T) {
 	form.Set("sets[0][weight]", "-10")
 
 	c := newEchoContextWithForm(t, form)
-	_, err := parseEntrySets(c, utils.NewValidator())
+	_, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err == nil {
 		t.Fatal("expected error for negative weight")
 	}
@@ -2358,7 +2358,7 @@ func TestParseEntrySets_InvalidRestTime(t *testing.T) {
 	form.Set("sets[0][rest_time]", "abc")
 
 	c := newEchoContextWithForm(t, form)
-	_, err := parseEntrySets(c, utils.NewValidator())
+	_, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err == nil {
 		t.Fatal("expected error for non-numeric rest time")
 	}
@@ -2375,9 +2375,9 @@ func TestParseEntrySets_RestTimeDefaultsToZero(t *testing.T) {
 	// rest_time intentionally absent
 
 	c := newEchoContextWithForm(t, form)
-	sets, err := parseEntrySets(c, utils.NewValidator())
+	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err != nil {
-		t.Fatalf("parseEntrySets failed: %v", err)
+		t.Fatalf("parseExerciseEntrySets failed: %v", err)
 	}
 	if len(sets) != 1 || sets[0].RestTime != 0 {
 		t.Errorf("expected rest_time 0, got %+v", sets[0])
@@ -2393,7 +2393,7 @@ func TestParseEntrySets_PerRowErrorIncludesIndex(t *testing.T) {
 	form.Set("sets[1][weight]", "-5")
 
 	c := newEchoContextWithForm(t, form)
-	_, err := parseEntrySets(c, utils.NewValidator())
+	_, err := parseExerciseEntrySets(c, utils.NewValidator())
 	if err == nil {
 		t.Fatal("expected error")
 	}

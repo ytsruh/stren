@@ -254,14 +254,14 @@ func TestEntryList(t *testing.T) {
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 		{ID: "entry-2", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
 	}
-	html := renderToString(t, EntryList(entries, "kg"))
+	html := renderToString(t, ExerciseEntryList(entries, "kg"))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected Squat in output")
 	}
 	if !strings.Contains(html, "Bench Press") {
 		t.Error("expected Bench Press in output")
 	}
-	if !strings.Contains(html, `<tbody id="entries-table">`) {
+	if !strings.Contains(html, `<tbody id="exercise-entries-table">`) {
 		t.Error("expected entries-table tbody")
 	}
 }
@@ -275,7 +275,7 @@ func TestEntryRow(t *testing.T) {
 		Notes:        "PR",
 		CreatedAt:    time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 	}
-	html := renderToString(t, EntryRow(entry, "kg"))
+	html := renderToString(t, ExerciseEntryRow(entry, "kg"))
 	if !strings.Contains(html, "Deadlift") {
 		t.Error("expected exercise name")
 	}
@@ -285,10 +285,10 @@ func TestEntryRow(t *testing.T) {
 	if !strings.Contains(html, "PR") {
 		t.Error("expected notes")
 	}
-	if !strings.Contains(html, `id="entry-entry-1"`) {
+	if !strings.Contains(html, `id="exercise-entry-entry-1"`) {
 		t.Error("expected entry ID attribute")
 	}
-	if !strings.Contains(html, "/entries/entry-1/edit") {
+	if !strings.Contains(html, "/exercise-entries/entry-1/edit") {
 		t.Error("expected edit link")
 	}
 }
@@ -297,7 +297,7 @@ func TestRecentEntries_WithData(t *testing.T) {
 	entries := []models.ExerciseEntry{
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
-	html := renderToString(t, RecentEntries(entries, "kg"))
+	html := renderToString(t, RecentExerciseEntries(entries, "kg"))
 	if !strings.Contains(html, "Recent Workouts") {
 		t.Error("expected section heading")
 	}
@@ -307,7 +307,7 @@ func TestRecentEntries_WithData(t *testing.T) {
 }
 
 func TestRecentEntries_Empty(t *testing.T) {
-	html := renderToString(t, RecentEntries([]models.ExerciseEntry{}, "kg"))
+	html := renderToString(t, RecentExerciseEntries([]models.ExerciseEntry{}, "kg"))
 	if !strings.Contains(html, "No workouts in the last 7 days") {
 		t.Error("expected empty state")
 	}

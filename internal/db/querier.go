@@ -27,12 +27,12 @@ type Querier interface {
 	// the raw token with sha256 before storing. The raw token only ever
 	// lives in the email link; the database never sees it.
 	CreateAuthToken(ctx context.Context, arg CreateAuthTokenParams) (AuthToken, error)
-	CreateEntry(ctx context.Context, arg CreateEntryParams) (string, error)
+	CreateExerciseEntry(ctx context.Context, arg CreateExerciseEntryParams) (string, error)
 	CreateFeedback(ctx context.Context, arg CreateFeedbackParams) (Feedback, error)
 	CreatePushSubscription(ctx context.Context, arg CreatePushSubscriptionParams) (PushSubscription, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (string, error)
 	CreateWeightEntry(ctx context.Context, arg CreateWeightEntryParams) (WeightEntry, error)
-	DeleteEntry(ctx context.Context, arg DeleteEntryParams) error
+	DeleteExerciseEntry(ctx context.Context, arg DeleteExerciseEntryParams) error
 	DeletePushSubscriptionByEndpoint(ctx context.Context, endpoint string) error
 	DeleteWeightEntry(ctx context.Context, arg DeleteWeightEntryParams) error
 	GetAll(ctx context.Context) ([]GetAllRow, error)
@@ -40,9 +40,9 @@ type Querier interface {
 	GetAllOpen(ctx context.Context) ([]GetAllOpenRow, error)
 	GetByID(ctx context.Context, id string) (Exercise, error)
 	GetByName(ctx context.Context, name string) (Exercise, error)
-	GetEntriesByDateRange(ctx context.Context, arg GetEntriesByDateRangeParams) ([]GetEntriesByDateRangeRow, error)
-	GetEntriesByExercisePaginated(ctx context.Context, arg GetEntriesByExercisePaginatedParams) ([]GetEntriesByExercisePaginatedRow, error)
-	GetEntry(ctx context.Context, arg GetEntryParams) (GetEntryRow, error)
+	GetExerciseEntriesByDateRange(ctx context.Context, arg GetExerciseEntriesByDateRangeParams) ([]GetExerciseEntriesByDateRangeRow, error)
+	GetExerciseEntriesByExercisePaginated(ctx context.Context, arg GetExerciseEntriesByExercisePaginatedParams) ([]GetExerciseEntriesByExercisePaginatedRow, error)
+	GetExerciseEntry(ctx context.Context, arg GetExerciseEntryParams) (GetExerciseEntryRow, error)
 	GetFeedbackByID(ctx context.Context, id string) (GetFeedbackByIDRow, error)
 	GetLastSetByExercise(ctx context.Context, arg GetLastSetByExerciseParams) (GetLastSetByExerciseRow, error)
 	GetMaxWeightByExercise(ctx context.Context, arg GetMaxWeightByExerciseParams) (float64, error)
@@ -53,14 +53,14 @@ type Querier interface {
 	GetWeightEntry(ctx context.Context, arg GetWeightEntryParams) (WeightEntry, error)
 	List(ctx context.Context) ([]Exercise, error)
 	ListAllPushSubscriptions(ctx context.Context) ([]PushSubscription, error)
-	ListEntries(ctx context.Context, userID sql.NullString) ([]ListEntriesRow, error)
-	ListEntriesLast7Days(ctx context.Context, userID sql.NullString) ([]ListEntriesLast7DaysRow, error)
-	ListEntriesWithLimit(ctx context.Context, arg ListEntriesWithLimitParams) ([]ListEntriesWithLimitRow, error)
+	ListExerciseEntries(ctx context.Context, userID sql.NullString) ([]ListExerciseEntriesRow, error)
+	ListExerciseEntriesLast7Days(ctx context.Context, userID sql.NullString) ([]ListExerciseEntriesLast7DaysRow, error)
+	ListExerciseEntriesWithLimit(ctx context.Context, arg ListExerciseEntriesWithLimitParams) ([]ListExerciseEntriesWithLimitRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWeightEntries(ctx context.Context, userID string) ([]WeightEntry, error)
 	Update(ctx context.Context, arg UpdateParams) (Exercise, error)
-	UpdateEntry(ctx context.Context, arg UpdateEntryParams) error
-	UpdateEntryWithDate(ctx context.Context, arg UpdateEntryWithDateParams) error
+	UpdateExerciseEntry(ctx context.Context, arg UpdateExerciseEntryParams) error
+	UpdateExerciseEntryWithDate(ctx context.Context, arg UpdateExerciseEntryWithDateParams) error
 	UpdatePushSubscription(ctx context.Context, arg UpdatePushSubscriptionParams) (PushSubscription, error)
 	UpdateStatus(ctx context.Context, arg UpdateStatusParams) (Feedback, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) error

@@ -2,7 +2,8 @@
 
 ## Application & Business Logic Instructions
 - Weight doesn't have KG or lbs and is stored as a number only. App is currently set to KG but ultimately will let a user determine this via a custom setting in their profile
-- Every entry created for a workout is a single set. A set has a number of repititions (reps) & a weight 
+- Every exercise entry created for a workout is a single set. A set has a number of repetitions (reps) & a weight
+- **Naming convention — be explicit.** The domain model is an **exercise entry** (one row in the `exercise_entries` table: reps + weight + notes + rest_time). The user-facing copy uses **"set"** / **"sets"** (e.g. "Add Set", "Set saved!", "Last 5 Sets") because that's what the user sees and what already appears in the dashboard. Code, URLs, HTML ids, comments, and developer-facing strings must always say **"exercise entry"** / **"exercise entries"** — never the bare word `entry` or `entries`. This is deliberate: the SQL table is still `exercise_entries` (and the `ExerciseEntry` struct stays), so anyone reading the codebase can always tell what the row represents without checking a glossary. When in doubt, write the longer form.
 - Push notifications are powered by the protocol `webpush-go` (one Go dep, isolated in `internal/push`); the third-party is the push service (FCM / Mozilla autopush / Apple), not a Go library. The VAPID keypair lives in `/data` alongside the SQLite file so subscriptions survive restarts.
 - The weight data export is a streaming zip download produced at `GET /weight/export`. The zip is built by `internal/export` (zip + CSV via Go stdlib, no new deps) and pulled from R2 via `utils.GetObject`. Photos that can't be fetched are skipped, with their keys listed in the zip's `manifest.json` `missing_photos` array. The route uses the global confirm dialog defined in `layout.templ`.
 - Transactional email is sent through Cloudflare Email Sending's authenticated SMTP endpoint (`smtp.mx.cloudflare.net:465`, implicit TLS). The whole feature is in `internal/email` (`client.go` does the hand-rolled `crypto/tls` + `net/smtp`, `service.go` composes messages) and the email-specific Templ components live in `internal/email/templates/`. The sender address (`stren@ytsruh.com`) and SMTP host are hard-coded in the package; the only required env vars are `CLOUDFLARE_EMAIL_TOKEN` (SMTP auth) and `PUBLIC_URL` (base URL threaded into every link the email contains). **Do not add more env vars for email config without discussing first.**
@@ -21,7 +22,7 @@
 - **Tech stack**: Go 1.25+, Echo, Templ, Turso Sync (turso.tech/database/tursogo), htmx, Basecoat CSS
 - **Entry point**: `cmd/main.go`
 - **HTTP routes**: `internal/routes/*.go` (Echo framework — request parsing, rendering, redirects, middleware)
-- **Controllers**: `internal/controllers/*.go` (business logic — auth, entry CRUD orchestration)
+- **Controllers**: `internal/controllers/*.go` (business logic — auth, exercise entry CRUD orchestration)
 - **Repository interfaces**: `internal/models/repository.go` (CRUD operations)
 - **Models**: `internal/models/models.go` (ExerciseType, ExerciseEntry, User)
 - **Database**: `internal/db/db.go` (Turso Sync wrapper with local-first reads/writes and background cloud sync)

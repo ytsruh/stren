@@ -21,7 +21,7 @@ templ WelcomeEmail(name string, baseURL string) {
 		<div style="padding:24px 0 8px 0;">
 			@EmailTitle("Welcome to Stren")
 			@EmailParagraph("Hi " + name + ", thanks for signing up.")
-			@EmailParagraph("Stren helps you log every set, watch your numbers climb, and keep your training consistent. Head to the dashboard any time to add your first entry.")
+			@EmailParagraph("Stren helps you log every set, watch your numbers climb, and keep your training consistent. Head to the dashboard any time to log your first set.")
 			@EmailButton(baseURL+"/", "Go to your dashboard")
 		</div>
 		@EmailDivider()

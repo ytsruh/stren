@@ -1,35 +1,35 @@
--- name: CreateEntry :one
+-- name: CreateExerciseEntry :one
 INSERT INTO exercise_entries (id, exercise_id, user_id, reps, weight, notes, rest_time, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
--- name: GetEntry :one
+-- name: GetExerciseEntry :one
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.id = ? AND e.user_id = ?;
 
--- name: UpdateEntry :exec
+-- name: UpdateExerciseEntry :exec
 UPDATE exercise_entries
 SET exercise_id = ?, reps = ?, weight = ?, notes = ?, rest_time = ?
 WHERE id = ? AND user_id = ?;
 
--- name: UpdateEntryWithDate :exec
+-- name: UpdateExerciseEntryWithDate :exec
 UPDATE exercise_entries
 SET exercise_id = ?, reps = ?, weight = ?, notes = ?, rest_time = ?, created_at = ?
 WHERE id = ? AND user_id = ?;
 
--- name: DeleteEntry :exec
+-- name: DeleteExerciseEntry :exec
 DELETE FROM exercise_entries WHERE id = ? AND user_id = ?;
 
--- name: ListEntries :many
+-- name: ListExerciseEntries :many
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.user_id = ?
 ORDER BY e.created_at DESC;
 
--- name: ListEntriesWithLimit :many
+-- name: ListExerciseEntriesWithLimit :many
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
@@ -37,14 +37,14 @@ WHERE e.user_id = ?
 ORDER BY e.created_at DESC
 LIMIT ?;
 
--- name: ListEntriesLast7Days :many
+-- name: ListExerciseEntriesLast7Days :many
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.created_at >= datetime('now', '-7 days') AND e.user_id = ?
 ORDER BY e.created_at DESC;
 
--- name: GetEntriesByExercisePaginated :many
+-- name: GetExerciseEntriesByExercisePaginated :many
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
@@ -64,7 +64,7 @@ WHERE e.exercise_id = ? AND e.user_id = ?
 ORDER BY e.created_at DESC
 LIMIT 1;
 
--- name: GetEntriesByDateRange :many
+-- name: GetExerciseEntriesByDateRange :many
 SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id

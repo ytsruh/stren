@@ -4,14 +4,14 @@ import "stren/internal/models"
 import "stren/internal/views/components"
 
 type PageData struct {
-	Title           string
-	Entries         []models.ExerciseEntry
-	Exercises       []models.Exercise
-	Entry           *models.ExerciseEntry
-	UserName        string
-	IsAuthenticated bool
-	IsAdmin         bool
-	CurrentPath     string
+	Title             string
+	ExerciseEntries   []models.ExerciseEntry
+	Exercises         []models.Exercise
+	ExerciseEntry     *models.ExerciseEntry
+	UserName          string
+	IsAuthenticated   bool
+	IsAdmin           bool
+	CurrentPath       string
 }
 
 // Layout is the base layout for all pages
@@ -87,13 +87,13 @@ templ Layout(data PageData) {
 									</li>
 									<li>
 										<a
-											href="/entries/new"
-											if data.CurrentPath == "/entries/new" {
+											href="/exercise-entries/new"
+											if data.CurrentPath == "/exercise-entries/new" {
 												aria-current="page"
 											}
 										>
 											@components.Icon(components.IconProps{Name: "plus", Size: 18})
-											<span>New Entry</span>
+											<span>New Set</span>
 										</a>
 									</li>
 									<li>
@@ -251,7 +251,7 @@ templ Layout(data PageData) {
 								</div>
 								<div class="flex gap-1">
 									<li>
-										<a href="/entries/new" class="btn-ghost">
+										<a href="/exercise-entries/new" class="btn-ghost">
 											@components.Icon(components.IconProps{Name: "plus", Size: 20})
 										</a>
 									</li>
@@ -422,7 +422,7 @@ templ Toast(category string, title string, description string) {
 	</div>
 }
 
-// EmptyState shows when no entries exist
+// EmptyState shows when no exercise entries exist
 templ EmptyState() {
 	<div class="flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed border-2 p-12 text-center">
 		<header class="flex max-w-sm flex-col items-center gap-3 text-center">
@@ -433,9 +433,9 @@ templ EmptyState() {
 			<p class="text-muted-foreground text-sm">Log a session to keep your streak going.</p>
 		</header>
 		<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
-			<a href="/entries/new" class="btn">
+			<a href="/exercise-entries/new" class="btn">
 				@components.Icon(components.IconProps{Name: "plus", Size: 18})
-				Add Entry
+				Add Set
 			</a>
 		</section>
 	</div>
