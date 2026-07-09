@@ -39,7 +39,7 @@ func TestChartDataForExercise(t *testing.T) {
 		{Weight: 85, CreatedAt: day1Evening},
 		{Weight: 90, CreatedAt: day3},
 	}
-	props := chartDataForExercise(entries, "Squat")
+	props := chartDataForExercise(entries, "Squat", "kg")
 	if props.ID != "exercise-history-chart" {
 		t.Errorf("ID = %q, want %q", props.ID, "exercise-history-chart")
 	}
@@ -71,7 +71,7 @@ func TestChartDataForExercise(t *testing.T) {
 }
 
 func TestChartDataForExercise_Empty(t *testing.T) {
-	props := chartDataForExercise(nil, "Squat")
+	props := chartDataForExercise(nil, "Squat", "kg")
 	if len(props.Labels) != 0 {
 		t.Errorf("expected no labels for empty input, got %v", props.Labels)
 	}
@@ -80,20 +80,20 @@ func TestChartDataForExercise_Empty(t *testing.T) {
 	}
 }
 
-func TestEntryForm_New(t *testing.T) {
+func TestExerciseEntryForm_New(t *testing.T) {
 	types := []models.Exercise{
 		{ID: "ex-1", Name: "Squat"},
 		{ID: "ex-2", Name: "Bench Press"},
 	}
-	html := renderToString(t, EntryForm(types, "", "Test User", true, false))
-	if !strings.Contains(html, "New Entry") {
+	html := renderToString(t, ExerciseEntryForm(types, "", "Test User", true, false, "kg"))
+	if !strings.Contains(html, "New Set") {
 		t.Error("expected new entry title")
 	}
 	if !strings.Contains(html, `value=""`) && !strings.Contains(html, "Select an exercise") {
 		t.Error("expected empty/default exercise selection")
 	}
-	if !strings.Contains(html, `/entries"`) {
-		t.Error("expected form action to be /entries")
+	if !strings.Contains(html, `/exercise-entries"`) {
+		t.Error("expected form action to be /exercise-entries")
 	}
 	// Multi-set form scaffolding.
 	if !strings.Contains(html, `data-set-list`) {
@@ -102,21 +102,53 @@ func TestEntryForm_New(t *testing.T) {
 	if !strings.Contains(html, `data-add-set`) {
 		t.Error("expected Add Set button")
 	}
-	if !strings.Contains(html, `id="entry-set-template"`) {
+	if !strings.Contains(html, `id="exercise-entry-set-template"`) {
 		t.Error("expected hidden row template for cloning")
 	}
 	// The form exposes the cap so the inline script can read it at runtime.
-	wantMaxAttr := fmt.Sprintf(`data-max-sets="%d"`, views.MaxSetsPerEntry)
+	wantMaxAttr := fmt.Sprintf(`data-max-sets="%d"`, views.MaxSetsPerExerciseEntry)
 	if !strings.Contains(html, wantMaxAttr) {
 		t.Errorf("expected form to expose %s", wantMaxAttr)
 	}
 	// One starter row rendered at index 0; the user adds more via the
-	// Add Set button (which clones the hidden #entry-set-template).
+	// Add Set button (which clones the hidden #exercise-entry-set-template).
 	if !strings.Contains(html, `name="sets[0][reps]"`) {
 		t.Error(`expected starter row with name="sets[0][reps]"`)
 	}
 	if !strings.Contains(html, `name="sets[0][weight]"`) {
 		t.Error(`expected starter row with name="sets[0][weight]"`)
+	}
+	// Mobile keyboard hints: reps + rest are integers (numberpad, no
+	// decimal point), weight accepts decimals (numberpad with a "." key).
+	// Lock the inputmode on the visible Set 1 row so the user can type
+	// 2.5 kg on mobile.
+	visibleRepsPattern := `inputmode="numeric" name="sets\[0\]\[reps\]"`
+	if !regexp.MustCompile(visibleRepsPattern).MatchString(html) {
+		t.Errorf("expected visible Set 1 reps input to carry %q", visibleRepsPattern)
+	}
+	visibleWeightPattern := `inputmode="decimal" name="sets\[0\]\[weight\]"`
+	if !regexp.MustCompile(visibleWeightPattern).MatchString(html) {
+		t.Errorf("expected visible Set 1 weight input to carry %q", visibleWeightPattern)
+	}
+	visibleRestPattern := `inputmode="numeric" name="sets\[0\]\[rest_time\]"`
+	if !regexp.MustCompile(visibleRestPattern).MatchString(html) {
+		t.Errorf("expected visible Set 1 rest input to carry %q", visibleRestPattern)
+	}
+	// The hidden #exercise-entry-set-template must mirror the visible row's
+	// inputmode values. If they drift, the first row uses the numberpad
+	// and later cloned rows fall back to the full keyboard — the original
+	// bug we're guarding against.
+	tplRepsPattern := `inputmode="numeric" name="sets\[__INDEX__\]\[reps\]"`
+	if !regexp.MustCompile(tplRepsPattern).MatchString(html) {
+		t.Errorf("expected clone template reps input to carry %q", tplRepsPattern)
+	}
+	tplWeightPattern := `inputmode="decimal" name="sets\[__INDEX__\]\[weight\]"`
+	if !regexp.MustCompile(tplWeightPattern).MatchString(html) {
+		t.Errorf("expected clone template weight input to carry %q", tplWeightPattern)
+	}
+	tplRestPattern := `inputmode="numeric" name="sets\[__INDEX__\]\[rest_time\]"`
+	if !regexp.MustCompile(tplRestPattern).MatchString(html) {
+		t.Errorf("expected clone template rest input to carry %q", tplRestPattern)
 	}
 	// Remove button is wired up via data-remove-set.
 	if !strings.Contains(html, `data-remove-set`) {
@@ -142,20 +174,20 @@ func TestEntryForm_New(t *testing.T) {
 	// Sanity: the inline script looks the clone template up by id via
 	// getElementById, NOT form.querySelector (the template lives outside the
 	// form so a scoped query would miss it).
-	if !strings.Contains(html, `getElementById('entry-set-template')`) {
+	if !strings.Contains(html, `getElementById('exercise-entry-set-template')`) {
 		t.Error("expected script to look up clone template by getElementById")
 	}
 	// Date & Time input: a datetime-local field named created_at, marked
 	// required, with a value rendered from FormatDateTimeLocal(time.Now()).
 	if !strings.Contains(html, "Date &amp; Time") && !strings.Contains(html, "Date & Time") {
-		t.Error("expected 'Date & Time' label in new-entry form")
+		t.Error("expected 'Date & Time' label in new-exercise-entry form")
 	}
-	if !strings.Contains(html, `id="entry-date"`) {
+	if !strings.Contains(html, `id="exercise-entry-date"`) {
 		t.Error("expected id=\"entry-date\" on the datetime input")
 	}
 	// The required input must combine name, type and required attributes
 	// together so a regression that drops the field or its name is caught.
-	dateInputPattern := `<input class="input" type="datetime-local" id="entry-date" name="created_at" value="[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}" required`
+	dateInputPattern := `<input class="input" type="datetime-local" id="exercise-entry-date" name="created_at" value="[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}" required`
 	if !regexp.MustCompile(dateInputPattern).MatchString(html) {
 		t.Errorf("expected datetime-local input with name=\"created_at\" and rendered value matching the formatDateTimeLocal pattern; pattern was %q", dateInputPattern)
 	}
@@ -166,7 +198,7 @@ func TestEntryForm_New(t *testing.T) {
 	if !strings.Contains(html, `sm:grid-cols-2 sm:items-end`) {
 		t.Error("expected exercise + date to share a sm:grid-cols-2 sm:items-end wrapper")
 	}
-	// The exercise select id="exercise-name" and the date input id="entry-date"
+	// The exercise select id="exercise-name" and the date input id="exercise-entry-date"
 	// must both be present in the rendered HTML so the wrapper is actually
 	// wrapping the right fields. The regex above already proves the date
 	// input; this double-checks the select is in the same context.
@@ -175,7 +207,7 @@ func TestEntryForm_New(t *testing.T) {
 	}
 }
 
-func TestEditEntryForm(t *testing.T) {
+func TestEditExerciseEntryForm(t *testing.T) {
 	entry := &models.ExerciseEntry{
 		ID:           "entry-1",
 		ExerciseName: "Squat",
@@ -184,20 +216,35 @@ func TestEditEntryForm(t *testing.T) {
 		Notes:        "good",
 		CreatedAt:    time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 	}
-	html := renderToString(t, EditEntryForm(entry, "Test User", true, false))
-	if !strings.Contains(html, "Edit Entry") {
+	html := renderToString(t, EditExerciseEntryForm(entry, "Test User", true, false, "kg"))
+	if !strings.Contains(html, "Edit Set") {
 		t.Error("expected edit title")
 	}
-	if !strings.Contains(html, "/entries/entry-1") {
+	if !strings.Contains(html, "/exercise-entries/entry-1") {
 		t.Error("expected form action with entry ID")
 	}
 	if !strings.Contains(html, `name="created_at"`) {
 		t.Error("expected datetime input for edit mode")
 	}
+	// Mobile keyboard hints must match the new-exercise-entry form: reps + rest
+	// get the integer numberpad, weight gets the decimal numberpad so
+	// editing an existing 2.5 kg entry on mobile is possible.
+	editRepsPattern := `inputmode="numeric" id="reps"`
+	if !regexp.MustCompile(editRepsPattern).MatchString(html) {
+		t.Errorf("expected edit form reps input to carry %q", editRepsPattern)
+	}
+	editWeightPattern := `inputmode="decimal" id="weight"`
+	if !regexp.MustCompile(editWeightPattern).MatchString(html) {
+		t.Errorf("expected edit form weight input to carry %q", editWeightPattern)
+	}
+	editRestPattern := `inputmode="numeric" id="rest_time"`
+	if !regexp.MustCompile(editRestPattern).MatchString(html) {
+		t.Errorf("expected edit form rest_time input to carry %q", editRestPattern)
+	}
 }
 
 func TestEntryFormSuccess_StayOnPage(t *testing.T) {
-	html := renderToString(t, EntryFormSuccess("Saved!", true))
+	html := renderToString(t, ExerciseEntryFormSuccess("Saved!", true))
 	if !strings.Contains(html, "Saved!") {
 		t.Error("expected success message")
 	}
@@ -207,7 +254,7 @@ func TestEntryFormSuccess_StayOnPage(t *testing.T) {
 }
 
 func TestEntryFormSuccess_Redirect(t *testing.T) {
-	html := renderToString(t, EntryFormSuccess("Saved!", false))
+	html := renderToString(t, ExerciseEntryFormSuccess("Saved!", false))
 	if !strings.Contains(html, "Back to Dashboard") {
 		t.Error("expected back link when not staying on page")
 	}
@@ -216,8 +263,8 @@ func TestEntryFormSuccess_Redirect(t *testing.T) {
 	}
 }
 
-func TestEntryFormError(t *testing.T) {
-	html := renderToString(t, EntryFormError("Invalid reps"))
+func TestExerciseEntryFormError(t *testing.T) {
+	html := renderToString(t, ExerciseEntryFormError("Invalid reps"))
 	if !strings.Contains(html, "Invalid reps") {
 		t.Error("expected error message")
 	}
@@ -229,7 +276,7 @@ func TestEntryFormError(t *testing.T) {
 func TestExerciseHistory_WithEntries(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{
-		Entries: []models.ExerciseEntry{
+		ExerciseEntries: []models.ExerciseEntry{
 			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 		},
 		Stats: models.HistoryStats{
@@ -238,11 +285,11 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 		},
 		Page: 1,
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg"))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected exercise name heading")
 	}
-	if strings.Contains(html, "No entries yet") {
+	if strings.Contains(html, "No sets yet") {
 		t.Error("did not expect empty state when entries exist")
 	}
 	if !strings.Contains(html, "100.0 kg") {
@@ -253,8 +300,8 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 func TestExerciseHistory_Empty(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{Page: 1}
-	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false))
-	if !strings.Contains(html, "No entries yet") {
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg"))
+	if !strings.Contains(html, "No sets yet") {
 		t.Error("expected empty state")
 	}
 }
@@ -262,18 +309,18 @@ func TestExerciseHistory_Empty(t *testing.T) {
 func TestExerciseHistory_RendersChart(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{
-		Entries: []models.ExerciseEntry{
+		ExerciseEntries: []models.ExerciseEntry{
 			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 		},
 		Stats: models.HistoryStats{MaxWeight: 100},
 		Page:  1,
 	}
-	chartEntries := []models.ExerciseEntry{
+	chartExerciseEntries := []models.ExerciseEntry{
 		{Weight: 80, CreatedAt: time.Date(2024, 6, 10, 9, 0, 0, 0, time.UTC)},
 		{Weight: 85, CreatedAt: time.Date(2024, 6, 12, 9, 0, 0, 0, time.UTC)},
 		{Weight: 90, CreatedAt: time.Date(2024, 6, 15, 9, 0, 0, 0, time.UTC)},
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, chartExerciseEntries, "Test User", true, false, "kg"))
 	if !strings.Contains(html, `id="exercise-history-chart"`) {
 		t.Error("expected chart canvas with id exercise-history-chart")
 	}
@@ -297,7 +344,7 @@ func TestExerciseHistory_RendersChart(t *testing.T) {
 func TestExerciseHistory_OmitsChartWhenSingleDay(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{
-		Entries: []models.ExerciseEntry{
+		ExerciseEntries: []models.ExerciseEntry{
 			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 		},
 		Stats: models.HistoryStats{MaxWeight: 100},
@@ -306,11 +353,11 @@ func TestExerciseHistory_OmitsChartWhenSingleDay(t *testing.T) {
 	// Two entries on the same day should collapse to a single chart point,
 	// so the chart (which needs >= 2 labels) should not render.
 	sameDay := time.Date(2024, 6, 10, 9, 0, 0, 0, time.UTC)
-	chartEntries := []models.ExerciseEntry{
+	chartExerciseEntries := []models.ExerciseEntry{
 		{Weight: 80, CreatedAt: sameDay},
 		{Weight: 85, CreatedAt: sameDay.Add(time.Hour)},
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, chartExerciseEntries, "Test User", true, false, "kg"))
 	if strings.Contains(html, `id="exercise-history-chart"`) {
 		t.Error("expected chart to be omitted when only one unique day is present")
 	}
@@ -318,12 +365,12 @@ func TestExerciseHistory_OmitsChartWhenSingleDay(t *testing.T) {
 
 func TestHistoryTable_NoPagerWhenSinglePage(t *testing.T) {
 	page := &models.ExerciseHistoryPage{
-		Entries: []models.ExerciseEntry{
+		ExerciseEntries: []models.ExerciseEntry{
 			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 		},
 		Page: 1,
 	}
-	html := renderToString(t, HistoryTable("ex-1", page))
+	html := renderToString(t, HistoryTable("ex-1", page, "kg"))
 	if !strings.Contains(html, historyTableWrapID) {
 		t.Error("expected swappable wrap region to be present")
 	}
@@ -339,7 +386,7 @@ func TestHistoryTable_NoPagerWhenSinglePage(t *testing.T) {
 func TestExerciseHistory_RendersChartButton(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{Page: 1}
-	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg"))
 	if !strings.Contains(html, `href="/exercises/ex-1/chart"`) {
 		t.Error("expected Chart link pointing at /exercises/ex-1/chart")
 	}
@@ -348,13 +395,13 @@ func TestExerciseHistory_RendersChartButton(t *testing.T) {
 	}
 	// Populated state — make sure the button is also present when entries exist.
 	populatedPage := &models.ExerciseHistoryPage{
-		Entries: []models.ExerciseEntry{
+		ExerciseEntries: []models.ExerciseEntry{
 			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 		},
 		Stats: models.HistoryStats{MaxWeight: 100},
 		Page:  1,
 	}
-	populatedHTML := renderToString(t, ExerciseHistory(exercise, populatedPage, nil, "Test User", true, false))
+	populatedHTML := renderToString(t, ExerciseHistory(exercise, populatedPage, nil, "Test User", true, false, "kg"))
 	if !strings.Contains(populatedHTML, `href="/exercises/ex-1/chart"`) {
 		t.Error("expected Chart link in populated history view as well")
 	}
@@ -372,11 +419,11 @@ func TestExerciseChart(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
 	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
-	chartEntries := []models.ExerciseEntry{
+	chartExerciseEntries := []models.ExerciseEntry{
 		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: day1},
 		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: day2},
 	}
-	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChart(exercise, chartExerciseEntries, "Test User", true, false, "kg"))
 
 	// Button group container with the documented basecoat class.
 	if !strings.Contains(html, `class="button-group"`) {
@@ -426,12 +473,12 @@ func TestExerciseChart(t *testing.T) {
 func TestExerciseChart_RendersFullWidthChartCard(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	now := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
-	chartEntries := []models.ExerciseEntry{
+	chartExerciseEntries := []models.ExerciseEntry{
 		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: now},
 		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: now.AddDate(0, 0, 7)},
 		{ID: "e3", Reps: 3, Weight: 110, CreatedAt: now.AddDate(0, 0, 14)},
 	}
-	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChart(exercise, chartExerciseEntries, "Test User", true, false, "kg"))
 
 	// Card container wraps the chart.
 	if !strings.Contains(html, `<div class="card p-4">`) {
@@ -492,7 +539,7 @@ func TestExerciseChart_EmptyState(t *testing.T) {
 	}
 	for name, entries := range cases {
 		t.Run(name, func(t *testing.T) {
-			html := renderToString(t, ExerciseChart(exercise, entries, "Test User", true, false))
+			html := renderToString(t, ExerciseChart(exercise, entries, "Test User", true, false, "kg"))
 			if !strings.Contains(html, "Log at least 2 sessions to see your progression.") {
 				t.Errorf("expected friendly empty-state message for %q", name)
 			}
@@ -515,13 +562,13 @@ func TestExerciseChart_AggregatesMaxWeightPerDay(t *testing.T) {
 	day1evening := time.Date(2025, 6, 10, 19, 30, 0, 0, time.UTC)
 	day2morning := time.Date(2025, 6, 11, 9, 0, 0, 0, time.UTC)
 	day2evening := time.Date(2025, 6, 11, 19, 30, 0, 0, time.UTC)
-	chartEntries := []models.ExerciseEntry{
+	chartExerciseEntries := []models.ExerciseEntry{
 		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: day1morning}, // day1: 100
 		{ID: "e2", Reps: 3, Weight: 110, CreatedAt: day1evening}, // day1: 110 (max)
 		{ID: "e3", Reps: 5, Weight: 112, CreatedAt: day2morning}, // day2: 112 (max)
 		{ID: "e4", Reps: 5, Weight: 108, CreatedAt: day2evening}, // day2: 108 (not max)
 	}
-	html := renderToString(t, ExerciseChart(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChart(exercise, chartExerciseEntries, "Test User", true, false, "kg"))
 
 	re := regexp.MustCompile(`<script id="exercise-chart-data" type="application/json">([\s\S]*?)</script>`)
 	m := re.FindStringSubmatch(html)
@@ -564,11 +611,11 @@ func TestExerciseChart_AggregatesMaxWeightPerDay(t *testing.T) {
 // TestExerciseChartAdvanced_EmptyState.
 func TestExerciseChartAdvanced(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
-	chartEntries := []models.ExerciseEntry{
+	chartExerciseEntries := []models.ExerciseEntry{
 		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)},
 		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)},
 	}
-	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChartAdvanced(exercise, chartExerciseEntries, "Test User", true, false, "kg"))
 
 	if !strings.Contains(html, `class="button-group"`) {
 		t.Error("expected basecoat button-group container")
@@ -613,12 +660,12 @@ func TestExerciseChartAdvanced(t *testing.T) {
 func TestExerciseChartAdvanced_RendersScatterCard(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	now := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
-	chartEntries := []models.ExerciseEntry{
+	chartExerciseEntries := []models.ExerciseEntry{
 		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: now},
 		{ID: "e2", Reps: 3, Weight: 110, CreatedAt: now.AddDate(0, 0, 1)},
 		{ID: "e3", Reps: 8, Weight: 90, CreatedAt: now.AddDate(0, 0, 2)},
 	}
-	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChartAdvanced(exercise, chartExerciseEntries, "Test User", true, false, "kg"))
 
 	if !strings.Contains(html, `<div class="card p-4">`) {
 		t.Error("expected full-width card container with p-4 padding")
@@ -680,7 +727,7 @@ func TestExerciseChartAdvanced_EmptyState(t *testing.T) {
 	}
 	for name, entries := range cases {
 		t.Run(name, func(t *testing.T) {
-			html := renderToString(t, ExerciseChartAdvanced(exercise, entries, "Test User", true, false))
+			html := renderToString(t, ExerciseChartAdvanced(exercise, entries, "Test User", true, false, "kg"))
 			if !strings.Contains(html, "Log at least 2 sets to see your volume profile.") {
 				t.Errorf("expected friendly empty-state message for %q", name)
 			}
@@ -703,12 +750,12 @@ func TestExerciseChartAdvanced_PlotsEverySet(t *testing.T) {
 	day1morning := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
 	day1evening := time.Date(2025, 6, 10, 19, 30, 0, 0, time.UTC)
 	day2morning := time.Date(2025, 6, 11, 9, 0, 0, 0, time.UTC)
-	chartEntries := []models.ExerciseEntry{
+	chartExerciseEntries := []models.ExerciseEntry{
 		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: day1morning},
 		{ID: "e2", Reps: 3, Weight: 110, CreatedAt: day1evening},
 		{ID: "e3", Reps: 5, Weight: 112, CreatedAt: day2morning},
 	}
-	html := renderToString(t, ExerciseChartAdvanced(exercise, chartEntries, "Test User", true, false))
+	html := renderToString(t, ExerciseChartAdvanced(exercise, chartExerciseEntries, "Test User", true, false, "kg"))
 
 	re := regexp.MustCompile(`<script id="exercise-chart-advanced-data" type="application/json">([\s\S]*?)</script>`)
 	m := re.FindStringSubmatch(html)
@@ -751,14 +798,14 @@ func TestExerciseChartAdvanced_PlotsEverySet(t *testing.T) {
 
 func TestHistoryTable_ShowsNextAndPrev(t *testing.T) {
 	page := &models.ExerciseHistoryPage{
-		Entries: []models.ExerciseEntry{
+		ExerciseEntries: []models.ExerciseEntry{
 			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 		},
 		Page:    2,
 		HasPrev: true,
 		HasNext: true,
 	}
-	html := renderToString(t, HistoryTable("ex-1", page))
+	html := renderToString(t, HistoryTable("ex-1", page, "kg"))
 	if !strings.Contains(html, `aria-label="Previous page"`) {
 		t.Error("expected Previous button on a middle page")
 	}

@@ -1,12 +1,15 @@
 package routes
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/labstack/echo/v4"
 
+	"stren/internal/models"
 	"stren/internal/utils"
 )
 
@@ -23,8 +26,8 @@ func TestIsPublicRoute(t *testing.T) {
 		{"/sw.js", true},
 		{"/favicon.ico", true},
 		{"/", false},
-		{"/entries", false},
-		{"/entries/new", false},
+		{"/exercise-entries", false},
+		{"/exercise-entries/new", false},
 		{"/exercises/Squat", false},
 		{"/api/exercises", false},
 	}
@@ -40,7 +43,7 @@ func TestIsPublicRoute(t *testing.T) {
 
 func TestRedirectToLogin_NonHTMX(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -59,7 +62,7 @@ func TestRedirectToLogin_NonHTMX(t *testing.T) {
 
 func TestRedirectToLogin_HTMX(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -106,7 +109,7 @@ func TestAuthMiddleware_MissingCookie(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -132,7 +135,7 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
 		Value: "invalid-token",
@@ -164,7 +167,7 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
 		Value: token,
@@ -208,7 +211,7 @@ if claims.UserID != "user-42" {
 
 func TestGetClaims_Missing(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -220,7 +223,7 @@ func TestGetClaims_Missing(t *testing.T) {
 
 func TestGetClaims_Present(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -257,7 +260,7 @@ func TestAuthMiddleware_ValidToken_HTMX(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.Header.Set("HX-Request", "true")
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
@@ -286,7 +289,7 @@ func TestAuthMiddleware_MissingCookie_HTMX(t *testing.T) {
 	middleware := AuthMiddleware(jwtService)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
+	req := httptest.NewRequest(http.MethodGet, "/exercise-entries", nil)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -305,5 +308,101 @@ func TestAuthMiddleware_MissingCookie_HTMX(t *testing.T) {
 	}
 	if hx := rec.Header().Get("HX-Redirect"); hx != "/login" {
 		t.Fatalf("expected HX-Redirect /login, got %q", hx)
+	}
+}
+
+// countingUserRepo wraps a base UserRepo (nil-safe) and counts how many
+// times GetUserByID is invoked. Used by TestGetUser_CachedOnSecondCall
+// to assert the request-scoped cache works.
+type countingUserRepo struct {
+	base    models.UserRepo
+	getCalls int32
+	err     error
+}
+
+func (r *countingUserRepo) CreateUser(user *models.User) error { return r.base.CreateUser(user) }
+func (r *countingUserRepo) GetUserByEmail(email string) (*models.User, error) {
+	return r.base.GetUserByEmail(email)
+}
+func (r *countingUserRepo) GetUserByID(id string) (*models.User, error) {
+	atomic.AddInt32(&r.getCalls, 1)
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.base.GetUserByID(id)
+}
+func (r *countingUserRepo) UpdateUser(user *models.User) error    { return r.base.UpdateUser(user) }
+func (r *countingUserRepo) UpdateUserPassword(id, hash string) error {
+	return r.base.UpdateUserPassword(id, hash)
+}
+
+// TestGetUser_NoClaims asserts that GetUser returns nil when no auth
+// claims are present in the context (e.g. on a public route or in a
+// test that doesn't set them up).
+func TestGetUser_NoClaims(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if u := h.GetUser(c); u != nil {
+		t.Fatalf("expected nil user when no claims, got %+v", u)
+	}
+}
+
+// TestGetUser_DBError asserts that GetUser swallows DB errors (logs
+// them) and returns nil rather than propagating. The caller is
+// expected to handle a nil user, e.g. by falling back to the default
+// "kg" unit.
+func TestGetUser_DBError(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	mockUser.users = []models.User{
+		{ID: "u1", Name: "Alice", Email: "a@b.c", PasswordHash: "x", WeightUnit: "kg"},
+	}
+	counting := &countingUserRepo{base: mockUser, err: errors.New("simulated db error")}
+	h.userRepo = counting
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "u1", "a@b.c", "Alice", false)
+
+	if u := h.GetUser(c); u != nil {
+		t.Fatalf("expected nil user on db error, got %+v", u)
+	}
+	if got := atomic.LoadInt32(&counting.getCalls); got != 1 {
+		t.Errorf("expected exactly 1 GetUserByID call, got %d", got)
+	}
+}
+
+// TestGetUser_CachedOnSecondCall asserts that two GetUser calls in the
+// same request only trigger one DB read. The second call should be
+// served from the Echo context cache.
+func TestGetUser_CachedOnSecondCall(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	mockUser.users = []models.User{
+		{ID: "u1", Name: "Alice", Email: "a@b.c", PasswordHash: "x", WeightUnit: "lbs"},
+	}
+	counting := &countingUserRepo{base: mockUser}
+	h.userRepo = counting
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "u1", "a@b.c", "Alice", false)
+
+	u1 := h.GetUser(c)
+	u2 := h.GetUser(c)
+	if u1 == nil || u2 == nil {
+		t.Fatal("expected both GetUser calls to return a non-nil user")
+	}
+	if u1 != u2 {
+		t.Error("expected cached user pointer identity between calls")
+	}
+	if got := atomic.LoadInt32(&counting.getCalls); got != 1 {
+		t.Errorf("expected exactly 1 GetUserByID call (second should be cached), got %d", got)
+	}
+	if u1.WeightUnitDisplay() != "lbs" {
+		t.Errorf("expected cached user to expose lbs unit, got %q", u1.WeightUnitDisplay())
 	}
 }

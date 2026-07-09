@@ -9,13 +9,24 @@ import (
 	"time"
 )
 
+type AuthToken struct {
+	ID        string
+	UserID    string
+	Purpose   string
+	TokenHash string
+	ExpiresAt time.Time
+	UsedAt    sql.NullTime
+	CreatedAt time.Time
+}
+
 type Exercise struct {
-	ID          string
-	Name        string
-	Description sql.NullString
-	VideoUrl    sql.NullString
-	ImgUrl      sql.NullString
-	Type        string
+	ID             string
+	Name           string
+	Description    sql.NullString
+	VideoUrl       sql.NullString
+	ImgUrl         sql.NullString
+	ImgUrlOriginal sql.NullString
+	Type           string
 }
 
 type ExerciseEntry struct {

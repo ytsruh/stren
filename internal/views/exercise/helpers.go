@@ -15,14 +15,14 @@ type chartDay struct {
 	weight float64
 }
 
-// aggregateEntriesByDay groups a slice of ExerciseEntry by calendar
-// day and reduces each day to the heaviest weight recorded. Days are
-// returned in ascending order so the resulting line runs left-to-right.
-// The two chart views (history and full-width) both wrap this helper
-// to build their own ChartProps.
-func aggregateEntriesByDay(entries []models.ExerciseEntry) []chartDay {
+// aggregateExerciseEntriesByDay groups a slice of ExerciseEntry by
+// calendar day and reduces each day to the heaviest weight recorded. Days
+// are returned in ascending order so the resulting line runs
+// left-to-right. The two chart views (history and full-width) both wrap
+// this helper to build their own ChartProps.
+func aggregateExerciseEntriesByDay(exerciseEntries []models.ExerciseEntry) []chartDay {
 	byDay := make(map[string]chartDay)
-	for _, e := range entries {
+	for _, e := range exerciseEntries {
 		key := e.CreatedAt.Format("2006-01-02")
 		existing, ok := byDay[key]
 		if !ok || e.Weight > existing.weight {
@@ -40,8 +40,8 @@ func aggregateEntriesByDay(entries []models.ExerciseEntry) []chartDay {
 }
 
 // dayLabelsAndValues turns a []chartDay into the parallel labels /
-// values slices the chart props expect. format controls how the date
-// is rendered (e.g. "02 Jan" for the history view).
+// values slices the chart props expect. format controls how the date is
+// rendered (e.g. "02 Jan" for the history view).
 func dayLabelsAndValues(days []chartDay, format string) ([]string, []float64) {
 	labels := make([]string, len(days))
 	values := make([]float64, len(days))

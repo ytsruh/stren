@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -16,7 +17,7 @@ func newMockAdminUserRepository() *mockAdminUserRepository {
 	return &mockAdminUserRepository{}
 }
 
-func (m *mockAdminUserRepository) ListUsers() ([]models.User, error) {
+func (m *mockAdminUserRepository) ListUsers(_ context.Context) ([]models.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	result := make([]models.User, len(m.users))
@@ -32,7 +33,7 @@ func TestAdminUserController_ListUsers(t *testing.T) {
 	}
 
 	ctrl := NewAdminUserController(mock)
-	users, err := ctrl.ListUsers()
+	users, err := ctrl.ListUsers(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestAdminUserController_ListUsers_Empty(t *testing.T) {
 	mock := newMockAdminUserRepository()
 	ctrl := NewAdminUserController(mock)
 
-	users, err := ctrl.ListUsers()
+	users, err := ctrl.ListUsers(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -64,7 +65,7 @@ func TestAdminUserController_ListUsers_Error(t *testing.T) {
 	mock := newMockAdminUserRepository()
 	ctrl := NewAdminUserController(mock)
 
-	_, err := ctrl.ListUsers()
+	_, err := ctrl.ListUsers(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

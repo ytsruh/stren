@@ -13,7 +13,7 @@ import (
 // (toast, error card, etc.).
 var (
 	ErrPushSubscriptionMissingFields = errors.New("subscription is missing required fields")
-	ErrPushEndpointMissing            = errors.New("endpoint is required")
+	ErrPushEndpointMissing           = errors.New("endpoint is required")
 )
 
 // PushController handles the authenticated user's push subscription

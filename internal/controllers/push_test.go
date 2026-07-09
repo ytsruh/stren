@@ -179,10 +179,27 @@ func TestAdminNotifications_BroadcastInput_Validate(t *testing.T) {
 }
 
 func TestAdminNotifications_Broadcast_NilService(t *testing.T) {
-	c := NewAdminNotificationsController(nil)
+	c := NewAdminNotificationsController(nil, nil)
 	_, err := c.Broadcast(context.Background(), BroadcastInput{Title: "x", Body: "y"})
 	if !errors.Is(err, ErrPushNotConfigured) {
 		t.Fatalf("expected ErrPushNotConfigured, got %v", err)
+	}
+}
+
+func TestAdminNotifications_SendWeightReminder_NilReminder(t *testing.T) {
+	// A nil orchestrator (e.g. a server started without
+	// the reminders package) must produce a clean error so
+	// the route handler can render a friendly error card.
+	// Returning a typed sentinel — rather than panicking
+	// on a nil dereference — keeps the failure mode
+	// observable in the admin UI.
+	c := NewAdminNotificationsController(nil, nil)
+	_, attempted, err := c.SendWeightReminder(context.Background())
+	if !errors.Is(err, ErrWeightReminderNotConfigured) {
+		t.Fatalf("expected ErrWeightReminderNotConfigured, got %v", err)
+	}
+	if attempted {
+		t.Error("attempted = true, want false when reminder is nil")
 	}
 }
 

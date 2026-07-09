@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"stren/internal/models"
+	"stren/internal/utils"
 	"stren/internal/views"
 	"stren/internal/views/components"
 )
@@ -160,17 +161,19 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 							value={ data.Exercise.VideoURL }
 						/>
 					</div>
-					<div class="grid gap-2">
-						<label for="img_url">Image Path</label>
-						<input
-							class="input"
-							type="text"
-							id="img_url"
-							name="img_url"
-							placeholder="exercises/image.jpg"
-							value={ data.Exercise.ImgURL }
-						/>
-					</div>
+					@components.ImageUpload(components.ImageUploadProps{
+						Name:               "exercise",
+						Label:              "Image",
+						CurrentURL:         utils.PublicURLFor(data.Exercise.ImgURL),
+						CurrentKey:         data.Exercise.ImgURL,
+						CurrentOriginalKey: data.Exercise.ImgURLOriginal,
+						MaxSizeMB:          10,
+						UploadEndpoint:     "/admin/exercises/image-upload",
+						RemoveFieldName:    "clear_image",
+						RemoveLabel:        "Remove current image",
+						AspectWidth:        4,
+						AspectHeight:       1,
+					})
 				</fieldset>
 				<div class="flex gap-3">
 					<button type="submit" hx-indicator="#edit-exercise-spinner" class="btn relative inline-flex">
@@ -235,16 +238,14 @@ templ AdminExerciseForm(data AdminExerciseFormData, userName string, isAuthentic
 							placeholder="https://example.com/video.mp4"
 						/>
 					</div>
-					<div class="grid gap-2">
-						<label for="img_url">Image URL</label>
-						<input
-							class="input"
-							type="url"
-							id="img_url"
-							name="img_url"
-							placeholder="https://example.com/image.jpg"
-						/>
-					</div>
+					@components.ImageUpload(components.ImageUploadProps{
+						Name:           "exercise",
+						Label:          "Image",
+						MaxSizeMB:      10,
+						UploadEndpoint: "/admin/exercises/image-upload",
+						AspectWidth:    4,
+						AspectHeight:   1,
+					})
 				</fieldset>
 				<div class="flex gap-3">
 					<button type="submit" hx-indicator="#new-exercise-spinner" class="btn relative inline-flex">

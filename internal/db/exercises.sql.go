@@ -11,18 +11,19 @@ import (
 )
 
 const create = `-- name: Create :one
-INSERT INTO exercises (id, name, description, video_url, img_url, type)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO exercises (id, name, description, video_url, img_url, img_url_original, type)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type CreateParams struct {
-	ID          string
-	Name        string
-	Description sql.NullString
-	VideoUrl    sql.NullString
-	ImgUrl      sql.NullString
-	Type        string
+	ID             string
+	Name           string
+	Description    sql.NullString
+	VideoUrl       sql.NullString
+	ImgUrl         sql.NullString
+	ImgUrlOriginal sql.NullString
+	Type           string
 }
 
 func (q *Queries) Create(ctx context.Context, arg CreateParams) (string, error) {
@@ -32,6 +33,7 @@ func (q *Queries) Create(ctx context.Context, arg CreateParams) (string, error) 
 		arg.Description,
 		arg.VideoUrl,
 		arg.ImgUrl,
+		arg.ImgUrlOriginal,
 		arg.Type,
 	)
 	var id string
@@ -40,7 +42,7 @@ func (q *Queries) Create(ctx context.Context, arg CreateParams) (string, error) 
 }
 
 const getByID = `-- name: GetByID :one
-SELECT id, name, description, video_url, img_url, type
+SELECT id, name, description, video_url, img_url, img_url_original, type
 FROM exercises
 WHERE id = ?
 `
@@ -54,13 +56,14 @@ func (q *Queries) GetByID(ctx context.Context, id string) (Exercise, error) {
 		&i.Description,
 		&i.VideoUrl,
 		&i.ImgUrl,
+		&i.ImgUrlOriginal,
 		&i.Type,
 	)
 	return i, err
 }
 
 const getByName = `-- name: GetByName :one
-SELECT id, name, description, video_url, img_url, type
+SELECT id, name, description, video_url, img_url, img_url_original, type
 FROM exercises
 WHERE name = ?
 `
@@ -74,13 +77,14 @@ func (q *Queries) GetByName(ctx context.Context, name string) (Exercise, error) 
 		&i.Description,
 		&i.VideoUrl,
 		&i.ImgUrl,
+		&i.ImgUrlOriginal,
 		&i.Type,
 	)
 	return i, err
 }
 
 const list = `-- name: List :many
-SELECT id, name, description, video_url, img_url, type
+SELECT id, name, description, video_url, img_url, img_url_original, type
 FROM exercises
 ORDER BY name
 `
@@ -100,6 +104,7 @@ func (q *Queries) List(ctx context.Context) ([]Exercise, error) {
 			&i.Description,
 			&i.VideoUrl,
 			&i.ImgUrl,
+			&i.ImgUrlOriginal,
 			&i.Type,
 		); err != nil {
 			return nil, err
@@ -117,18 +122,19 @@ func (q *Queries) List(ctx context.Context) ([]Exercise, error) {
 
 const update = `-- name: Update :one
 UPDATE exercises
-SET name = ?, description = ?, video_url = ?, img_url = ?, type = ?
+SET name = ?, description = ?, video_url = ?, img_url = ?, img_url_original = ?, type = ?
 WHERE id = ?
-RETURNING id, name, description, video_url, img_url, type
+RETURNING id, name, description, video_url, img_url, img_url_original, type
 `
 
 type UpdateParams struct {
-	Name        string
-	Description sql.NullString
-	VideoUrl    sql.NullString
-	ImgUrl      sql.NullString
-	Type        string
-	ID          string
+	Name           string
+	Description    sql.NullString
+	VideoUrl       sql.NullString
+	ImgUrl         sql.NullString
+	ImgUrlOriginal sql.NullString
+	Type           string
+	ID             string
 }
 
 func (q *Queries) Update(ctx context.Context, arg UpdateParams) (Exercise, error) {
@@ -137,6 +143,7 @@ func (q *Queries) Update(ctx context.Context, arg UpdateParams) (Exercise, error
 		arg.Description,
 		arg.VideoUrl,
 		arg.ImgUrl,
+		arg.ImgUrlOriginal,
 		arg.Type,
 		arg.ID,
 	)
@@ -147,6 +154,7 @@ func (q *Queries) Update(ctx context.Context, arg UpdateParams) (Exercise, error
 		&i.Description,
 		&i.VideoUrl,
 		&i.ImgUrl,
+		&i.ImgUrlOriginal,
 		&i.Type,
 	)
 	return i, err

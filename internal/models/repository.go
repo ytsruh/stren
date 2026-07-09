@@ -25,47 +25,47 @@ type Repository interface {
 	// List returns all exercises ordered by name.
 	List() ([]Exercise, error)
 
-	// CreateEntry persists a new exercise entry and links it to its exercise.
-	CreateEntry(entry *ExerciseEntry) error
+	// CreateExerciseEntry persists a new exercise entry and links it to its exercise.
+	CreateExerciseEntry(exerciseEntry *ExerciseEntry) error
 
-	// GetEntry retrieves a single entry by ID with its exercise name.
+	// GetExerciseEntry retrieves a single exercise entry by ID with its exercise name.
 	// Returns nil if not found. Scopes to the given user ID.
-	GetEntry(id string, userID string) (*ExerciseEntry, error)
+	GetExerciseEntry(id string, userID string) (*ExerciseEntry, error)
 
-	// UpdateEntry updates an existing entry without changing its created_at date.
+	// UpdateExerciseEntry updates an existing exercise entry without changing its created_at date.
 	// Scopes to the given user ID.
-	UpdateEntry(entry *ExerciseEntry, userID string) error
+	UpdateExerciseEntry(exerciseEntry *ExerciseEntry, userID string) error
 
-	// UpdateEntryWithDate updates an existing entry including its created_at date.
+	// UpdateExerciseEntryWithDate updates an existing exercise entry including its created_at date.
 	// Scopes to the given user ID.
-	UpdateEntryWithDate(entry *ExerciseEntry, userID string) error
+	UpdateExerciseEntryWithDate(exerciseEntry *ExerciseEntry, userID string) error
 
-	// DeleteEntry removes an entry by ID. Scopes to the given user ID.
-	DeleteEntry(id string, userID string) error
+	// DeleteExerciseEntry removes an exercise entry by ID. Scopes to the given user ID.
+	DeleteExerciseEntry(id string, userID string) error
 
-	// ListEntries returns entries ordered by created_at descending.
+	// ListExerciseEntries returns exercise entries ordered by created_at descending.
 	// If limit > 0, results are capped at that count. Scopes to the given user ID.
-	ListEntries(userID string, limit int) ([]ExerciseEntry, error)
+	ListExerciseEntries(userID string, limit int) ([]ExerciseEntry, error)
 
-	// GetEntriesByExercisePaginated returns a page of entries for a specific exercise ID,
-	// ordered by created_at descending. Scopes to the given user ID.
-	GetEntriesByExercisePaginated(exerciseID string, userID string, limit, offset int) ([]ExerciseEntry, error)
+	// GetExerciseEntriesByExercisePaginated returns a page of exercise entries for a specific
+	// exercise ID, ordered by created_at descending. Scopes to the given user ID.
+	GetExerciseEntriesByExercisePaginated(exerciseID string, userID string, limit, offset int) ([]ExerciseEntry, error)
 
 	// GetMaxWeightByExercise returns the heaviest weight logged for the given exercise by
-	// the given user. Returns 0 when no entries exist. Scopes to the given user ID.
+	// the given user. Returns 0 when no exercise entries exist. Scopes to the given user ID.
 	GetMaxWeightByExercise(exerciseID string, userID string) (float64, error)
 
-	// GetLastSetByExercise returns the most recent entry for the given exercise by the
-	// given user, or sql.ErrNoRows when no entries exist. Scopes to the given user ID.
+	// GetLastSetByExercise returns the most recent exercise entry for the given exercise by
+	// the given user, or sql.ErrNoRows when no exercise entries exist. Scopes to the given user ID.
 	GetLastSetByExercise(exerciseID string, userID string) (*ExerciseEntry, error)
 
-	// GetEntriesByDateRange returns entries within an inclusive date range.
+	// GetExerciseEntriesByDateRange returns exercise entries within an inclusive date range.
 	// Scopes to the given user ID.
-	GetEntriesByDateRange(start, end time.Time, userID string) ([]ExerciseEntry, error)
+	GetExerciseEntriesByDateRange(start, end time.Time, userID string) ([]ExerciseEntry, error)
 
-	// ListEntriesLast7Days returns entries from the last 7 days ordered by created_at descending.
-	// Scopes to the given user ID.
-	ListEntriesLast7Days(userID string) ([]ExerciseEntry, error)
+	// ListExerciseEntriesLast7Days returns exercise entries from the last 7 days ordered by
+	// created_at descending. Scopes to the given user ID.
+	ListExerciseEntriesLast7Days(userID string) ([]ExerciseEntry, error)
 }
 
 // UserRepo defines the interface for user data access.
@@ -74,11 +74,15 @@ type UserRepo interface {
 	GetUserByEmail(email string) (*User, error)
 	GetUserByID(id string) (*User, error)
 	UpdateUser(user *User) error
+	// UpdateUserPassword replaces a user's password hash. Used by
+	// the password-reset flow. Kept separate from UpdateUser so a
+	// profile form cannot be tricked into clearing the password.
+	UpdateUserPassword(userID, passwordHash string) error
 }
 
 // AdminUserRepo defines the interface for admin user operations.
 type AdminUserRepo interface {
-	ListUsers() ([]User, error)
+	ListUsers(ctx context.Context) ([]User, error)
 }
 
 // Compile-time check to ensure AdminUserRepository implements AdminUserRepo.

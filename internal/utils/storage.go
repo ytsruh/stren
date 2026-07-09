@@ -19,11 +19,11 @@ import (
 // StorageConfig holds the R2 (or any S3-compatible) credentials and bucket info.
 // Fields are populated from environment variables and validated on startup.
 type StorageConfig struct {
-	Endpoint   string
-	AccessKey  string
-	SecretKey  string
-	Bucket     string
-	PublicURL  string // Public base URL used to build display URLs (e.g., https://pub-xxx.r2.dev)
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	PublicURL string // Public base URL used to build display URLs (e.g., https://pub-xxx.r2.dev)
 }
 
 // LoadStorageConfig reads the storage environment variables and returns a
@@ -129,6 +129,32 @@ func DeleteObject(key string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to delete object: %w", err)
+	}
+	return nil
+}
+
+// PutObject uploads body to R2 under key with the given content type.
+// Used by server-side upload flows (e.g. the admin exercise image
+// route) where the Go process holds the bytes — typically after
+// having decoded, resized, and re-encoded them through the imaging
+// package. The body is read until EOF; callers pass a bytes.Reader
+// or any other io.Reader. Errors are wrapped so callers can identify
+// "no such bucket", "permission denied", etc. without inspecting the
+// underlying AWS SDK error directly.
+func PutObject(ctx context.Context, key, contentType string, body io.Reader) error {
+	client, err := GetS3Client()
+	if err != nil {
+		return err
+	}
+	sc := storageConfig
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(sc.Bucket),
+		Key:         aws.String(key),
+		ContentType: aws.String(contentType),
+		Body:        body,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to put object %q: %w", key, err)
 	}
 	return nil
 }

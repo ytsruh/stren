@@ -7,18 +7,34 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
 	"stren/internal/controllers"
 	"stren/internal/db"
+	"stren/internal/email"
 	"stren/internal/export"
+	"stren/internal/imaging"
 	"stren/internal/models"
 	"stren/internal/push"
+	"stren/internal/reminders"
 	"stren/internal/routes"
 	"stren/internal/utils"
 	"stren/internal/views"
 )
+
+// weightReminderCronSpec is the cron expression for the
+// weekly "log your weight" reminder. "0 9 * * 0" is
+// minute=0, hour=9, day-of-month=*, month=*, day-of-week=0
+// (Sunday). Interpreted in UTC by the cron wrapper so
+// the schedule is the same regardless of where the
+// server happens to be deployed.
+//
+// Per project policy (AGENTS.md) the spec is hard-coded
+// rather than driven by an env var: the schedule is a
+// product decision, not a per-deployment knob.
+const weightReminderCronSpec = "0 9 * * 0"
 
 func main() {
 	// Load and validate environment variables on startup
@@ -45,6 +61,7 @@ func main() {
 	adminUserRepo := models.NewUserAdminRepository(database)
 	weightRepo := models.NewWeightRepository(database)
 	pushRepo := models.NewPushSubscriptionRepository(database)
+	authTokenRepo := models.NewAuthTokenRepository(database)
 
 	// Initialize auth service
 	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
@@ -68,22 +85,61 @@ func main() {
 	pushClient := push.NewClient(keys, push.ClientConfig{})
 	pushService := push.NewService(pushClient, push.NewStoreAdapter(pushRepo), push.ServiceConfig{})
 
+	// Wire the email service. The SMTP client targets Cloudflare's
+	// implicit-TLS endpoint (smtp.mx.cloudflare.net:465); the
+	// default From address, port, and timeout are set by
+	// email.NewClient from the APIToken alone. Email is required at
+	// startup (the env var is in the required list), so a failure
+	// to construct the client is fatal. The PUBLIC_URL env var is
+	// the base URL threaded into every link the email contains
+	// (dashboard button, password-reset URL, footer link).
+	emailClient, err := email.NewClient(email.ClientConfig{
+		APIToken: cfg.CLOUDFLARE_EMAIL_TOKEN,
+	})
+	if err != nil {
+		log.Fatalf("Failed to initialize email client: %v", err)
+	}
+	emailService, err := email.NewService(emailClient, cfg.PUBLIC_URL)
+	if err != nil {
+		log.Fatalf("Failed to initialize email service: %v", err)
+	}
+
 	// Initialize controllers
-	authCtrl := controllers.NewAuthController(userRepo, jwtService)
-	entryCtrl := controllers.NewEntryController(repo)
+	authCtrl := controllers.NewAuthController(userRepo, jwtService, emailService)
+	exerciseEntryCtrl := controllers.NewExerciseEntryController(repo)
 	adminCtrl := controllers.NewAdminController(repo)
 	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
 	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(weightRepo, r2PhotoGetter{})
 	pushCtrl := controllers.NewPushController(pushRepo)
-	adminNotificationsCtrl := controllers.NewAdminNotificationsController(pushService)
+	authRecoveryCtrl := controllers.NewAuthRecoveryController(userRepo, authTokenRepo, emailService)
+
+	// Initialize the weekly weight-reminder orchestrator here
+	// (above the admin notifications controller it is wired
+	// into) so the controller constructor can take a non-nil
+	// pointer. The orchestrator's own scheduler is started
+	// further down, after the Echo routes are registered, so
+	// an init failure here is the same as an init failure
+	// there (log.Fatal).
+	weightReminder, err := reminders.NewWeightReminder(
+		adminUserRepo,
+		emailService,
+		pushService,
+		reminders.WeightReminderConfig{},
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize weight reminder: %v", err)
+	}
+
+	adminNotificationsCtrl := controllers.NewAdminNotificationsController(pushService, weightReminder)
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
 	h := routes.NewHandler(
 		authCtrl,
-		entryCtrl,
+		authRecoveryCtrl,
+		exerciseEntryCtrl,
 		adminCtrl,
 		adminUserCtrl,
 		feedbackCtrl,
@@ -97,6 +153,9 @@ func main() {
 		userRepo,
 		jwtService,
 		validator,
+		imaging.NewStdProcessor(),
+		utilsR2Uploader{},
+		routes.DefaultExerciseImageConfig,
 	)
 
 	// Create Echo instance
@@ -124,6 +183,33 @@ func main() {
 
 	// Register routes
 	h.RegisterRoutes(e)
+
+	// Start the weekly weight-reminder scheduler. The
+	// orchestrator was constructed above and is also
+	// shared with the admin notifications controller
+	// (the "send weight reminder" button). The cron
+	// wrapper is the only place in the codebase that
+	// imports the third-party scheduling library, so
+	// a future "swap for a queue / system cron" change
+	// is a one-package diff. A bad spec (e.g. a typo
+	// in "0 9 * * 0") fails startup rather than
+	// silently never firing.
+	scheduler, err := reminders.NewCronScheduler(
+		weightReminderCronSpec,
+		time.UTC,
+		// The cron job discards the RunResult — every
+		// useful field is already written to the server
+		// log. The admin "send weight reminder" route
+		// calls Run directly and renders the result
+		// into a result card; the cron path
+		// intentionally does not duplicate that.
+		func(ctx context.Context) { _, _ = weightReminder.Run(ctx) },
+	)
+	if err != nil {
+		log.Fatalf("Failed to initialize reminder scheduler: %v", err)
+	}
+	scheduler.Start()
+	defer scheduler.Stop()
 
 	// Start server
 	localIP := getLocalIP()
@@ -165,3 +251,20 @@ func (r2PhotoGetter) Get(ctx context.Context, key string) (io.ReadCloser, error)
 
 // Compile-time check: r2PhotoGetter satisfies export.PhotoGetter.
 var _ export.PhotoGetter = r2PhotoGetter{}
+
+// utilsR2Uploader adapts utils.PutObject to the
+// routes.exerciseImageUploader interface. Same shape as
+// r2PhotoGetter (the read-side adapter used by the export flow);
+// keeping it as a named type makes it easy to swap a fake in tests
+// when the admin image route eventually needs end-to-end coverage.
+type utilsR2Uploader struct{}
+
+func (utilsR2Uploader) PutObject(ctx context.Context, key, contentType string, body io.Reader) error {
+	return utils.PutObject(ctx, key, contentType, body)
+}
+
+// Compile-time check: utilsR2Uploader satisfies the
+// routes.exerciseImageUploader interface.
+var _ interface {
+	PutObject(ctx context.Context, key, contentType string, body io.Reader) error
+} = utilsR2Uploader{}

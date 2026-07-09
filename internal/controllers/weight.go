@@ -131,11 +131,16 @@ func SuggestedExportFilename(now time.Time) string {
 // first zip entry is written — no in-memory buffering of the full
 // archive.
 //
+// weightUnit is the user's preferred display unit ("kg" or "lbs") and
+// is recorded in the CSV's weight_unit column so the file is
+// self-describing — the weight column is otherwise a unit-agnostic
+// number.
+//
 // The error returned covers failures up to the point of returning the
 // pipe reader; once streaming has started, errors are surfaced by the
 // goroutine closing the pipe with the error, which io.Copy will
 // propagate to the response writer.
-func (wc *WeightController) ExportWeightZip(ctx context.Context, userID string) (io.Reader, string, error) {
+func (wc *WeightController) ExportWeightZip(ctx context.Context, userID string, weightUnit string) (io.Reader, string, error) {
 	entries, err := wc.repo.List(userID)
 	if err != nil {
 		return nil, "", fmt.Errorf("load weight entries: %w", err)
@@ -150,7 +155,7 @@ func (wc *WeightController) ExportWeightZip(ctx context.Context, userID string) 
 		// context is. The pipe closure is the only way to
 		// signal a mid-stream error to io.Copy.
 		buildCtx := context.Background()
-		_, buildErr := export.BuildWeightZip(buildCtx, pw, entries, wc.photos, userID)
+		_, buildErr := export.BuildWeightZip(buildCtx, pw, entries, wc.photos, userID, weightUnit)
 		if buildErr != nil {
 			_ = pw.CloseWithError(buildErr)
 			return

@@ -22,9 +22,11 @@ type WeightEntry struct {
 	CreatedAt time.Time
 }
 
-// FormattedWeight returns the weight formatted as "X.X kg".
-func (w *WeightEntry) FormattedWeight() string {
-	return fmt.Sprintf("%.1f kg", w.Weight)
+// FormattedWeight returns the weight labelled with the given unit.
+// No conversion happens — the value is rendered as "%.1f <unit>" so
+// the number is displayed using whatever unit the user prefers.
+func (w *WeightEntry) FormattedWeight(unit string) string {
+	return FormatWeight(w.Weight, unit)
 }
 
 // FormattedDate returns the date in UK format (DD/MM/YY).

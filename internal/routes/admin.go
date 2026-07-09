@@ -8,6 +8,7 @@ import (
 
 	"stren/internal/controllers"
 	"stren/internal/models"
+	"stren/internal/utils"
 	"stren/internal/views/admin"
 )
 
@@ -16,7 +17,7 @@ import (
 // AdminListUsers renders the admin page listing all users.
 func (h *Handler) AdminListUsers(c echo.Context) error {
 	claims := GetClaims(c)
-	users, err := h.adminUserCtrl.ListUsers()
+	users, err := h.adminUserCtrl.ListUsers(c.Request().Context())
 	if err != nil {
 		return err
 	}
@@ -51,11 +52,12 @@ func (h *Handler) AdminCreateExercise(c echo.Context) error {
 	}
 
 	params := models.CreateExerciseParams{
-		Name:        name,
-		Description: c.FormValue("description"),
-		VideoURL:    c.FormValue("video_url"),
-		ImgURL:      c.FormValue("img_url"),
-		Type:        models.ExerciseType(c.FormValue("type")),
+		Name:           name,
+		Description:    c.FormValue("description"),
+		VideoURL:       c.FormValue("video_url"),
+		ImgURL:         c.FormValue("img_key"),
+		ImgURLOriginal: c.FormValue("img_key_original"),
+		Type:           models.ExerciseType(c.FormValue("type")),
 	}
 
 	_, err := h.adminCtrl.Create(params)
@@ -99,15 +101,70 @@ func (h *Handler) AdminUpdateExercise(c echo.Context) error {
 		return render(c, admin.AdminExerciseFormError("Exercise name is required"))
 	}
 
-	params := models.UpdateExerciseParams{
-		Name:        name,
-		Description: c.FormValue("description"),
-		VideoURL:    c.FormValue("video_url"),
-		ImgURL:      c.FormValue("img_url"),
-		Type:        models.ExerciseType(c.FormValue("type")),
+	// Load the current exercise so we can decide whether to delete
+	// the previous R2 objects. Doing this before the update means
+	// the new keys (if any) are still safe in the form payload.
+	existing, err := h.adminCtrl.Get(id)
+	if err != nil {
+		if errors.Is(err, controllers.ErrNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "Exercise not found")
+		}
+		c.Logger().Errorf("admin load exercise for update failed: %v", err)
+		return render(c, admin.AdminExerciseFormError("Failed to save exercise. Please try again."))
 	}
 
-	_, err := h.adminCtrl.Update(id, params)
+	// Resolve the final img_url and img_url_original values:
+	//  - if "clear_image" is checked, drop both to "" (and best-effort
+	//    delete the old R2 objects)
+	//  - else if a new key was uploaded, use it (and best-effort
+	//    delete the old R2 objects)
+	//  - else keep the existing values
+	clearImage := c.FormValue("clear_image") == "true"
+	newDisplayKey := c.FormValue("img_key")
+	newOriginalKey := c.FormValue("img_key_original")
+
+	finalDisplay := existing.ImgURL
+	finalOriginal := existing.ImgURLOriginal
+
+	if clearImage {
+		finalDisplay = ""
+		finalOriginal = ""
+	} else if newDisplayKey != "" {
+		// Only switch to the new key when the upload route actually
+		// returned one. An empty input + an unchanged hidden value
+		// means the user didn't change the image.
+		finalDisplay = newDisplayKey
+		finalOriginal = newOriginalKey
+	}
+
+	// Delete the old R2 objects if either:
+	//  - the user cleared the image
+	//  - the user replaced the image with a new upload
+	// Best-effort — log and continue so a missing/old object doesn't
+	// block the DB write.
+	if clearImage || newDisplayKey != "" {
+		if existing.ImgURL != "" {
+			if delErr := utils.DeleteObject(existing.ImgURL); delErr != nil {
+				c.Logger().Warnf("failed to delete exercise image %q from R2: %v", existing.ImgURL, delErr)
+			}
+		}
+		if existing.ImgURLOriginal != "" {
+			if delErr := utils.DeleteObject(existing.ImgURLOriginal); delErr != nil {
+				c.Logger().Warnf("failed to delete exercise original image %q from R2: %v", existing.ImgURLOriginal, delErr)
+			}
+		}
+	}
+
+	params := models.UpdateExerciseParams{
+		Name:           name,
+		Description:    c.FormValue("description"),
+		VideoURL:       c.FormValue("video_url"),
+		ImgURL:         finalDisplay,
+		ImgURLOriginal: finalOriginal,
+		Type:           models.ExerciseType(c.FormValue("type")),
+	}
+
+	_, err = h.adminCtrl.Update(id, params)
 	if err != nil {
 		if errors.Is(err, controllers.ErrNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "Exercise not found")

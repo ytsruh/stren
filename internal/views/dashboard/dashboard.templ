@@ -9,16 +9,18 @@ import (
 	"time"
 )
 
-// Dashboard renders the main dashboard page
-templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool) {
+// Dashboard renders the main dashboard page.
+// weightUnit is the user's preferred unit ("kg" / "lbs") and
+// drives the per-row "Weight" column and the "Total Volume" stat.
+templ Dashboard(exerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<section class="mb-8">
 			<div class="grid grid-cols-2 gap-2 sm:gap-4">
-				@components.ActionCard(components.ActionCardProps{Label: "Add Entry", Href: "/entries/new", Icon: "plus"})
+				@components.ActionCard(components.ActionCardProps{Label: "Add Set", Href: "/exercise-entries/new", Icon: "plus"})
 				@components.ActionCard(components.ActionCardProps{Label: "Timer", Href: "/timer", Icon: "timer"})
 			</div>
 		</section>
-		if len(entries) == 0 {
+		if len(exerciseEntries) == 0 {
 			@views.EmptyState()
 		} else {
 			<section class="flex flex-col gap-y-4">
@@ -26,16 +28,18 @@ templ Dashboard(entries []models.ExerciseEntry, userName string, isAuthenticated
 					@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "7 Day History"})
 				</div>
 				<div class="card p-4 h-72 sm:h-80">
-					@components.DonutChart(popularExercisesChartProps(entries))
+					@components.DonutChart(popularExercisesChartProps(exerciseEntries))
 				</div>
-				@EntryList(entries)
+				@ExerciseEntryList(exerciseEntries, weightUnit)
 			</section>
 		}
 	}
 }
 
-// EntryList renders a table of entries
-templ EntryList(entries []models.ExerciseEntry) {
+// ExerciseEntryList renders a table of exercise entries.
+// weightUnit is forwarded to ExerciseEntryRow so the "Weight" column is
+// labelled with whatever unit the user prefers.
+templ ExerciseEntryList(exerciseEntries []models.ExerciseEntry, weightUnit string) {
 	<table class="table w-full">
 		<thead>
 			<tr>
@@ -47,31 +51,33 @@ templ EntryList(entries []models.ExerciseEntry) {
 				<th></th>
 			</tr>
 		</thead>
-		<tbody id="entries-table">
-			for _, entry := range entries {
-				@EntryRow(entry)
+		<tbody id="exercise-entries-table">
+			for _, exerciseEntry := range exerciseEntries {
+				@ExerciseEntryRow(exerciseEntry, weightUnit)
 			}
 		</tbody>
 	</table>
 }
 
-// EntryRow renders a single entry row (used for htmx swaps)
-templ EntryRow(entry models.ExerciseEntry) {
-	<tr id={ fmt.Sprintf("entry-%s", entry.ID) }>
-		<td>{ entry.FormattedDate() }</td>
+// ExerciseEntryRow renders a single exercise entry row (used for htmx swaps).
+// weightUnit is passed to exerciseEntry.FormattedWeight so the cell shows
+// the user's preferred unit instead of always "kg".
+templ ExerciseEntryRow(exerciseEntry models.ExerciseEntry, weightUnit string) {
+	<tr id={ fmt.Sprintf("exercise-entry-%s", exerciseEntry.ID) }>
+		<td>{ exerciseEntry.FormattedDate() }</td>
 		<td>
-			<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", entry.ExerciseID)) } class="underline-offset-4 hover:underline inline-flex items-center gap-1">
+			<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s", exerciseEntry.ExerciseID)) } class="underline-offset-4 hover:underline inline-flex items-center gap-1">
 				@components.Icon(components.IconProps{Name: "eye", Size: 14})
-				{ entry.ExerciseName }
+				{ exerciseEntry.ExerciseName }
 			</a>
 		</td>
-		<td class="hidden sm:table-cell">{ fmt.Sprintf("%d", entry.Reps) }</td>
-		<td class="hidden sm:table-cell">{ entry.FormattedWeight() }</td>
-		<td class="hidden lg:table-cell">{ entry.Notes }</td>
+		<td class="hidden sm:table-cell">{ fmt.Sprintf("%d", exerciseEntry.Reps) }</td>
+		<td class="hidden sm:table-cell">{ exerciseEntry.FormattedWeight(weightUnit) }</td>
+		<td class="hidden lg:table-cell">{ exerciseEntry.Notes }</td>
 		<td>
 			<div class="flex gap-2">
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/entries/%s/edit", entry.ID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/exercise-entries/%s/edit", exerciseEntry.ID)) }
 					class="btn-outline p-2"
 					title="Edit"
 				>
@@ -82,43 +88,45 @@ templ EntryRow(entry models.ExerciseEntry) {
 	</tr>
 }
 
-// DeletedRow is returned after deleting an entry (htmx swap)
+// DeletedRow is returned after deleting an exercise entry (htmx swap)
 templ DeletedRow() {
 	<tr class="fade-out" style="display: none;"></tr>
 }
 
-// RecentEntries shows the most recent entries on the dashboard
-templ RecentEntries(entries []models.ExerciseEntry) {
+// RecentExerciseEntries shows the most recent exercise entries on the dashboard
+templ RecentExerciseEntries(exerciseEntries []models.ExerciseEntry, weightUnit string) {
 	<section>
 		<h2 class="mb-4">Recent Workouts</h2>
-		if len(entries) == 0 {
+		if len(exerciseEntries) == 0 {
 			@views.EmptyState()
 		} else {
-			@EntryList(entries)
+			@ExerciseEntryList(exerciseEntries, weightUnit)
 		}
 	</section>
 }
 
-// QuickStats shows some basic statistics
-templ QuickStats(entries []models.ExerciseEntry) {
+// QuickStats shows some basic statistics.
+// weightUnit is used for the "Total Volume" stat so the value is
+// labelled with whatever unit the user prefers.
+templ QuickStats(exerciseEntries []models.ExerciseEntry, weightUnit string) {
 	<section class="mt-8">
 		<h3 class="flex items-center gap-2 mb-4">
 			@components.Icon(components.IconProps{Name: "calendar", Size: 20})
 			Last 7 Days
 		</h3>
 		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-			@components.StatCard(components.StatCardProps{Label: "Total Sets", Value: fmt.Sprintf("%d", len(entries))})
-			@components.StatCard(components.StatCardProps{Label: "Unique Exercises", Value: fmt.Sprintf("%d", countUniqueExercises(entries))})
-			@components.StatCard(components.StatCardProps{Label: "Total Volume", Value: fmt.Sprintf("%.0f kg", calculateVolume(entries))})
+			@components.StatCard(components.StatCardProps{Label: "Total Sets", Value: fmt.Sprintf("%d", len(exerciseEntries))})
+			@components.StatCard(components.StatCardProps{Label: "Unique Exercises", Value: fmt.Sprintf("%d", countUniqueExercises(exerciseEntries))})
+			@components.StatCard(components.StatCardProps{Label: "Total Volume", Value: models.FormatWeight(calculateVolume(exerciseEntries), weightUnit)})
 		</div>
 	</section>
 }
 
 // Helper functions
-func countUniqueExercises(entries []models.ExerciseEntry) int {
+func countUniqueExercises(exerciseEntries []models.ExerciseEntry) int {
 	seen := make(map[string]bool)
 	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
-	for _, e := range entries {
+	for _, e := range exerciseEntries {
 		if e.CreatedAt.After(sevenDaysAgo) {
 			seen[e.ExerciseName] = true
 		}
@@ -126,10 +134,10 @@ func countUniqueExercises(entries []models.ExerciseEntry) int {
 	return len(seen)
 }
 
-func calculateVolume(entries []models.ExerciseEntry) float64 {
+func calculateVolume(exerciseEntries []models.ExerciseEntry) float64 {
 	var volume float64
 	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
-	for _, e := range entries {
+	for _, e := range exerciseEntries {
 		if e.CreatedAt.After(sevenDaysAgo) {
 			volume += e.Weight
 		}
@@ -167,16 +175,16 @@ const popularExercisesChartTitle = "Most Popular Exercises (7d)"
 // the DonutChartProps needed to render the dashboard's "Most Popular
 // Exercises (7d)" donut. Up to popularExercisesTopN exercises are
 // returned individually; the rest are collapsed into an "Other" bucket
-// so the chart stays readable. Each entry is counted as a single set
-// to match the dashboard's "Total Sets" stat semantics. A donut with
-// zero slices is not meaningful, so callers should also gate on
-// len(entries) > 0 before rendering.
+// so the chart stays readable. Each exercise entry is counted as a
+// single set to match the dashboard's "Total Sets" stat semantics. A
+// donut with zero slices is not meaningful, so callers should also gate
+// on len(exerciseEntries) > 0 before rendering.
 //
 // Sorting is by count desc, then by name asc, so the slice order is
 // fully deterministic and stable.
-func popularExercisesChartProps(entries []models.ExerciseEntry) components.DonutChartProps {
+func popularExercisesChartProps(exerciseEntries []models.ExerciseEntry) components.DonutChartProps {
 	counts := make(map[string]int)
-	for _, e := range entries {
+	for _, e := range exerciseEntries {
 		counts[e.ExerciseName]++
 	}
 

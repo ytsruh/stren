@@ -55,24 +55,30 @@ func (h *Handler) WeightPage(c echo.Context) error {
 		return err
 	}
 
-	// Look up the user's body-weight goal (if any) to drive the progress
-	// widget. A failed load is logged and treated as "no goal" so the page
-	// still renders.
+	// GetUser caches the user on the request context, so this is a
+	// single DB read even if other handlers in the same request also
+	// need the user. We use the cached user to read the target
+	// weight (drives the progress card) and the weight unit (drives
+	// every label in the view).
+	user := h.GetUser(c)
 	var target *float64
-	user, err := h.userRepo.GetUserByID(claims.UserID)
-	if err != nil {
-		c.Logger().Errorf("failed to load user for weight page: %v", err)
-	} else if user != nil {
+	unit := "kg"
+	if user != nil {
 		target = user.TargetWeight
+		unit = user.WeightUnitDisplay()
 	}
 
-	return render(c, weight.WeightPage(entries, claims.Name, true, claims.IsAdmin, target))
+	return render(c, weight.WeightPage(entries, claims.Name, true, claims.IsAdmin, target, unit))
 }
 
 // NewWeightForm renders the form for creating a new weight entry.
 func (h *Handler) NewWeightForm(c echo.Context) error {
 	claims := GetClaims(c)
-	return render(c, weight.WeightForm(claims.Name, true, claims.IsAdmin))
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+	return render(c, weight.WeightForm(claims.Name, true, claims.IsAdmin, unit))
 }
 
 // CreateWeight handles the creation of a new weight entry.
@@ -109,7 +115,12 @@ func (h *Handler) EditWeightForm(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Weight entry not found")
 	}
 
-	return render(c, weight.EditWeightForm(entry, claims.Name, true, claims.IsAdmin))
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
+	return render(c, weight.EditWeightForm(entry, claims.Name, true, claims.IsAdmin, unit))
 }
 
 // UpdateWeight handles updating an existing weight entry.
@@ -203,29 +214,36 @@ func (h *Handler) CompareWeightModal(c echo.Context) error {
 		return render(c, views.Toast("error", "Cannot compare photos", err.Error()))
 	}
 
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
 	before := entries[0]
 	after := entries[1]
 	delta := after.Weight - before.Weight
-	deltaStr := formatWeightDelta(delta)
+	deltaStr := formatWeightDelta(delta, unit)
 
 	return render(c, weight.CompareModal(
-		before.FormattedDateLong(), before.FormattedWeight(), before.PhotoURL(),
-		after.FormattedDateLong(), after.FormattedWeight(), after.PhotoURL(),
+		before.FormattedDateLong(), before.FormattedWeight(unit), before.PhotoURL(),
+		after.FormattedDateLong(), after.FormattedWeight(unit), after.PhotoURL(),
 		deltaStr,
 	))
 }
 
 // formatWeightDelta produces a short human-readable summary of the
 // weight change between two entries. Positive deltas are prefixed with
-// "+", negative with "−" (U+2212), and deltas within ±0.05 kg return
-// an empty string so the caller can omit the change indicator entirely
-// (avoids the awkward "· no change" label).
-func formatWeightDelta(delta float64) string {
+// "+", negative with "−" (U+2212), and deltas within ±0.05 return an
+// empty string so the caller can omit the change indicator entirely
+// (avoids the awkward "· no change" label). unit is the user's
+// preferred display unit ("kg" or "lbs") and is appended to the value
+// so the delta is labelled consistently with the entries it compares.
+func formatWeightDelta(delta float64, unit string) string {
 	switch {
 	case delta > 0.05:
-		return fmt.Sprintf("+%.1f kg", delta)
+		return fmt.Sprintf("+%.1f %s", delta, unit)
 	case delta < -0.05:
-		return fmt.Sprintf("−%.1f kg", -delta)
+		return fmt.Sprintf("−%.1f %s", -delta, unit)
 	default:
 		return ""
 	}
@@ -240,7 +258,12 @@ func formatWeightDelta(delta float64) string {
 func (h *Handler) ExportWeightZip(c echo.Context) error {
 	claims := GetClaims(c)
 
-	reader, filename, err := h.weightCtrl.ExportWeightZip(c.Request().Context(), claims.UserID)
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
+	reader, filename, err := h.weightCtrl.ExportWeightZip(c.Request().Context(), claims.UserID, unit)
 	if err != nil {
 		return err
 	}

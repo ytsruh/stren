@@ -15,7 +15,9 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/pressly/goose/v3 v3.27.0
+	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/crypto v0.49.0
+	golang.org/x/image v0.43.0
 	turso.tech/database/tursogo v0.5.3
 )
 
@@ -49,9 +51,9 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	modernc.org/sqlite v1.49.1 // indirect
 )

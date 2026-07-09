@@ -17,7 +17,8 @@ templ LoginPage(errorMsg string) {
 					hx-post="/login"
 					hx-target="#toaster"
 					hx-swap="beforeend"
-					class="form grid gap-4">
+					class="form grid gap-4"
+				>
 					<fieldset class="grid gap-3">
 						<div class="grid gap-2">
 							<label for="login-email">Email</label>
@@ -26,6 +27,7 @@ templ LoginPage(errorMsg string) {
 						<div class="grid gap-2">
 							<label for="login-password">Password</label>
 							<input class="input" type="password" id="login-password" name="password" placeholder="Password" required/>
+							<a href="/forgot" class="text-xs hover:underline">Forgot password?</a>
 						</div>
 					</fieldset>
 					<button type="submit" hx-indicator="#login-spinner" class="btn relative inline-flex">
@@ -48,6 +50,105 @@ templ LoginPageError(message string) {
 	@views.Toast("error", "Error", message)
 }
 
+// ForgotPasswordPage renders the "forgot password" form. The
+// same page is rendered for both GET (initial visit) and POST
+// (after submission) so the user sees a single, stable surface;
+// errorMsg and submitted control the post-submit state.
+templ ForgotPasswordPage(errorMsg string, submitted bool) {
+	@views.Layout(views.PageData{Title: "Forgot password", UserName: "", IsAuthenticated: false}) {
+		@components.Card(components.CardProps{Class: "w-full max-w-[400px] mx-auto mt-8"}) {
+			@components.CardHeader(components.CardHeaderProps{}) {
+				<h2>Forgot password</h2>
+			}
+			@components.CardSection(components.CardSectionProps{}) {
+				if submitted {
+					<p class="text-sm">If an account exists for the email you entered, we've sent a reset link. Check your inbox (and spam folder, just in case).</p>
+				} else {
+					if errorMsg != "" {
+						@views.Toast("error", "Error", errorMsg)
+					}
+					<form
+						hx-post="/forgot"
+						hx-target="#toaster"
+						hx-swap="beforeend"
+						class="form grid gap-4"
+					>
+						<fieldset class="grid gap-3">
+							<div class="grid gap-2">
+								<label for="forgot-email">Email</label>
+								<input class="input" type="email" id="forgot-email" name="email" placeholder="you@example.com" required/>
+							</div>
+						</fieldset>
+						<button type="submit" hx-indicator="#forgot-spinner" class="btn relative inline-flex">
+							<span class="btn-text">Send reset link</span>
+							<span id="forgot-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+								@components.Icon(components.IconProps{Name: "loader", Size: 18})
+							</span>
+						</button>
+					</form>
+				}
+			}
+			<footer class="text-center text-sm mx-auto">
+				<p><a href="/login" class="underline-offset-4 hover:underline">Back to login</a></p>
+			</footer>
+		}
+	}
+}
+
+// ResetPasswordPage renders the "reset your password" form
+// reached from the link in the password-reset email. The token
+// is preserved across the form submission via a hidden input
+// (the user types a new password, then submits; the form posts
+// to /reset with the same token).
+templ ResetPasswordPage(token string, errorMsg string) {
+	@views.Layout(views.PageData{Title: "Reset password", UserName: "", IsAuthenticated: false}) {
+		@components.Card(components.CardProps{Class: "w-full max-w-[400px] mx-auto mt-8"}) {
+			@components.CardHeader(components.CardHeaderProps{}) {
+				<h2>Reset your password</h2>
+			}
+			@components.CardSection(components.CardSectionProps{}) {
+				if errorMsg != "" {
+					@views.Toast("error", "Error", errorMsg)
+				}
+				<form
+					hx-post="/reset"
+					hx-target="#toaster"
+					hx-swap="beforeend"
+					class="form grid gap-4"
+				>
+					<input type="hidden" name="token" value={ token }/>
+					<fieldset class="grid gap-3">
+						<div class="grid gap-2">
+							<label for="reset-password">New password</label>
+							<input class="input" type="password" id="reset-password" name="password" placeholder="Min 6 characters" required minlength="6"/>
+						</div>
+						<div class="grid gap-2">
+							<label for="reset-confirm">Confirm new password</label>
+							<input class="input" type="password" id="reset-confirm" name="confirm" placeholder="Re-enter password" required minlength="6"/>
+						</div>
+					</fieldset>
+					<button type="submit" hx-indicator="#reset-spinner" class="btn relative inline-flex">
+						<span class="btn-text">Set new password</span>
+						<span id="reset-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+							@components.Icon(components.IconProps{Name: "loader", Size: 18})
+						</span>
+					</button>
+				</form>
+			}
+			<footer class="text-center text-sm mx-auto">
+				<p><a href="/login" class="underline-offset-4 hover:underline">Back to login</a></p>
+			</footer>
+		}
+	}
+}
+
+// ResetPasswordSuccessToast is shown after a successful password
+// reset (for HTMX responses). Tells the user to log in with
+// their new password.
+templ ResetPasswordSuccessToast() {
+	@views.Toast("success", "Password reset", "Sign in with your new password.")
+}
+
 // RegisterPage renders the registration form.
 templ RegisterPage(errorMsg string) {
 	@views.Layout(views.PageData{Title: "Register", UserName: "", IsAuthenticated: false}) {
@@ -60,7 +161,8 @@ templ RegisterPage(errorMsg string) {
 					hx-post="/register"
 					hx-target="#toaster"
 					hx-swap="beforeend"
-					class="form grid gap-4">
+					class="form grid gap-4"
+				>
 					<fieldset class="grid gap-3">
 						<div class="grid gap-2">
 							<label for="register-name">Name</label>

@@ -89,11 +89,11 @@ func mapFeedbackAllRows(rows []db.GetAllRow) []*Feedback {
 	result := make([]*Feedback, len(rows))
 	for i, f := range rows {
 		result[i] = &Feedback{
-			ID:        f.ID,
-			UserID:    f.UserID,
-			Title:     f.Title,
-			Message:   f.Message,
-			IsClosed:  f.IsClosed == 1,
+			ID:       f.ID,
+			UserID:   f.UserID,
+			Title:    f.Title,
+			Message:  f.Message,
+			IsClosed: f.IsClosed == 1,
 		}
 		if f.CreatedAt.Valid {
 			result[i].CreatedAt = f.CreatedAt.Time
@@ -112,11 +112,11 @@ func mapFeedbackClosedRows(rows []db.GetAllClosedRow) []*Feedback {
 	result := make([]*Feedback, len(rows))
 	for i, f := range rows {
 		result[i] = &Feedback{
-			ID:        f.ID,
-			UserID:    f.UserID,
-			Title:     f.Title,
-			Message:   f.Message,
-			IsClosed:  f.IsClosed == 1,
+			ID:       f.ID,
+			UserID:   f.UserID,
+			Title:    f.Title,
+			Message:  f.Message,
+			IsClosed: f.IsClosed == 1,
 		}
 		if f.CreatedAt.Valid {
 			result[i].CreatedAt = f.CreatedAt.Time
@@ -135,11 +135,11 @@ func mapFeedbackRows(rows []db.GetAllOpenRow) []*Feedback {
 	result := make([]*Feedback, len(rows))
 	for i, f := range rows {
 		result[i] = &Feedback{
-			ID:        f.ID,
-			UserID:    f.UserID,
-			Title:     f.Title,
-			Message:   f.Message,
-			IsClosed:  f.IsClosed == 1,
+			ID:       f.ID,
+			UserID:   f.UserID,
+			Title:    f.Title,
+			Message:  f.Message,
+			IsClosed: f.IsClosed == 1,
 		}
 		if f.CreatedAt.Valid {
 			result[i].CreatedAt = f.CreatedAt.Time
@@ -164,11 +164,11 @@ func (r *FeedbackRepo) GetByID(id string) (*Feedback, error) {
 		return nil, err
 	}
 	result := &Feedback{
-		ID:        f.ID,
-		UserID:    f.UserID,
-		Title:     f.Title,
-		Message:   f.Message,
-		IsClosed:  f.IsClosed == 1,
+		ID:       f.ID,
+		UserID:   f.UserID,
+		Title:    f.Title,
+		Message:  f.Message,
+		IsClosed: f.IsClosed == 1,
 	}
 	if f.CreatedAt.Valid {
 		result.CreatedAt = f.CreatedAt.Time

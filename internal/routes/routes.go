@@ -25,7 +25,8 @@ import (
 // Handler holds dependencies for HTTP route handlers.
 type Handler struct {
 	authCtrl               *controllers.AuthController
-	entryCtrl              *controllers.EntryController
+	authRecoveryCtrl       *controllers.AuthRecoveryController
+	exerciseEntryCtrl      *controllers.ExerciseEntryController
 	adminCtrl              *controllers.AdminController
 	adminUserCtrl          *controllers.AdminUserController
 	feedbackCtrl           *controllers.FeedbackController
@@ -39,13 +40,22 @@ type Handler struct {
 	userRepo               models.UserRepo
 	jwtService             *utils.JWTService
 	validator              utils.Validator
+	// imageProcessor and imageUploader are the dependencies for
+	// the admin exercise image upload route. Both are interfaces
+	// (defined in admin_images.go) so tests can substitute fakes
+	// without touching the real S3 client or imaging package.
+	imageProcessor exerciseImageProcessor
+	imageUploader  exerciseImageUploader
+	// imageConfig controls the two variants produced per upload.
+	imageConfig ExerciseImageConfig
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.EntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controllers.AuthRecoveryController, exerciseEntryCtrl *controllers.ExerciseEntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator, imageProcessor exerciseImageProcessor, imageUploader exerciseImageUploader, imageConfig ExerciseImageConfig) *Handler {
 	return &Handler{
 		authCtrl:               authCtrl,
-		entryCtrl:              entryCtrl,
+		authRecoveryCtrl:       authRecoveryCtrl,
+		exerciseEntryCtrl:      exerciseEntryCtrl,
 		adminCtrl:              adminCtrl,
 		adminUserCtrl:          adminUserCtrl,
 		feedbackCtrl:           feedbackCtrl,
@@ -59,6 +69,9 @@ func NewHandler(authCtrl *controllers.AuthController, entryCtrl *controllers.Ent
 		userRepo:               userRepo,
 		jwtService:             jwtService,
 		validator:              validator,
+		imageProcessor:         imageProcessor,
+		imageUploader:          imageUploader,
+		imageConfig:            imageConfig,
 	}
 }
 
@@ -80,6 +93,12 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.POST("/register", h.Register)
 	e.POST("/logout", h.Logout)
 
+	// Password recovery
+	e.GET("/forgot", h.ForgotPasswordForm)
+	e.POST("/forgot", h.RequestPasswordReset)
+	e.GET("/reset", h.ResetPasswordForm)
+	e.POST("/reset", h.ResetPassword)
+
 	// Routes
 	e.GET("/", h.Dashboard)
 
@@ -87,13 +106,13 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/profile", h.Profile)
 	e.POST("/profile", h.UpdateProfile)
 
-	// Entry CRUD
-	e.GET("/entries/new", h.NewEntryForm)
-	e.POST("/entries", h.CreateEntry)
-	e.GET("/entries/:id/edit", h.EditEntryForm)
-	e.GET("/entries/:id", h.GetEntry)
-	e.PUT("/entries/:id", h.UpdateEntry)
-	e.DELETE("/entries/:id", h.DeleteEntry)
+	// Exercise entry CRUD
+	e.GET("/exercise-entries/new", h.NewExerciseEntryForm)
+	e.POST("/exercise-entries", h.CreateExerciseEntry)
+	e.GET("/exercise-entries/:id/edit", h.EditExerciseEntryForm)
+	e.GET("/exercise-entries/:id", h.GetExerciseEntry)
+	e.PUT("/exercise-entries/:id", h.UpdateExerciseEntry)
+	e.DELETE("/exercise-entries/:id", h.DeleteExerciseEntry)
 
 	// Exercise history
 	e.GET("/exercises", h.ListExercisesUI)
@@ -103,8 +122,8 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/exercises/:id/chart", h.ExerciseChart)
 	e.GET("/exercises/:id/chart/advanced", h.ExerciseChartAdvanced)
 
-	// New entry pre-filled for a specific exercise
-	e.GET("/exercises/:id/new", h.NewEntryForm)
+	// New set pre-filled for a specific exercise
+	e.GET("/exercises/:id/new", h.NewExerciseEntryForm)
 
 	// Feedback
 	e.GET("/feedback", h.FeedbackForm)
@@ -143,12 +162,17 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	admin.POST("/exercises", h.AdminCreateExercise)
 	admin.GET("/exercises/:id/edit", h.AdminEditExerciseForm)
 	admin.POST("/exercises/:id", h.AdminUpdateExercise)
+	// Admin image upload (multipart, 10 MB cap applied inside the
+	// handler via http.MaxBytesReader so a hostile client can't
+	// exhaust memory before the multipart parser runs).
+	admin.POST("/exercises/image-upload", h.AdminExerciseImageUpload)
 	admin.GET("/feedback", h.AdminListFeedback)
 	admin.GET("/feedback/:id", h.AdminFeedbackDetail)
 	admin.POST("/feedback/:id/close", h.AdminCloseFeedback)
 	admin.GET("/users", h.AdminListUsers)
 	admin.GET("/notifications", h.AdminNotificationsForm)
 	admin.POST("/notifications/send", h.AdminNotificationsSend)
+	admin.POST("/notifications/send-weight-reminder", h.AdminNotificationsSendWeightReminder)
 
 	// API routes for htmx
 	e.GET("/api/exercises", h.ListExercisesJSON)
@@ -196,8 +220,8 @@ func clearAuthCookie(c echo.Context) {
 	c.SetCookie(cookie)
 }
 
-// entryFormInput represents the parsed and validated form data for an exercise entry.
-type entryFormInput struct {
+// exerciseEntryFormInput represents the parsed and validated form data for an exercise entry.
+type exerciseEntryFormInput struct {
 	ExerciseName string  `validate:"omitempty,min=1,max=100"`
 	Reps         int     `validate:"gte=1,lte=1000"`
 	Weight       float64 `validate:"gte=0,lte=5000"`
@@ -205,10 +229,10 @@ type entryFormInput struct {
 	RestTime     int     `validate:"gte=0,lte=3600"`
 }
 
-// parseEntryForm extracts form values, converts types, and validates the input.
+// parseExerciseEntryForm extracts form values, converts types, and validates the input.
 // It returns an HTTP error with a user-friendly message if any validation fails.
-func parseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, error) {
-	input := entryFormInput{
+func parseExerciseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, error) {
+	input := exerciseEntryFormInput{
 		Notes: c.FormValue("notes"),
 	}
 
@@ -248,18 +272,18 @@ func parseEntryForm(c echo.Context, v utils.Validator) (*models.ExerciseEntry, e
 // ("reps", "weight", or "rest_time").
 var setFieldPattern = regexp.MustCompile(`^sets\[(\d+)\]\[(reps|weight|rest_time)\]$`)
 
-// parseEntrySets extracts the array of set inputs from the multi-set form
-// payload. Form field names use PHP-style bracket notation: sets[N][reps],
-// sets[N][weight], sets[N][rest_time]. Echo's c.FormValue only returns scalar
-// values, so we read PostForm directly.
+// parseExerciseEntrySets extracts the array of set inputs from the multi-set
+// form payload. Form field names use PHP-style bracket notation:
+// sets[N][reps], sets[N][weight], sets[N][rest_time]. Echo's c.FormValue only
+// returns scalar values, so we read PostForm directly.
 //
 // Rows with an empty reps value are skipped (the user didn't fill them in).
 // The total number of submitted rows — including empty ones — must not exceed
-// controllers.MaxSetsPerEntry, otherwise a malicious client could submit an
-// unbounded payload. Each non-empty row is validated with the same struct
-// tags used by parseEntryForm so per-row limits (reps 1–1000, weight 0–5000,
-// rest 0–3600) carry over for free.
-func parseEntrySets(c echo.Context, v utils.Validator) ([]controllers.EntrySetInput, error) {
+// views.MaxSetsPerExerciseEntry, otherwise a malicious client could submit
+// an unbounded payload. Each non-empty row is validated with the same struct
+// tags used by parseExerciseEntryForm so per-row limits (reps 1–1000, weight
+// 0–5000, rest 0–3600) carry over for free.
+func parseExerciseEntrySets(c echo.Context, v utils.Validator) ([]controllers.ExerciseSetInput, error) {
 	postForm, err := c.FormParams()
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid form payload")
@@ -287,17 +311,18 @@ func parseEntrySets(c echo.Context, v utils.Validator) ([]controllers.EntrySetIn
 
 	// Cap by submitted row count (not just non-empty ones) to stop a hostile
 	// client from sending sets[0..99999] with all reps empty.
-	if len(indices) > views.MaxSetsPerEntry {
+	if len(indices) > views.MaxSetsPerExerciseEntry {
 		return nil, echo.NewHTTPError(
 			http.StatusBadRequest,
-			fmt.Sprintf("Maximum %d sets per entry", views.MaxSetsPerEntry),
+			fmt.Sprintf("Maximum %d sets per exercise entry", views.MaxSetsPerExerciseEntry),
 		)
 	}
 
-	// Process rows in submission order so saved entries follow the order the
-	// user typed them (helpful for descending weight/drop-set patterns).
+	// Process rows in submission order so saved exercise entries follow the
+	// order the user typed them (helpful for descending weight/drop-set
+	// patterns).
 	sort.Ints(indices)
-	sets := make([]controllers.EntrySetInput, 0, len(indices))
+	sets := make([]controllers.ExerciseSetInput, 0, len(indices))
 	for _, idx := range indices {
 		row := rows[idx]
 		repsStr := strings.TrimSpace(row["reps"])
@@ -325,12 +350,12 @@ func parseEntrySets(c echo.Context, v utils.Validator) ([]controllers.EntrySetIn
 			}
 		}
 
-		input := entryFormInput{Reps: reps, Weight: weight, RestTime: restTime}
+		input := exerciseEntryFormInput{Reps: reps, Weight: weight, RestTime: restTime}
 		if err := v.ValidateStruct(&input); err != nil {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Set %d: %s", idx+1, friendlyValidationError(err)))
 		}
 
-		sets = append(sets, controllers.EntrySetInput{
+		sets = append(sets, controllers.ExerciseSetInput{
 			Reps:     reps,
 			Weight:   weight,
 			RestTime: restTime,

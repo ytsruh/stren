@@ -10,6 +10,7 @@ A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS +
 - Exercise history view showing all sets for a specific exercise
 - Rest/countdown timer & an EMOM timer
 - Weight tracking
+- User notifications (push & email)
 
 ## Environment Variables
 
@@ -18,3 +19,10 @@ A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS +
 - `DB_PATH` - SQLite/Turso database file path (default: strength_tracker.db)
 - `TURSO_DATABASE_URL` - Remote URL from Turso
 - `TURSO_AUTH_TOKEN` - Auth token for Turso
+- `STORAGE_ENDPOINT` - Storage endpoint URL
+- `STORAGE_ACCESS_KEY` - Storage access key
+- `STORAGE_SECRET_KEY` - Storage secret key
+- `STORAGE_BUCKET` - Storage bucket name
+- `STORAGE_PUBLIC_URL` - Public URL for the storage bucket
+- `CLOUDFLARE_EMAIL_TOKEN` - Cloudflare email token
+- `PUBLIC_URL` - Public URL for the app

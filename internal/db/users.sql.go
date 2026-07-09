@@ -149,3 +149,25 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
 	)
 	return err
 }
+
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE users
+SET password_hash = ?,
+    updated_at = ?
+WHERE id = ?
+`
+
+type UpdateUserPasswordParams struct {
+	PasswordHash string
+	UpdatedAt    sql.NullTime
+	ID           string
+}
+
+// Replace a user's password hash. Used by the password-reset flow
+// after a reset token has been successfully consumed. Separate from
+// UpdateUser so the profile-editing form cannot be tricked into
+// clearing the password by omitting fields.
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserPassword, arg.PasswordHash, arg.UpdatedAt, arg.ID)
+	return err
+}

@@ -10,8 +10,9 @@ import (
 
 // WeightPage renders the weight entries list page. targetWeight is the
 // user's body-weight goal; when non-nil, a progress widget is rendered
-// alongside the chart.
-templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool, targetWeight *float64) {
+// alongside the chart. weightUnit is the user's preferred unit and drives
+// the chart label, the table column, and the progress card values.
+templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool, targetWeight *float64, weightUnit string) {
 	{{
 		// Lift the "what's the latest reading" computation up out of
 		// the progress card so the card stays a pure render. The card
@@ -54,11 +55,11 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 				map[string]bool{"sm:w-3/4": targetWeight != nil && len(entries) > 0},
 			) }
 			>
-				@components.Chart(chartDataForWeight(entries))
+				@components.Chart(chartDataForWeight(entries, weightUnit))
 			</div>
 			if targetWeight != nil && len(entries) > 0 {
 				<div class="w-full sm:w-1/4 sm:h-40">
-					@WeightProgressCard(current, *targetWeight, pct)
+					@WeightProgressCard(current, *targetWeight, pct, weightUnit)
 				</div>
 			}
 		</div>
@@ -66,7 +67,7 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 			@WeightEmptyState()
 		} else {
 			<div class="py-2 flex flex-col gap-2">
-				@WeightList(entries)
+				@WeightList(entries, weightUnit)
 				@CompareBar()
 			</div>
 		}
@@ -83,8 +84,9 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 // user can see the overall trend at a glance. The trendline is rendered
 // dashed and hidden from the legend via opt-in flags on ChartDataset. The
 // chart renders nothing when fewer than 2 entries are provided (handled
-// inside Chart).
-func chartDataForWeight(entries []models.WeightEntry) components.ChartProps {
+// inside Chart). weightUnit is the user's preferred unit and drives the
+// dataset label.
+func chartDataForWeight(entries []models.WeightEntry, weightUnit string) components.ChartProps {
 	sorted := make([]models.WeightEntry, len(entries))
 	copy(sorted, entries)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -97,7 +99,7 @@ func chartDataForWeight(entries []models.WeightEntry) components.ChartProps {
 		values[i] = e.Weight
 	}
 	datasets := []components.ChartDataset{
-		{Label: "Weight (kg)", Values: values},
+		{Label: fmt.Sprintf("Weight (%s)", weightUnit), Values: values},
 	}
 	if len(values) >= 2 {
 		datasets = append(datasets, components.ChartDataset{
@@ -129,8 +131,10 @@ func latestWeight(entries []models.WeightEntry) float64 {
 	return sorted[len(sorted)-1].Weight
 }
 
-// WeightList renders a table of weight entries
-templ WeightList(entries []models.WeightEntry) {
+// WeightList renders a table of weight entries.
+// weightUnit is forwarded to WeightRow so each row's "Weight" cell is
+// labelled with the user's preferred unit.
+templ WeightList(entries []models.WeightEntry, weightUnit string) {
 	<table class="table w-full">
 		<thead>
 			<tr>
@@ -146,14 +150,17 @@ templ WeightList(entries []models.WeightEntry) {
 		</thead>
 		<tbody id="weight-table">
 			for _, entry := range entries {
-				@WeightRow(entry)
+				@WeightRow(entry, weightUnit)
 			}
 		</tbody>
 	</table>
 }
 
-// WeightRow renders a single weight entry row
-templ WeightRow(entry models.WeightEntry) {
+// WeightRow renders a single weight entry row.
+// weightUnit is the user's preferred unit and is passed to
+// entry.FormattedWeight for both the "Weight" cell and the
+// data-entry-weight attribute used by the compare selection JS.
+templ WeightRow(entry models.WeightEntry, weightUnit string) {
 	<tr id={ fmt.Sprintf("weight-%s", entry.ID) }>
 		<td>
 			if entry.HasPhoto() {
@@ -164,12 +171,12 @@ templ WeightRow(entry models.WeightEntry) {
 					data-compare-pick
 					data-entry-id={ entry.ID }
 					data-entry-date={ entry.FormattedDate() }
-					data-entry-weight={ entry.FormattedWeight() }
+					data-entry-weight={ entry.FormattedWeight(weightUnit) }
 				/>
 			}
 		</td>
 		<td>{ entry.FormattedDate() }</td>
-		<td>{ entry.FormattedWeight() }</td>
+		<td>{ entry.FormattedWeight(weightUnit) }</td>
 		<td class="hidden lg:table-cell">
 			if entry.HasPhoto() {
 				<img
@@ -218,8 +225,9 @@ templ WeightEmptyState() {
 // the current weight and the clamped percent (typically via
 // latestWeight and weightProgress), so this template stays a pure
 // render. The card is hidden by the caller when targetWeight is nil or
-// there are no entries.
-templ WeightProgressCard(current, target, pct float64) {
+// there are no entries. weightUnit is the user's preferred unit and
+// drives the "Current" and "Target" values.
+templ WeightProgressCard(current, target, pct float64, weightUnit string) {
 	<div class="card p-4 h-full flex flex-row md:flex-col gap-3 justify-around md:justify-center">
 		<div>
 			<p class="text-base text-muted-foreground">Progress</p>
@@ -228,11 +236,11 @@ templ WeightProgressCard(current, target, pct float64) {
 		<dl class="grid grid-cols-2 gap-5 md:gap-2 text-base md:text-xs">
 			<div>
 				<dt class="text-muted-foreground">Current</dt>
-				<dd class="text-base">{ fmt.Sprintf("%.1f kg", current) }</dd>
+				<dd class="text-base">{ models.FormatWeight(current, weightUnit) }</dd>
 			</div>
 			<div>
 				<dt class="text-muted-foreground">Target</dt>
-				<dd class="text-base">{ fmt.Sprintf("%.1f kg", target) }</dd>
+				<dd class="text-base">{ models.FormatWeight(target, weightUnit) }</dd>
 			</div>
 		</dl>
 	</div>
