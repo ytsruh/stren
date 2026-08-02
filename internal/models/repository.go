@@ -127,3 +127,31 @@ type PushSubscriptionRepo interface {
 // Compile-time check to ensure PushSubscriptionRepository implements
 // PushSubscriptionRepo.
 var _ PushSubscriptionRepo = (*PushSubscriptionRepository)(nil)
+
+// GoalRepo defines the interface for goal data access. The controller
+// depends on this so the route tests can substitute an in-memory fake
+// without touching the real sqlc repository.
+type GoalRepo interface {
+	// Create persists a new goal and assigns the generated ID back
+	// onto the supplied value.
+	Create(g *Goal) error
+	// GetByID returns the goal or nil when not found. Scoped to
+	// the user.
+	GetByID(id, userID string) (*Goal, error)
+	// List returns every goal for the user, active first then
+	// completed.
+	List(userID string) ([]Goal, error)
+	// Update overwrites the editable fields (title, description,
+	// dates). completed_at is managed by MarkComplete / Reopen.
+	Update(g *Goal, userID string) error
+	// MarkComplete sets completed_at to the supplied time. No-op
+	// when the goal is already complete.
+	MarkComplete(id, userID string, completedAt time.Time) error
+	// Reopen clears completed_at. No-op when the goal is already active.
+	Reopen(id, userID string) error
+	// Delete removes a goal. Scoped to the user.
+	Delete(id, userID string) error
+}
+
+// Compile-time check to ensure GoalRepository implements GoalRepo.
+var _ GoalRepo = (*GoalRepository)(nil)

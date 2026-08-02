@@ -62,6 +62,7 @@ func main() {
 	weightRepo := models.NewWeightRepository(database)
 	pushRepo := models.NewPushSubscriptionRepository(database)
 	authTokenRepo := models.NewAuthTokenRepository(database)
+	goalsRepo := models.NewGoalRepository(database)
 
 	// Initialize auth service
 	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
@@ -114,6 +115,7 @@ func main() {
 	weightCtrl := controllers.NewWeightController(weightRepo, r2PhotoGetter{})
 	pushCtrl := controllers.NewPushController(pushRepo)
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(userRepo, authTokenRepo, emailService)
+	goalsCtrl := controllers.NewGoalsController(goalsRepo)
 
 	// Initialize the weekly weight-reminder orchestrator here
 	// (above the admin notifications controller it is wired
@@ -147,6 +149,7 @@ func main() {
 		weightCtrl,
 		pushCtrl,
 		adminNotificationsCtrl,
+		goalsCtrl,
 		pushRepo,
 		vapidPublicKey,
 		true, // pushConfigured — keys are always present after LoadOrGenerate

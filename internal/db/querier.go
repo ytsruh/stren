@@ -29,10 +29,12 @@ type Querier interface {
 	CreateAuthToken(ctx context.Context, arg CreateAuthTokenParams) (AuthToken, error)
 	CreateExerciseEntry(ctx context.Context, arg CreateExerciseEntryParams) (string, error)
 	CreateFeedback(ctx context.Context, arg CreateFeedbackParams) (Feedback, error)
+	CreateGoal(ctx context.Context, arg CreateGoalParams) (Goal, error)
 	CreatePushSubscription(ctx context.Context, arg CreatePushSubscriptionParams) (PushSubscription, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (string, error)
 	CreateWeightEntry(ctx context.Context, arg CreateWeightEntryParams) (WeightEntry, error)
 	DeleteExerciseEntry(ctx context.Context, arg DeleteExerciseEntryParams) error
+	DeleteGoal(ctx context.Context, arg DeleteGoalParams) error
 	DeletePushSubscriptionByEndpoint(ctx context.Context, endpoint string) error
 	DeleteWeightEntry(ctx context.Context, arg DeleteWeightEntryParams) error
 	GetAll(ctx context.Context) ([]GetAllRow, error)
@@ -44,6 +46,7 @@ type Querier interface {
 	GetExerciseEntriesByExercisePaginated(ctx context.Context, arg GetExerciseEntriesByExercisePaginatedParams) ([]GetExerciseEntriesByExercisePaginatedRow, error)
 	GetExerciseEntry(ctx context.Context, arg GetExerciseEntryParams) (GetExerciseEntryRow, error)
 	GetFeedbackByID(ctx context.Context, id string) (GetFeedbackByIDRow, error)
+	GetGoal(ctx context.Context, arg GetGoalParams) (Goal, error)
 	GetLastSetByExercise(ctx context.Context, arg GetLastSetByExerciseParams) (GetLastSetByExerciseRow, error)
 	GetMaxWeightByExercise(ctx context.Context, arg GetMaxWeightByExerciseParams) (float64, error)
 	GetPushSubscriptionByEndpoint(ctx context.Context, endpoint string) (PushSubscription, error)
@@ -52,15 +55,33 @@ type Querier interface {
 	GetWeightEntriesByIDs(ctx context.Context, arg GetWeightEntriesByIDsParams) ([]WeightEntry, error)
 	GetWeightEntry(ctx context.Context, arg GetWeightEntryParams) (WeightEntry, error)
 	List(ctx context.Context) ([]Exercise, error)
+	// Active goals: completed_at IS NULL. Order by target_date asc with nulls
+	// last, then by created_at asc as a stable tiebreaker. The CASE expression
+	// emulates NULLS LAST for SQLite versions that don't support it natively.
+	ListActiveGoals(ctx context.Context, userID string) ([]Goal, error)
 	ListAllPushSubscriptions(ctx context.Context) ([]PushSubscription, error)
+	// Completed goals: completed_at IS NOT NULL. Most recently completed first.
+	ListCompletedGoals(ctx context.Context, userID string) ([]Goal, error)
 	ListExerciseEntries(ctx context.Context, userID sql.NullString) ([]ListExerciseEntriesRow, error)
 	ListExerciseEntriesLast7Days(ctx context.Context, userID sql.NullString) ([]ListExerciseEntriesLast7DaysRow, error)
 	ListExerciseEntriesWithLimit(ctx context.Context, arg ListExerciseEntriesWithLimitParams) ([]ListExerciseEntriesWithLimitRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWeightEntries(ctx context.Context, userID string) ([]WeightEntry, error)
+	// Atomically set completed_at and bump updated_at. Scoped to user_id so
+	// the request cannot mark another user's goal complete.
+	MarkGoalComplete(ctx context.Context, arg MarkGoalCompleteParams) error
+	// Atomically clear completed_at and bump updated_at. No-op if the goal
+	// is already active (completed_at is already NULL), so the route can
+	// call it without first checking the current state.
+	ReopenGoal(ctx context.Context, arg ReopenGoalParams) error
 	Update(ctx context.Context, arg UpdateParams) (Exercise, error)
 	UpdateExerciseEntry(ctx context.Context, arg UpdateExerciseEntryParams) error
 	UpdateExerciseEntryWithDate(ctx context.Context, arg UpdateExerciseEntryWithDateParams) error
+	// Update the editable fields. completed_at is managed by MarkGoalComplete
+	// and ReopenGoal (single-purpose methods that don't touch the rest of the
+	// row), so the edit form cannot accidentally clear or set the completed
+	// state. updated_at is bumped automatically.
+	UpdateGoal(ctx context.Context, arg UpdateGoalParams) error
 	UpdatePushSubscription(ctx context.Context, arg UpdatePushSubscriptionParams) (PushSubscription, error)
 	UpdateStatus(ctx context.Context, arg UpdateStatusParams) (Feedback, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) error

@@ -1,0 +1,190 @@
+package goals
+
+import (
+	"fmt"
+	"time"
+
+	"stren/internal/models"
+	"stren/internal/views"
+	"stren/internal/views/components"
+)
+
+// NewGoalForm renders the empty create form. Date inputs are the
+// native HTML5 <input type="date"> (per the user preference for
+// zero-JS pickers); the route parses them with
+// time.Parse("2006-01-02", ...).
+templ NewGoalForm(userName string, isAuthenticated bool, isAdmin bool) {
+	@views.Layout(views.PageData{Title: "New Goal", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "New Goal"})
+		<form
+			id="goal-form"
+			hx-post="/goals"
+			hx-target="#toaster"
+			hx-swap="beforeend"
+			class="form grid gap-6"
+		>
+			@GoalFormFields("", "", "", "", "", false)
+			@GoalFormActions()
+		</form>
+	}
+}
+
+// EditGoalForm renders the prefilled edit form. The goal is
+// looked up by the route and passed in (nil is treated as 404).
+// The header has a delete button — this is the only place the
+// delete action is exposed; the list view intentionally does not
+// have one to keep each row compact. The delete button just issues
+// hx-delete with hx-confirm; the route responds with HX-Redirect
+// to /goals, which the browser navigates to (no DOM target
+// required, so no htmx:targetError on the edit page).
+templ EditGoalForm(g *models.Goal, userName string, isAuthenticated bool, isAdmin bool) {
+	@views.Layout(views.PageData{Title: "Edit Goal", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
+		<div class="w-full flex items-center justify-between">
+			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Edit Goal"})
+			if g != nil {
+				<button
+					type="button"
+					class="btn-sm-icon-destructive"
+					title="Delete goal"
+					aria-label="Delete goal"
+					hx-delete={ fmt.Sprintf("/goals/%s", g.ID) }
+					hx-confirm="Are you sure you want to delete this goal?"
+				>
+					@components.Icon(components.IconProps{Name: "trash", Size: 14})
+				</button>
+			}
+		</div>
+		if g != nil {
+			<form
+				id="goal-form"
+				hx-put={ fmt.Sprintf("/goals/%s", g.ID) }
+				hx-target="#toaster"
+				hx-swap="beforeend"
+				class="form grid gap-6"
+			>
+				@GoalFormFields(
+					g.Title,
+					g.Description,
+					formatGoalDateInput(g.StartDate),
+					formatGoalDateInput(g.TargetDate),
+					formatGoalDateInput(g.EndDate),
+					g.IsComplete(),
+				)
+				@GoalFormActions()
+			</form>
+		}
+	}
+}
+
+// GoalFormFields renders the shared form body. start/target/end
+// are date-only (type="date") per the user preference. The
+// isComplete flag is read-only: the edit form doesn't let the user
+// change the completed state directly — they use the dedicated
+// Mark Complete / Reopen buttons on the list page. Surfaced as a
+// hidden input only so the value is preserved if we ever need it.
+templ GoalFormFields(title, description, startDate, targetDate, endDate string, isComplete bool) {
+	<fieldset class="grid gap-4">
+		<div class="grid gap-2">
+			<label for="title">Title</label>
+			<input
+				class="input"
+				type="text"
+				id="title"
+				name="title"
+				value={ title }
+				required
+				maxlength="200"
+				placeholder="What are you working towards?"
+			/>
+		</div>
+		<div class="grid gap-2">
+			<label for="description">Description (optional)</label>
+			<textarea
+				id="description"
+				name="description"
+				class="textarea"
+				placeholder="Add any context, motivation, or notes"
+				maxlength="2000"
+			>{ description }</textarea>
+		</div>
+		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+			<div class="grid gap-2">
+				<label for="start_date">Start (optional)</label>
+				<input
+					class="input"
+					type="date"
+					id="start_date"
+					name="start_date"
+					value={ startDate }
+				/>
+			</div>
+			<div class="grid gap-2">
+				<label for="target_date">Target (optional)</label>
+				<input
+					class="input"
+					type="date"
+					id="target_date"
+					name="target_date"
+					value={ targetDate }
+				/>
+			</div>
+			<div class="grid gap-2">
+				<label for="end_date">End (optional)</label>
+				<input
+					class="input"
+					type="date"
+					id="end_date"
+					name="end_date"
+					value={ endDate }
+				/>
+			</div>
+		</div>
+		if isComplete {
+			<input type="hidden" name="_is_complete" value="true"/>
+		}
+	</fieldset>
+}
+
+// GoalFormActions renders the Save / Update + Cancel row.
+templ GoalFormActions() {
+	<div class="flex gap-3">
+		<button type="submit" hx-indicator="#goal-spinner" class="btn relative inline-flex">
+			<span class="btn-text flex items-center justify-around gap-2">
+				@components.Icon(components.IconProps{Name: "check", Size: 18})
+				Save
+			</span>
+			<span id="goal-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+				@components.Icon(components.IconProps{Name: "loader", Size: 18})
+			</span>
+		</button>
+		<a href="/goals" class="btn-outline">
+			@components.Icon(components.IconProps{Name: "x", Size: 18})
+			Cancel
+		</a>
+	</div>
+}
+
+// GoalFormSuccessToast is the success toast rendered in the
+// toaster by the create / update routes (htmx path). The full
+// page reload is triggered by the HX-Trigger header so the toast
+// is briefly visible before the navigation.
+templ GoalFormSuccessToast(message string) {
+	@views.Toast("success", "Goal saved!", message)
+}
+
+// GoalFormError renders the error toast for form validation
+// failures or controller errors. The form itself stays on screen
+// (no redirect) so the user can correct and retry.
+templ GoalFormError(message string) {
+	@views.Toast("error", "Error", message)
+}
+
+// formatGoalDateInput renders a *time.Time as the value attribute
+// of an <input type="date"> (YYYY-MM-DD). Returns "" for a nil
+// pointer so the field renders empty in the browser.
+func formatGoalDateInput(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format("2006-01-02")
+}

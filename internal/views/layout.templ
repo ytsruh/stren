@@ -59,6 +59,14 @@ templ Layout(data PageData) {
 			<script src="https://unpkg.com/htmx.org@1.9.12"></script>
 			<script src="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.js" defer></script>
 			<script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/js/all.min.js" defer></script>
+			// canvas-confetti is loaded on every page so the goals
+			// page can fire its celebration burst without a per-page
+			// script tag. The library is a small (~9KB) zero-dep
+			// function (window.confetti) and is a no-op when no
+			// event fires. Loaded after the basecoat script so
+			// blocking-CDN failures don't disrupt the rest of the
+			// app.
+			<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
 		</head>
 		<body>
 			if data.IsAuthenticated {
@@ -132,6 +140,17 @@ templ Layout(data PageData) {
 										>
 											@components.Icon(components.IconProps{Name: "scale", Size: 18})
 											<span>Weight</span>
+										</a>
+									</li>
+									<li>
+										<a
+											href="/goals"
+											if data.CurrentPath == "/goals" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "target", Size: 18})
+											<span>Goals</span>
 										</a>
 									</li>
 								</ul>

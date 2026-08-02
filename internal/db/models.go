@@ -50,6 +50,19 @@ type Feedback struct {
 	UpdatedAt sql.NullTime
 }
 
+type Goal struct {
+	ID          string
+	UserID      string
+	Title       string
+	Description sql.NullString
+	StartDate   sql.NullTime
+	TargetDate  sql.NullTime
+	EndDate     sql.NullTime
+	CompletedAt sql.NullTime
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type PushSubscription struct {
 	ID         string
 	UserID     string

@@ -85,3 +85,18 @@ CREATE TABLE auth_tokens (
 );
 CREATE INDEX idx_auth_tokens_lookup ON auth_tokens(token_hash, purpose);
 CREATE INDEX idx_auth_tokens_user ON auth_tokens(user_id);
+
+CREATE TABLE goals (
+    id           TEXT     PRIMARY KEY,
+    user_id      TEXT     NOT NULL REFERENCES users(id),
+    title        TEXT     NOT NULL,
+    description  TEXT,
+    start_date   DATETIME,
+    target_date  DATETIME,
+    end_date     DATETIME,
+    completed_at DATETIME,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_goals_user      ON goals(user_id);
+CREATE INDEX idx_goals_completed ON goals(user_id, completed_at);

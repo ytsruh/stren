@@ -34,6 +34,7 @@ type Handler struct {
 	weightCtrl             *controllers.WeightController
 	pushCtrl               *controllers.PushController
 	adminNotificationsCtrl *controllers.AdminNotificationsController
+	goalsCtrl              *controllers.GoalsController
 	pushRepo               models.PushSubscriptionRepo
 	vapidPublicKey         string
 	pushConfigured         bool
@@ -51,7 +52,7 @@ type Handler struct {
 }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controllers.AuthRecoveryController, exerciseEntryCtrl *controllers.ExerciseEntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator, imageProcessor exerciseImageProcessor, imageUploader exerciseImageUploader, imageConfig ExerciseImageConfig) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controllers.AuthRecoveryController, exerciseEntryCtrl *controllers.ExerciseEntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, goalsCtrl *controllers.GoalsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator, imageProcessor exerciseImageProcessor, imageUploader exerciseImageUploader, imageConfig ExerciseImageConfig) *Handler {
 	return &Handler{
 		authCtrl:               authCtrl,
 		authRecoveryCtrl:       authRecoveryCtrl,
@@ -63,6 +64,7 @@ func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controll
 		weightCtrl:             weightCtrl,
 		pushCtrl:               pushCtrl,
 		adminNotificationsCtrl: adminNotificationsCtrl,
+		goalsCtrl:              goalsCtrl,
 		pushRepo:               pushRepo,
 		vapidPublicKey:         vapidPublicKey,
 		pushConfigured:         pushConfigured,
@@ -150,6 +152,16 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 
 	// Photo upload (presigned URL for direct browser → R2)
 	e.POST("/api/weight/photo-upload", h.PhotoUploadURL)
+
+	// Goals
+	e.GET("/goals", h.GoalsPage)
+	e.GET("/goals/new", h.NewGoalForm)
+	e.POST("/goals", h.CreateGoal)
+	e.GET("/goals/:id/edit", h.EditGoalForm)
+	e.PUT("/goals/:id", h.UpdateGoal)
+	e.POST("/goals/:id/complete", h.MarkGoalComplete)
+	e.POST("/goals/:id/reopen", h.ReopenGoal)
+	e.DELETE("/goals/:id", h.DeleteGoal)
 
 	// Push subscription endpoints (authenticated)
 	e.POST("/api/push/subscribe", h.PushSubscribe)
