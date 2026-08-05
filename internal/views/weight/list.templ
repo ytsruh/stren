@@ -46,23 +46,31 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 				</a>
 			</div>
 		</div>
-		<div class="flex flex-col sm:flex-row gap-4">
-			<div
-				class={ templ.Classes(
-				"w-full",
-				"h-40",
-				"card p-2",
-				map[string]bool{"sm:w-3/4": targetWeight != nil && len(entries) > 0},
-			) }
-			>
-				@components.Chart(chartDataForWeight(entries, weightUnit))
-			</div>
-			if targetWeight != nil && len(entries) > 0 {
-				<div class="w-full sm:w-1/4 sm:h-40">
-					@WeightProgressCard(current, *targetWeight, pct, weightUnit)
+		// The chart needs at least 2 data points to draw a line, and
+		// Chart renders nothing with fewer than 2 labels. Wrapping the
+		// whole row in this guard also kills the empty grey card that
+		// used to appear with 0 or 1 entries — the chart wrapper
+		// (`card p-2` with `h-40`) was always emitted, leaving an
+		// empty box at the top of the page.
+		if len(entries) >= 2 {
+			<div class="flex flex-col sm:flex-row gap-4">
+				<div
+					class={ templ.Classes(
+					"w-full",
+					"h-40",
+					"card p-2",
+					map[string]bool{"sm:w-3/4": targetWeight != nil},
+				) }
+				>
+					@components.Chart(chartDataForWeight(entries, weightUnit))
 				</div>
-			}
-		</div>
+				if targetWeight != nil {
+					<div class="w-full sm:w-1/4 sm:h-40">
+						@WeightProgressCard(current, *targetWeight, pct, weightUnit)
+					</div>
+				}
+			</div>
+		}
 		if len(entries) == 0 {
 			@WeightEmptyState()
 		} else {

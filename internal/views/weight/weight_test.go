@@ -206,6 +206,60 @@ func TestWeightPage_ProgressCardHiddenWithoutEntries(t *testing.T) {
 	}
 }
 
+// chartCardClass is the class used by the chart wrapper div in
+// list.templ. Used by the empty/single-entry regression tests below
+// to assert that the wrapper itself is not rendered (instead of
+// just being empty inside).
+const chartCardClass = `card p-2`
+
+// TestWeightPage_ChartWrapperHiddenWithFewerThanTwoEntries locks in
+// the fix for the "weird grey box at the top of the page" bug: the
+// chart card (`card p-2` wrapper + `h-40`) is only rendered when
+// there are at least two entries, since Chart.js itself renders
+// nothing with fewer than two data points and the empty wrapper
+// was producing an empty grey card above the list.
+func TestWeightPage_ChartWrapperHiddenWithFewerThanTwoEntries(t *testing.T) {
+	day := time.Date(2026, 1, 9, 8, 0, 0, 0, time.UTC)
+	target := 80.0
+
+	t.Run("no entries: no chart card", func(t *testing.T) {
+		html := renderToString(t, WeightPage(nil, "Test User", true, false, &target, "kg"))
+		if strings.Contains(html, chartCardClass) {
+			t.Error("expected chart card wrapper to be omitted when there are no entries")
+		}
+	})
+
+	t.Run("one entry: no chart card", func(t *testing.T) {
+		// Single-entry case was the user-reported "still asking for a
+		// first entry" symptom: with one entry the chart inside the
+		// wrapper rendered nothing (Chart needs >= 2 labels), leaving
+		// the grey card visible.
+		entries := []models.WeightEntry{
+			{ID: "w1", Weight: 80, CreatedAt: day},
+		}
+		html := renderToString(t, WeightPage(entries, "Test User", true, false, &target, "kg"))
+		if strings.Contains(html, chartCardClass) {
+			t.Error("expected chart card wrapper to be omitted when there is one entry")
+		}
+	})
+
+	t.Run("two entries: chart card present", func(t *testing.T) {
+		entries := []models.WeightEntry{
+			{ID: "w1", Weight: 80, CreatedAt: day},
+			{ID: "w2", Weight: 79, CreatedAt: day.Add(24 * time.Hour)},
+		}
+		html := renderToString(t, WeightPage(entries, "Test User", true, false, &target, "kg"))
+		if !strings.Contains(html, chartCardClass) {
+			t.Error("expected chart card wrapper to be rendered when there are two or more entries")
+		}
+		// And the progress card should be present because the user
+		// has a target weight and we have >= 2 entries.
+		if !strings.Contains(html, "Progress") {
+			t.Error("expected progress card to render when a target weight and >=2 entries are set")
+		}
+	})
+}
+
 // TestWeightRow_RendersCompareCheckboxWhenPhoto ensures entries that
 // have a photo expose a checkbox so the user can pick them for the
 // image-comparison feature.

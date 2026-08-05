@@ -187,9 +187,11 @@ templ WeightFormError(message string) {
 	@views.Toast("error", "Error", message)
 }
 
-// WeightFormSuccessToast returns only the toast (for HTMX responses)
-templ WeightFormSuccessToast(message string) {
-	@views.Toast("success", "Weight entry updated!", message)
+// WeightFormSuccessToast returns only the toast (for HTMX responses).
+// title is the toast heading; message is the optional description body
+// (pass "" to render a title-only toast).
+templ WeightFormSuccessToast(title string, message string) {
+	@views.Toast("success", title, message)
 }
 
 // WeightDeleteSuccess returns the toast for successful deletion (for HTMX responses)
