@@ -235,7 +235,7 @@ func setAuthCookie(c echo.Context, token string) {
 		HttpOnly: true,
 		Secure:   false, // Set to true in production with HTTPS
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   7 * 24 * 60 * 60, // 7 days
+		MaxAge:   int(utils.JWTTTL.Seconds()), // matches JWT exp claim
 	}
 	c.SetCookie(cookie)
 }

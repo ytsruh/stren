@@ -30,7 +30,9 @@ func NewJWTService(secret string) *JWTService {
 }
 
 // GenerateToken creates a new JWT token for the given user details.
-// Tokens expire after 7 days.
+// Tokens expire after JWTTTL (see internal/utils/env.go); the
+// browser auth cookie's MaxAge is set to the same value in
+// routes.go so the two cannot drift.
 func (s *JWTService) GenerateToken(userID string, email, name string, isAdmin bool) (string, error) {
 	claims := Claims{
 		UserID:  userID,
@@ -38,7 +40,7 @@ func (s *JWTService) GenerateToken(userID string, email, name string, isAdmin bo
 		Name:    name,
 		IsAdmin: isAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(JWTTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}

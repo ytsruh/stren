@@ -2,7 +2,26 @@ package utils
 
 import (
 	"testing"
+	"time"
 )
+
+// TestJWTTTL_ValueAndCookieSync guards the session-TTL constant
+// in two ways: it pins the user-facing value to 14 days, and it
+// verifies the constant is representable as an int-second
+// MaxAge for the auth cookie (so the JWT "exp" claim and the
+// cookie cannot silently drift apart). If JWTTTL is changed
+// intentionally, update this test in the same commit.
+func TestJWTTTL_ValueAndCookieSync(t *testing.T) {
+	if got, want := JWTTTL, 14*24*time.Hour; got != want {
+		t.Errorf("JWTTTL = %s, want %s (14 days)", got, want)
+	}
+	// MaxAge in net/http.Cookie is an int (seconds). The
+	// constant must convert cleanly without overflow or
+	// truncation so the browser cookie matches the JWT.
+	if int64(int(JWTTTL.Seconds())) != int64(JWTTTL.Seconds()) {
+		t.Errorf("JWTTTL seconds %d does not fit in int (cookie MaxAge)", int64(JWTTTL.Seconds()))
+	}
+}
 
 func setValidEnv(t *testing.T) {
 	t.Helper()

@@ -7,9 +7,17 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/joho/godotenv"
 )
+
+// JWTTTL is the lifetime of an issued session JWT. It is the
+// single source of truth for both the JWT's "exp" claim (set
+// in jwt.go) and the browser auth cookie's MaxAge (set in
+// routes.go), so the two cannot drift apart. Changing this
+// value extends or shortens how long a login session lasts.
+const JWTTTL = 14 * 24 * time.Hour
 
 // EnvVar holds all environment variables used by the application.
 // Each field must have an `env` tag matching the environment variable name.
