@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
@@ -41,6 +42,12 @@ type Handler struct {
 	userRepo               models.UserRepo
 	jwtService             *utils.JWTService
 	validator              utils.Validator
+	// clock is the time source the profile route uses
+	// when computing the next reminder fire time on form
+	// save. Tests substitute a fixed clock to assert on
+	// the exact value written to next_fire_at; production
+	// uses a wall clock.
+	clock Clock
 	// imageProcessor and imageUploader are the dependencies for
 	// the admin exercise image upload route. Both are interfaces
 	// (defined in admin_images.go) so tests can substitute fakes
@@ -50,6 +57,19 @@ type Handler struct {
 	// imageConfig controls the two variants produced per upload.
 	imageConfig ExerciseImageConfig
 }
+
+// Clock is the time source the profile route uses to stamp
+// the next reminder fire. RealClock is the production default;
+// tests inject a fixed clock to keep assertions deterministic.
+type Clock interface {
+	Now() time.Time
+}
+
+// RealClock returns the wall clock.
+type RealClock struct{}
+
+// Now returns time.Now().
+func (RealClock) Now() time.Time { return time.Now() }
 
 // NewHandler creates a new route handler instance.
 func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controllers.AuthRecoveryController, exerciseEntryCtrl *controllers.ExerciseEntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, timersCtrl *controllers.TimersController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, adminNotificationsCtrl *controllers.AdminNotificationsController, goalsCtrl *controllers.GoalsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator, imageProcessor exerciseImageProcessor, imageUploader exerciseImageUploader, imageConfig ExerciseImageConfig) *Handler {
@@ -71,6 +91,7 @@ func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controll
 		userRepo:               userRepo,
 		jwtService:             jwtService,
 		validator:              validator,
+		clock:                  RealClock{},
 		imageProcessor:         imageProcessor,
 		imageUploader:          imageUploader,
 		imageConfig:            imageConfig,

@@ -66,10 +66,22 @@ type Querier interface {
 	ListExerciseEntriesLast7Days(ctx context.Context, userID sql.NullString) ([]ListExerciseEntriesLast7DaysRow, error)
 	ListExerciseEntriesWithLimit(ctx context.Context, arg ListExerciseEntriesWithLimitParams) ([]ListExerciseEntriesWithLimitRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	// Returns every enabled user whose next_fire_at is at or before the
+	// supplied reference time. The hourly tick calls this once per hour;
+	// the indexed next_fire_at column keeps the scan small even when the
+	// users table grows. We pull back the full row so the orchestrator can
+	// build its push / email payloads without an extra round-trip.
+	ListUsersDueForReminder(ctx context.Context, reminderNextFireAt sql.NullTime) ([]User, error)
 	ListWeightEntries(ctx context.Context, userID string) ([]WeightEntry, error)
 	// Atomically set completed_at and bump updated_at. Scoped to user_id so
 	// the request cannot mark another user's goal complete.
 	MarkGoalComplete(ctx context.Context, arg MarkGoalCompleteParams) error
+	// Atomically set last_fired_at = now and advance next_fire_at to the
+	// caller's computed next occurrence. Scoped to id so a misbehaving
+	// caller cannot advance another user's row. updated_at is bumped so
+	// the row's edit history stays accurate (useful for future "when was
+	// this user last updated" UI).
+	MarkUserReminderFired(ctx context.Context, arg MarkUserReminderFiredParams) error
 	// Atomically clear completed_at and bump updated_at. No-op if the goal
 	// is already active (completed_at is already NULL), so the route can
 	// call it without first checking the current state.
@@ -90,6 +102,14 @@ type Querier interface {
 	// UpdateUser so the profile-editing form cannot be tricked into
 	// clearing the password by omitting fields.
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	// Replace a user's reminder preferences and bump updated_at so the
+	// row is re-evaluated by the periodic tick on the next run. The day
+	// of week is nullable because off / daily frequencies don't need it;
+	// every other parameter is required and is asserted by the controller
+	// before the call. next_fire_at is recomputed by the caller and passed
+	// in as a parameter; we do not derive it here so the same query works
+	// for both "user changed preferences" and "tick just fired" callers.
+	UpdateUserReminder(ctx context.Context, arg UpdateUserReminderParams) error
 	UpdateWeightEntry(ctx context.Context, arg UpdateWeightEntryParams) error
 }
 

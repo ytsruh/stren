@@ -427,6 +427,29 @@ func (m *mockUserRepository) UpdateUserPassword(userID, passwordHash string) err
 	return errors.New("user not found")
 }
 
+// UpdateUserReminder stores the reminder preferences on the
+// matching user row. The route tests that exercise the
+// reminder save path (e.g. TestProfileUpdateReminder) check
+// the stored values via GetUserByID, so this is the only
+// piece of plumbing the mock needs.
+func (m *mockUserRepository) UpdateUserReminder(userID string, prefs models.ReminderPreferences) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, u := range m.users {
+		if u.ID == userID {
+			m.users[i].ReminderEnabled = prefs.Enabled
+			m.users[i].ReminderFrequency = prefs.Frequency
+			m.users[i].ReminderDayOfWeek = prefs.DayOfWeek
+			m.users[i].ReminderTime = prefs.Time
+			m.users[i].ReminderEmailEnabled = prefs.EmailEnabled
+			m.users[i].ReminderPushEnabled = prefs.PushEnabled
+			m.users[i].ReminderNextFireAt = prefs.NextFireAt
+			return nil
+		}
+	}
+	return errors.New("user not found")
+}
+
 // mockAuthTokenRepo is a no-op AuthTokenRepo used by the
 // route tests that don't exercise the password-reset flow.
 // The recovery controller's tests in

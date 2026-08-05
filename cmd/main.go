@@ -25,16 +25,19 @@ import (
 )
 
 // weightReminderCronSpec is the cron expression for the
-// weekly "log your weight" reminder. "0 9 * * 0" is
-// minute=0, hour=9, day-of-month=*, month=*, day-of-week=0
-// (Sunday). Interpreted in UTC by the cron wrapper so
-// the schedule is the same regardless of where the
-// server happens to be deployed.
+// hourly "who is due for a weight reminder?" tick.
+// "0 * * * *" is minute=0, every hour, every day. Each
+// tick finds every user whose next_fire_at is at or before
+// now and fires their chosen channels. The per-user
+// schedule (frequency, day-of-week, time) lives in the
+// users table — this is just the heartbeat.
 //
-// Per project policy (AGENTS.md) the spec is hard-coded
-// rather than driven by an env var: the schedule is a
-// product decision, not a per-deployment knob.
-const weightReminderCronSpec = "0 9 * * 0"
+// Interpreted in UTC by the cron wrapper so the schedule
+// is the same regardless of where the server happens to
+// be deployed. Per project policy (AGENTS.md) the spec is
+// hard-coded rather than driven by an env var: the tick
+// cadence is a product decision, not a per-deployment knob.
+const weightReminderCronSpec = "0 * * * *"
 
 func main() {
 	// Load and validate environment variables on startup
@@ -117,18 +120,18 @@ func main() {
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(userRepo, authTokenRepo, emailService)
 	goalsCtrl := controllers.NewGoalsController(goalsRepo)
 
-	// Initialize the weekly weight-reminder orchestrator here
+	// Initialize the per-user weight-reminder orchestrator here
 	// (above the admin notifications controller it is wired
 	// into) so the controller constructor can take a non-nil
 	// pointer. The orchestrator's own scheduler is started
 	// further down, after the Echo routes are registered, so
 	// an init failure here is the same as an init failure
 	// there (log.Fatal).
-	weightReminder, err := reminders.NewWeightReminder(
-		adminUserRepo,
+	weightReminder, err := reminders.NewUserReminder(
+		userRepo,
 		emailService,
 		pushService,
-		reminders.WeightReminderConfig{},
+		reminders.UserReminderConfig{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to initialize weight reminder: %v", err)
@@ -187,22 +190,22 @@ func main() {
 	// Register routes
 	h.RegisterRoutes(e)
 
-	// Start the weekly weight-reminder scheduler. The
+	// Start the hourly weight-reminder scheduler. The
 	// orchestrator was constructed above and is also
 	// shared with the admin notifications controller
-	// (the "send weight reminder" button). The cron
+	// (the "send all due reminders now" button). The cron
 	// wrapper is the only place in the codebase that
 	// imports the third-party scheduling library, so
 	// a future "swap for a queue / system cron" change
 	// is a one-package diff. A bad spec (e.g. a typo
-	// in "0 9 * * 0") fails startup rather than
+	// in "0 * * * *") fails startup rather than
 	// silently never firing.
 	scheduler, err := reminders.NewCronScheduler(
 		weightReminderCronSpec,
 		time.UTC,
-		// The cron job discards the RunResult — every
+		// The cron job discards the TickResult — every
 		// useful field is already written to the server
-		// log. The admin "send weight reminder" route
+		// log. The admin "send all due reminders" route
 		// calls Run directly and renders the result
 		// into a result card; the cron path
 		// intentionally does not duplicate that.

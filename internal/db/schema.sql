@@ -16,6 +16,14 @@ CREATE TABLE users (
     is_admin INTEGER NOT NULL DEFAULT 0,
     target_weight REAL,
     weight_unit TEXT NOT NULL DEFAULT 'kg',
+    reminder_enabled        INTEGER NOT NULL DEFAULT 0,
+    reminder_frequency      TEXT    NOT NULL DEFAULT 'weekly',
+    reminder_day_of_week    INTEGER,
+    reminder_time           TEXT    NOT NULL DEFAULT '09:00',
+    reminder_email_enabled  INTEGER NOT NULL DEFAULT 1,
+    reminder_push_enabled   INTEGER NOT NULL DEFAULT 1,
+    reminder_next_fire_at   DATETIME,
+    reminder_last_fired_at  DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

@@ -15,16 +15,17 @@ import (
 //   - A "Send" form that posts to /admin/notifications/send and
 //     broadcasts a custom push notification to every subscribed
 //     device.
-//   - A "Send weekly weight reminder" button that posts to
+//   - A "Send all due reminders now" button that posts to
 //     /admin/notifications/send-weight-reminder and fires the same
-//     orchestrator the Sunday 09:00 UTC cron job uses. The button
-//     is the rehearsal-test entry point: the admin can verify the
-//     end-to-end SMTP + push pipeline on demand.
+//     per-user orchestrator the hourly tick uses. The button is
+//     the rehearsal-test entry point: the admin can verify the
+//     end-to-end SMTP + push pipeline on demand and see exactly
+//     which users got the reminder.
 //
 // Both actions share the same #send-result target so the page has
 // one result region. The form clears itself on the
 // admin-notification-sent HX-Trigger (broadcast only); the
-// weight-reminder button is a one-shot and is not inside a form.
+// reminders button is a one-shot and is not inside a form.
 templ AdminNotificationsPage(userName string, isAdmin bool) {
 	@views.Layout(views.PageData{Title: "Notifications", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/admin/notifications"}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Notifications"})
@@ -64,7 +65,7 @@ templ AdminNotificationsPage(userName string, isAdmin bool) {
 		</form>
 		<div class="mt-8 pt-6 border-t">
 			<h2 class="text-base font-semibold">Scheduled reminders</h2>
-			<p class="text-sm text-muted-foreground my-3">The weekly "Sunday weigh-in" reminder fires automatically every Sunday at 09:00 UTC. Use the button below to send it on demand — same SMTP and push pipeline the cron uses, so it doubles as a pre-production test.</p>
+			<p class="text-sm text-muted-foreground my-3">Reminders fire on each user's schedule — users pick frequency, time-of-day, and channels on their profile. Use the button below to fire every due reminder right now (same pipeline the hourly tick uses, so it doubles as a pre-production test).</p>
 			<button
 				type="button"
 				id="weight-reminder-button"
@@ -74,11 +75,11 @@ templ AdminNotificationsPage(userName string, isAdmin bool) {
 				hx-swap="innerHTML"
 				hx-indicator="#weight-reminder-spinner"
 				hx-disabled-elt="this"
-				hx-confirm="Send the weekly weight reminder to every user now? This delivers a real email and a real push."
+				hx-confirm="Send every due weight reminder right now? This delivers a real email and a real push for every user whose reminder is due."
 			>
 				<span class="btn-text flex items-center gap-2">
 					@components.Icon(components.IconProps{Name: "bell", Size: 18})
-					Send weekly weight reminder
+					Send all due reminders now
 				</span>
 				<span id="weight-reminder-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
 					@components.Icon(components.IconProps{Name: "loader", Size: 18})
@@ -150,78 +151,165 @@ templ AdminNotificationError(message string) {
 	}
 }
 
-// AdminWeightReminderResult renders the result card after a
-// weight-reminder run. Mirrors the shape of AdminNotificationResult
-// so the admin sees a consistent card style regardless of which
-// button was clicked.
+// AdminWeightReminderResult renders the result card after a tick
+// fires the per-user reminder orchestrator. Mirrors the shape of
+// AdminNotificationResult so the admin sees a consistent card
+// style regardless of which button was clicked.
 //
-// The body of the card shows: total users, emails sent / failed
-// (with the failed addresses listed inline, capped to the first
-// few so the card stays compact), push sent / deleted / failed,
-// and the run's wall-clock duration.
-//
-// Email-failed addresses are surfaced inline so the operator can
-// spot a pattern (one specific SMTP error, a user with an
-// invalid address) without grepping the server log. The slice is
-// capped at maxWeightReminderFailedAddresses with a "see server
-// log" hint for the rest, matching the truncate-elsewhere-in-the
-// pattern used by push errors.
-templ AdminWeightReminderResult(result reminders.RunResult) {
+// The summary row shows the aggregate counts the operator cares
+// about: how many users were due, total emails sent, total push
+// sends, and the run's wall-clock duration. The per-user list
+// below breaks each user's outcome into the three states the
+// orchestrator can produce (sent / skipped / failed) so the
+// operator can see exactly who got the reminder, who had it
+// disabled, and who had a transport error — without grepping the
+// server log.
+templ AdminWeightReminderResult(result reminders.TickResult) {
 	@components.Card(components.CardProps{}) {
 		@components.CardSection(components.CardSectionProps{}) {
-			<h3 class="mb-2">Weekly weight reminder sent</h3>
+			<h3 class="mb-2">Weight reminders fired</h3>
 			<dl class="grid grid-cols-2 gap-2 text-sm">
-				<dt class="text-muted-foreground">Users:</dt>
+				<dt class="text-muted-foreground">Users due:</dt>
 				<dd>{ itoa(result.Users) }</dd>
 				<dt class="text-muted-foreground">Emails sent:</dt>
-				<dd>{ itoa(result.EmailsSent) }</dd>
-				if result.EmailsFailed > 0 {
+				<dd>{ itoa(countEmailsSent(result.Results)) }</dd>
+				if countEmailsFailed(result.Results) > 0 {
 					<dt class="text-destructive">Emails failed:</dt>
-					<dd class="text-destructive">{ itoa(result.EmailsFailed) }</dd>
+					<dd class="text-destructive">{ itoa(countEmailsFailed(result.Results)) }</dd>
 				}
 				<dt class="text-muted-foreground">Push sent:</dt>
-				<dd>{ itoa(result.PushSent) }</dd>
-				if result.PushDeleted > 0 {
+				<dd>{ itoa(countPushSent(result.Results)) }</dd>
+				if countPushDeleted(result.Results) > 0 {
 					<dt class="text-muted-foreground">Dead subscriptions pruned:</dt>
-					<dd>{ itoa(result.PushDeleted) }</dd>
+					<dd>{ itoa(countPushDeleted(result.Results)) }</dd>
 				}
-				if result.PushFailed > 0 {
+				if countPushFailed(result.Results) > 0 {
 					<dt class="text-destructive">Push failed:</dt>
-					<dd class="text-destructive">{ itoa(result.PushFailed) }</dd>
+					<dd class="text-destructive">{ itoa(countPushFailed(result.Results)) }</dd>
 				}
 				<dt class="text-muted-foreground">Duration:</dt>
 				<dd>{ formatDuration(result.Duration) }</dd>
 			</dl>
-			if len(result.EmailsFailedAddresses) > 0 {
-				<details class="mt-4" open?={ len(result.EmailsFailedAddresses) <= maxWeightReminderFailedAddresses }>
-					<summary class="text-sm text-muted-foreground cursor-pointer">Failed email addresses ({ itoa(len(result.EmailsFailedAddresses)) })</summary>
-					<ul class="mt-2 text-sm space-y-1">
-						for _, addr := range result.EmailsFailedAddresses {
-							if len(addr) > 0 {
-								<li class="text-destructive">{ addr }</li>
-							}
+			if result.Users > 0 {
+				<details class="mt-4" open?={ result.Users <= maxWeightReminderPerUserRows }>
+					<summary class="text-sm text-muted-foreground cursor-pointer">Per-user outcomes ({ itoa(result.Users) })</summary>
+					<ul class="mt-2 text-sm space-y-2">
+						for _, r := range result.Results {
+							<li class="flex flex-col gap-0.5">
+								<span class="font-medium">{ r.UserName } <span class="text-muted-foreground">({ r.UserEmail })</span></span>
+								<span>{ reminderOutcomeLabel(r) }</span>
+							</li>
 						}
 					</ul>
-					if len(result.EmailsFailedAddresses) > maxWeightReminderFailedAddresses {
-						<p class="text-sm text-muted-foreground mt-2">Showing all { itoa(len(result.EmailsFailedAddresses)) } addresses. See the server log for the full per-user error message.</p>
+					if result.Users > maxWeightReminderPerUserRows {
+						<p class="text-sm text-muted-foreground mt-2">Showing all { itoa(result.Users) } users. See the server log for the full per-user error message.</p>
 					}
 				</details>
-			}
-			if result.PushError != "" {
-				<p class="text-sm text-destructive mt-3">Push service error: { result.PushError }</p>
 			}
 		}
 	}
 }
 
-// maxWeightReminderFailedAddresses caps the number of failed
-// email addresses rendered inline in the weight-reminder result
-// card. Larger lists get a "see server log" hint instead of
-// dumping every address into the toast, so the card stays a
-// useful at-a-glance summary regardless of user count. The cap
-// is small on purpose: the operator's job is to spot a pattern
-// (e.g. one specific SMTP error), not to read the whole list.
-const maxWeightReminderFailedAddresses = 10
+// maxWeightReminderPerUserRows caps the per-user outcomes list
+// rendered inline. The list is collapsed when there are more rows
+// than the cap so a quiet operator scan still works on a busy day.
+// Mirrors maxWeightReminderFailedAddresses in the previous design
+// (which used to cap failed emails; that concept is now a per-user
+// outcome, so the cap moves with it).
+const maxWeightReminderPerUserRows = 10
+
+// reminderOutcomeLabel renders a one-line summary of a single
+// user's reminder outcome: which channels were sent / skipped /
+// failed. Pulled into a function (rather than inlined in the
+// templ) so the readable string is easy to tweak without
+// touching the markup.
+//
+// The push skip reason is included when present so the
+// operator can tell "user has push disabled" from "no active
+// push subscriptions" from "push service errored" without
+// grepping the server log.
+func reminderOutcomeLabel(r reminders.UserReminderResult) string {
+	var parts []string
+	switch {
+	case r.EmailSent:
+		parts = append(parts, "email sent")
+	case r.EmailFailed:
+		parts = append(parts, "email failed")
+	case r.EmailSkipped:
+		parts = append(parts, "email skipped")
+	}
+	switch {
+	case r.PushSent > 0:
+		parts = append(parts, "push sent ("+itoa(r.PushSent)+")")
+	case r.PushFailed > 0:
+		parts = append(parts, "push failed ("+itoa(r.PushFailed)+")")
+	case r.PushSkipped:
+		parts = append(parts, "push skipped")
+	}
+	if r.PushSkipReason != "" && (r.PushFailed > 0 || r.PushSkipped) {
+		parts = append(parts, "("+r.PushSkipReason+")")
+	}
+	if r.Error != "" {
+		parts = append(parts, "error: "+r.Error)
+	}
+	if len(parts) == 0 {
+		return "no channels fired"
+	}
+	out := parts[0]
+	for _, p := range parts[1:] {
+		out += ", " + p
+	}
+	return out
+}
+
+// countEmailsSent / countEmailsFailed / countPushSent /
+// countPushDeleted / countPushFailed fold the per-user result
+// slice into the aggregate numbers the summary row needs. Pulled
+// into helpers (rather than computed inside the templ) so the
+// loop is plain Go and easy to test.
+func countEmailsSent(rs []reminders.UserReminderResult) int {
+	n := 0
+	for _, r := range rs {
+		if r.EmailSent {
+			n++
+		}
+	}
+	return n
+}
+
+func countEmailsFailed(rs []reminders.UserReminderResult) int {
+	n := 0
+	for _, r := range rs {
+		if r.EmailFailed {
+			n++
+		}
+	}
+	return n
+}
+
+func countPushSent(rs []reminders.UserReminderResult) int {
+	n := 0
+	for _, r := range rs {
+		n += r.PushSent
+	}
+	return n
+}
+
+func countPushDeleted(rs []reminders.UserReminderResult) int {
+	n := 0
+	for _, r := range rs {
+		n += r.PushDeleted
+	}
+	return n
+}
+
+func countPushFailed(rs []reminders.UserReminderResult) int {
+	n := 0
+	for _, r := range rs {
+		n += r.PushFailed
+	}
+	return n
+}
 
 // WeightReminderConfirmScript swaps the global confirm dialog's
 // OK button from the destructive (red) default to the

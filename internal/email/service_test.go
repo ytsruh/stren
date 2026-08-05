@@ -201,8 +201,9 @@ func TestService_SendWeightReminder_HappyPath(t *testing.T) {
 	svc, sender := newTestService(t)
 
 	err := svc.SendWeightReminder(context.Background(), &models.User{
-		Name:  "Alice",
-		Email: "alice@example.com",
+		Name:              "Alice",
+		Email:             "alice@example.com",
+		ReminderFrequency: models.ReminderWeekly,
 	})
 	if err != nil {
 		t.Fatalf("SendWeightReminder: %v", err)
@@ -233,6 +234,65 @@ func TestService_SendWeightReminder_HappyPath(t *testing.T) {
 	// hard-coded production value.
 	if !strings.Contains(got.HTML, testBaseURL) {
 		t.Errorf("HTML missing baseURL %q", testBaseURL)
+	}
+}
+
+func TestService_SendWeightReminder_CadenceSubjects(t *testing.T) {
+	// The subject and body must change with the cadence. A
+	// daily user gets "Time to log your weight" + "Today's
+	// weigh-in"; a weekly user gets the Sunday-specific copy.
+	// The orchestrator picks the cadence from the user's row,
+	// so this is the only place to assert that the mapping is
+	// right end-to-end (cadence → subject → body).
+	cases := []struct {
+		cadence       models.ReminderFrequency
+		wantSubject   string
+		wantInText    string
+		wantInHTML    string
+	}{
+		{
+			cadence:     models.ReminderDaily,
+			wantSubject: "Time to log your weight",
+			wantInText:  "Today's weigh-in",
+			wantInHTML:  "Log today&#39;s weight",
+		},
+		{
+			cadence:     models.ReminderWeekly,
+			wantSubject: "Sunday weigh-in reminder",
+			wantInText:  "It's Sunday",
+			wantInHTML:  "Log this week&#39;s weight",
+		},
+		{
+			cadence:     models.ReminderBiweekly,
+			wantSubject: "Time to log your weight",
+			wantInText:  "Time to log this week's weight",
+			wantInHTML:  "Log today&#39;s weight",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.cadence), func(t *testing.T) {
+			svc, sender := newTestService(t)
+			if err := svc.SendWeightReminder(context.Background(), &models.User{
+				Name:              "Alice",
+				Email:             "alice@example.com",
+				ReminderFrequency: tc.cadence,
+			}); err != nil {
+				t.Fatalf("SendWeightReminder: %v", err)
+			}
+			got := sender.last()
+			if got == nil {
+				t.Fatal("sender received no message")
+			}
+			if got.Subject != tc.wantSubject {
+				t.Errorf("Subject = %q, want %q", got.Subject, tc.wantSubject)
+			}
+			if !strings.Contains(got.Text, tc.wantInText) {
+				t.Errorf("text missing %q: %q", tc.wantInText, got.Text)
+			}
+			if !strings.Contains(got.HTML, tc.wantInHTML) {
+				t.Errorf("HTML missing %q: %q", tc.wantInHTML, got.HTML)
+			}
+		})
 	}
 }
 

@@ -38,7 +38,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (string,
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 WHERE email = ?
 `
@@ -54,6 +54,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.IsAdmin,
 		&i.TargetWeight,
 		&i.WeightUnit,
+		&i.ReminderEnabled,
+		&i.ReminderFrequency,
+		&i.ReminderDayOfWeek,
+		&i.ReminderTime,
+		&i.ReminderEmailEnabled,
+		&i.ReminderPushEnabled,
+		&i.ReminderNextFireAt,
+		&i.ReminderLastFiredAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -61,7 +69,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 WHERE id = ?
 `
@@ -77,6 +85,14 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 		&i.IsAdmin,
 		&i.TargetWeight,
 		&i.WeightUnit,
+		&i.ReminderEnabled,
+		&i.ReminderFrequency,
+		&i.ReminderDayOfWeek,
+		&i.ReminderTime,
+		&i.ReminderEmailEnabled,
+		&i.ReminderPushEnabled,
+		&i.ReminderNextFireAt,
+		&i.ReminderLastFiredAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -84,7 +100,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 ORDER BY created_at DESC
 `
@@ -106,6 +122,14 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.IsAdmin,
 			&i.TargetWeight,
 			&i.WeightUnit,
+			&i.ReminderEnabled,
+			&i.ReminderFrequency,
+			&i.ReminderDayOfWeek,
+			&i.ReminderTime,
+			&i.ReminderEmailEnabled,
+			&i.ReminderPushEnabled,
+			&i.ReminderNextFireAt,
+			&i.ReminderLastFiredAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -120,6 +144,84 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listUsersDueForReminder = `-- name: ListUsersDueForReminder :many
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
+FROM users
+WHERE reminder_enabled = 1
+  AND reminder_next_fire_at IS NOT NULL
+  AND reminder_next_fire_at <= ?
+`
+
+// Returns every enabled user whose next_fire_at is at or before the
+// supplied reference time. The hourly tick calls this once per hour;
+// the indexed next_fire_at column keeps the scan small even when the
+// users table grows. We pull back the full row so the orchestrator can
+// build its push / email payloads without an extra round-trip.
+func (q *Queries) ListUsersDueForReminder(ctx context.Context, reminderNextFireAt sql.NullTime) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersDueForReminder, reminderNextFireAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.PasswordHash,
+			&i.IsAdmin,
+			&i.TargetWeight,
+			&i.WeightUnit,
+			&i.ReminderEnabled,
+			&i.ReminderFrequency,
+			&i.ReminderDayOfWeek,
+			&i.ReminderTime,
+			&i.ReminderEmailEnabled,
+			&i.ReminderPushEnabled,
+			&i.ReminderNextFireAt,
+			&i.ReminderLastFiredAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markUserReminderFired = `-- name: MarkUserReminderFired :exec
+UPDATE users
+SET reminder_last_fired_at = ?,
+    reminder_next_fire_at  = ?,
+    updated_at             = CURRENT_TIMESTAMP
+WHERE id = ?
+`
+
+type MarkUserReminderFiredParams struct {
+	ReminderLastFiredAt sql.NullTime
+	ReminderNextFireAt  sql.NullTime
+	ID                  string
+}
+
+// Atomically set last_fired_at = now and advance next_fire_at to the
+// caller's computed next occurrence. Scoped to id so a misbehaving
+// caller cannot advance another user's row. updated_at is bumped so
+// the row's edit history stays accurate (useful for future "when was
+// this user last updated" UI).
+func (q *Queries) MarkUserReminderFired(ctx context.Context, arg MarkUserReminderFiredParams) error {
+	_, err := q.db.ExecContext(ctx, markUserReminderFired, arg.ReminderLastFiredAt, arg.ReminderNextFireAt, arg.ID)
+	return err
 }
 
 const updateUser = `-- name: UpdateUser :exec
@@ -169,5 +271,50 @@ type UpdateUserPasswordParams struct {
 // clearing the password by omitting fields.
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
 	_, err := q.db.ExecContext(ctx, updateUserPassword, arg.PasswordHash, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const updateUserReminder = `-- name: UpdateUserReminder :exec
+UPDATE users
+SET reminder_enabled        = ?,
+    reminder_frequency      = ?,
+    reminder_day_of_week    = ?,
+    reminder_time           = ?,
+    reminder_email_enabled  = ?,
+    reminder_push_enabled   = ?,
+    reminder_next_fire_at   = ?,
+    updated_at              = CURRENT_TIMESTAMP
+WHERE id = ?
+`
+
+type UpdateUserReminderParams struct {
+	ReminderEnabled      int64
+	ReminderFrequency    string
+	ReminderDayOfWeek    sql.NullInt64
+	ReminderTime         string
+	ReminderEmailEnabled int64
+	ReminderPushEnabled  int64
+	ReminderNextFireAt   sql.NullTime
+	ID                   string
+}
+
+// Replace a user's reminder preferences and bump updated_at so the
+// row is re-evaluated by the periodic tick on the next run. The day
+// of week is nullable because off / daily frequencies don't need it;
+// every other parameter is required and is asserted by the controller
+// before the call. next_fire_at is recomputed by the caller and passed
+// in as a parameter; we do not derive it here so the same query works
+// for both "user changed preferences" and "tick just fired" callers.
+func (q *Queries) UpdateUserReminder(ctx context.Context, arg UpdateUserReminderParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserReminder,
+		arg.ReminderEnabled,
+		arg.ReminderFrequency,
+		arg.ReminderDayOfWeek,
+		arg.ReminderTime,
+		arg.ReminderEmailEnabled,
+		arg.ReminderPushEnabled,
+		arg.ReminderNextFireAt,
+		arg.ID,
+	)
 	return err
 }

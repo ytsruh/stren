@@ -194,7 +194,7 @@ func TestAdminNotifications_SendWeightReminder_NilReminder(t *testing.T) {
 	// on a nil dereference — keeps the failure mode
 	// observable in the admin UI.
 	c := NewAdminNotificationsController(nil, nil)
-	_, attempted, err := c.SendWeightReminder(context.Background())
+	_, attempted, err := c.SendAllDueReminders(context.Background())
 	if !errors.Is(err, ErrWeightReminderNotConfigured) {
 		t.Fatalf("expected ErrWeightReminderNotConfigured, got %v", err)
 	}

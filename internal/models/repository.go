@@ -78,6 +78,14 @@ type UserRepo interface {
 	// the password-reset flow. Kept separate from UpdateUser so a
 	// profile form cannot be tricked into clearing the password.
 	UpdateUserPassword(userID, passwordHash string) error
+	// UpdateUserReminder writes the user's reminder
+	// preferences and the next fire time computed by the
+	// route. Kept separate from UpdateUser for the same
+	// reason as UpdateUserPassword: a narrow,
+	// single-purpose method prevents the wrong form from
+	// clobbering reminder state and keeps the SQL UPDATE
+	// focused on the columns it actually owns.
+	UpdateUserReminder(userID string, prefs ReminderPreferences) error
 }
 
 // AdminUserRepo defines the interface for admin user operations.

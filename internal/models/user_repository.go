@@ -113,18 +113,148 @@ func (r *UserRepository) UpdateUser(user *User) error {
 	return nil
 }
 
+// UpdateUserReminder writes the user's reminder preferences and the
+// next_fire_at computed by the controller. Kept separate from
+// UpdateUser for the same reason as UpdateUserPassword: a narrow,
+// single-purpose method prevents the wrong form from clobbering
+// reminder state and keeps the SQL UPDATE focused on the columns
+// it actually owns.
+//
+// The reminder_day_of_week is written as NULL when the frequency
+// does not need it (off / daily) so the row does not carry a
+// meaningless 0 that the form would re-render as Sunday.
+func (r *UserRepository) UpdateUserReminder(userID string, prefs ReminderPreferences) error {
+	if userID == "" {
+		return fmt.Errorf("failed to update reminder preferences: user id is empty")
+	}
+	if !prefs.Frequency.IsValid() {
+		return fmt.Errorf("failed to update reminder preferences: frequency %q is invalid", prefs.Frequency)
+	}
+	ctx := context.Background()
+	var nextFire sql.NullTime
+	if prefs.NextFireAt != nil {
+		nextFire = sql.NullTime{Time: *prefs.NextFireAt, Valid: true}
+	}
+	var dayOfWeek sql.NullInt64
+	if prefs.DayOfWeek != nil {
+		dayOfWeek = sql.NullInt64{Int64: int64(*prefs.DayOfWeek), Valid: true}
+	}
+	err := r.queries.UpdateUserReminder(ctx, db.UpdateUserReminderParams{
+		ReminderEnabled:      boolToInt(prefs.Enabled),
+		ReminderFrequency:    string(prefs.Frequency),
+		ReminderDayOfWeek:    dayOfWeek,
+		ReminderTime:         prefs.Time,
+		ReminderEmailEnabled: boolToInt(prefs.EmailEnabled),
+		ReminderPushEnabled:  boolToInt(prefs.PushEnabled),
+		ReminderNextFireAt:   nextFire,
+		ID:                   userID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update reminder preferences: %w", err)
+	}
+	return nil
+}
+
+// ListUsersDueForReminder returns every enabled user whose
+// next_fire_at is at or before now. The hourly tick calls this
+// once per hour; the orchestrator decides who to fire and what
+// to send. Defined on UserRepository (rather than a separate
+// ReminderRepository) so the admin "list all users" path does
+// not have to import two repos for the same table.
+func (r *UserRepository) ListUsersDueForReminder(ctx context.Context, now time.Time) ([]User, error) {
+	rows, err := r.queries.ListUsersDueForReminder(ctx, sql.NullTime{Time: now, Valid: true})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list users due for reminder: %w", err)
+	}
+	users := make([]User, len(rows))
+	for i, row := range rows {
+		users[i] = *mapUser(row)
+	}
+	return users, nil
+}
+
+// MarkUserReminderFired atomically advances the user's next_fire_at
+// to the supplied value and stamps last_fired_at. Called by the
+// orchestrator after a successful (or partially successful) fire
+// for a single user, so a future tick will not pick the same row up
+// again until the new next_fire_at passes.
+//
+// nextFire is the only nullable parameter; lastFired is set to
+// time.Now() by the caller (and not by the DB) so the orchestrator
+// can pass a clock-injected time in tests. The supplied context is
+// used for the underlying sqlc call so caller-driven cancellation
+// (e.g. an admin "stop the tick" signal) propagates to the DB.
+func (r *UserRepository) MarkUserReminderFired(ctx context.Context, userID string, lastFired, nextFire time.Time) error {
+	if userID == "" {
+		return fmt.Errorf("failed to mark reminder fired: user id is empty")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := r.queries.MarkUserReminderFired(ctx, db.MarkUserReminderFiredParams{
+		ReminderLastFiredAt: sql.NullTime{Time: lastFired, Valid: true},
+		ReminderNextFireAt:  sql.NullTime{Time: nextFire, Valid: true},
+		ID:                  userID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to mark reminder fired: %w", err)
+	}
+	return nil
+}
+
+// ReminderPreferences is the controller-shaped struct the
+// /profile form posts. Decoupled from models.User so the form
+// layer never accidentally touches unrelated fields and the
+// repo method's signature reads as "reminder preferences" at
+// a glance.
+type ReminderPreferences struct {
+	// Enabled is the master switch. When false the orchestrator
+	// ignores the user regardless of the other fields; the row
+	// is kept in place so the user can flip it back on without
+	// re-entering the rest of the form.
+	Enabled bool
+	// Frequency is one of off | daily | weekly | biweekly.
+	Frequency ReminderFrequency
+	// DayOfWeek is 0–6 (Sunday=0) for weekly / biweekly; nil
+	// for off / daily. The form posts 0–6 as a string and the
+	// controller turns it into a *int.
+	DayOfWeek *int
+	// Time is "HH:00" in 24h UTC. The picker is hour-only by
+	// design.
+	Time string
+	// EmailEnabled toggles the per-user email send.
+	EmailEnabled bool
+	// PushEnabled toggles the per-user push broadcast. Even
+	// when true, push is skipped if the user has no push
+	// subscriptions.
+	PushEnabled bool
+	// NextFireAt is the next fire time the controller computed
+	// from the user's preferences via User.ComputeNextFire.
+	// Written verbatim to the row so the tick picks it up
+	// unchanged.
+	NextFireAt *time.Time
+}
+
 func mapUser(row db.User) *User {
 	isAdmin := row.IsAdmin == 1
 	return &User{
-		ID:           row.ID,
-		Name:         row.Name,
-		Email:        row.Email,
-		PasswordHash: row.PasswordHash,
-		IsAdmin:      isAdmin,
-		TargetWeight: nullFloat64ToPtr(row.TargetWeight),
-		WeightUnit:   row.WeightUnit,
-		CreatedAt:    nullTimeToTime(row.CreatedAt),
-		UpdatedAt:    nullTimeToTime(row.UpdatedAt),
+		ID:                   row.ID,
+		Name:                 row.Name,
+		Email:                row.Email,
+		PasswordHash:         row.PasswordHash,
+		IsAdmin:              isAdmin,
+		TargetWeight:         nullFloat64ToPtr(row.TargetWeight),
+		WeightUnit:           row.WeightUnit,
+		ReminderEnabled:      row.ReminderEnabled == 1,
+		ReminderFrequency:    ReminderFrequency(row.ReminderFrequency),
+		ReminderDayOfWeek:    nullInt64ToIntPtr(row.ReminderDayOfWeek),
+		ReminderTime:         row.ReminderTime,
+		ReminderEmailEnabled: row.ReminderEmailEnabled == 1,
+		ReminderPushEnabled:  row.ReminderPushEnabled == 1,
+		ReminderNextFireAt:   nullTimeToTimePtr(row.ReminderNextFireAt),
+		ReminderLastFiredAt:  nullTimeToTimePtr(row.ReminderLastFiredAt),
+		CreatedAt:            nullTimeToTime(row.CreatedAt),
+		UpdatedAt:            nullTimeToTime(row.UpdatedAt),
 	}
 }
 
@@ -145,4 +275,25 @@ func ptrToNullFloat64(p *float64) sql.NullFloat64 {
 		return sql.NullFloat64{}
 	}
 	return sql.NullFloat64{Float64: *p, Valid: true}
+}
+
+// nullInt64ToIntPtr converts a sql.NullInt64 to a *int. nil for SQL
+// NULL, &value otherwise. The mirror of ptrToNullFloat64 for the
+// integer fields (currently reminder_day_of_week).
+func nullInt64ToIntPtr(ni sql.NullInt64) *int {
+	if !ni.Valid {
+		return nil
+	}
+	v := int(ni.Int64)
+	return &v
+}
+
+// boolToInt converts a bool to the 0/1 the SQLite INTEGER columns
+// expect. Used for the reminder enabled flags so the SQL stays
+// schema-as-written.
+func boolToInt(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
 }

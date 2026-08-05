@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"stren/internal/models"
 )
 
 // testBaseURL is the base URL the render tests thread into
@@ -219,6 +221,50 @@ func TestRenderWelcome_DirectRenderEqualsViaRenderFn(t *testing.T) {
 	if buf.String() != html {
 		t.Errorf("RenderWelcome output differs from direct templ render.\ndirect: %q\nvia:    %q",
 			buf.String(), html)
+	}
+}
+
+func TestRenderWeightReminder_CadenceSpecificCopy(t *testing.T) {
+	// The email must be cadence-specific: a daily subscriber
+	// gets "Today's weigh-in", a weekly subscriber gets the
+	// Sunday-specific copy. The button label also changes
+	// ("Log today's weight" vs "Log this week's weight") so
+	// the call-to-action matches the cadence the user picked.
+	cases := []struct {
+		cadence     models.ReminderFrequency
+		wantInHTML  []string
+		wantInText  []string
+	}{
+		{
+			cadence:    models.ReminderDaily,
+			wantInHTML: []string{"Today&#39;s weigh-in", "Log today&#39;s weight"},
+			wantInText: []string{"Today's weigh-in", "today's entry"},
+		},
+		{
+			cadence:    models.ReminderWeekly,
+			wantInHTML: []string{"It&#39;s Sunday", "Log this week&#39;s weight"},
+			wantInText: []string{"It's Sunday", "this week's weight"},
+		},
+		{
+			cadence:    models.ReminderBiweekly,
+			wantInHTML: []string{"Time to log", "Log today&#39;s weight"},
+			wantInText: []string{"Time to log this week's weight", "today's entry"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.cadence), func(t *testing.T) {
+			html, text := RenderWeightReminder("Alice", testBaseURL, tc.cadence)
+			for _, want := range tc.wantInHTML {
+				if !strings.Contains(html, want) {
+					t.Errorf("HTML missing %q for cadence=%q: %q", want, tc.cadence, html)
+				}
+			}
+			for _, want := range tc.wantInText {
+				if !strings.Contains(text, want) {
+					t.Errorf("text missing %q for cadence=%q: %q", want, tc.cadence, text)
+				}
+			}
+		})
 	}
 }
 

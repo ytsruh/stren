@@ -91,6 +91,13 @@ func (m *mockUserRepository) UpdateUserPassword(userID, passwordHash string) err
 	return errors.New("user not found")
 }
 
+// UpdateUserReminder is a no-op in the auth-test mock; the
+// auth flows never write reminder state, but the interface
+// requires the method.
+func (m *mockUserRepository) UpdateUserReminder(userID string, prefs models.ReminderPreferences) error {
+	return nil
+}
+
 func setupAuthController(t *testing.T) (*AuthController, *mockUserRepository) {
 	t.Helper()
 	mockUser := newMockUserRepository()

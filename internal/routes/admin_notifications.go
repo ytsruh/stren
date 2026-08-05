@@ -56,18 +56,17 @@ func (h *Handler) AdminNotificationsSend(c echo.Context) error {
 
 // AdminNotificationsSendWeightReminder handles POST
 // /admin/notifications/send-weight-reminder. It calls the same
-// reminders.WeightReminder the cron job uses on Sunday 09:00 UTC
-// — the route exists so the admin can rehearsal-test the full
-// SMTP + push pipeline end-to-end without waiting for the cron
-// to fire.
+// reminders.UserReminder the hourly tick uses — the route exists
+// so the admin can rehearsal-test the full per-user pipeline
+// end-to-end without waiting for the next tick.
 //
-// The orchestrator's RunResult is rendered into a result card
+// The orchestrator's TickResult is rendered into a result card
 // that swaps into the same #send-result target as the broadcast
 // form. A user-list error (e.g. database down) renders the
 // shared AdminNotificationError card so the admin sees the
 // failure inline rather than as a dismissable toast.
 func (h *Handler) AdminNotificationsSendWeightReminder(c echo.Context) error {
-	result, attempted, err := h.adminNotificationsCtrl.SendWeightReminder(c.Request().Context())
+	result, attempted, err := h.adminNotificationsCtrl.SendAllDueReminders(c.Request().Context())
 	if err != nil {
 		return render(c, admin.AdminNotificationError(err.Error()))
 	}

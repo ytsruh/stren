@@ -34,14 +34,14 @@ var (
 )
 
 // AdminNotificationsController handles the admin-side broadcast form
-// and the admin "send weekly weight reminder" button. Both
+// and the admin "send all due reminders now" button. Both
 // orchestrate through their respective services; the controller's
 // only responsibility is parsing the form (for the broadcast) and
 // translating the orchestrator's result into something the route
 // can render.
 type AdminNotificationsController struct {
-	service         *push.Service
-	weightReminder  *reminders.WeightReminder
+	service        *push.Service
+	weightReminder *reminders.UserReminder
 }
 
 // NewAdminNotificationsController returns a controller bound to the
@@ -49,9 +49,9 @@ type AdminNotificationsController struct {
 // be nil if the server is running without VAPID keys (e.g. unit
 // tests) — the controller checks for nil before use and returns a
 // friendly error. weightReminder may also be nil; the
-// SendWeightReminder method returns ErrWeightReminderNotConfigured
+// SendAllDueReminders method returns ErrWeightReminderNotConfigured
 // in that case.
-func NewAdminNotificationsController(service *push.Service, weightReminder *reminders.WeightReminder) *AdminNotificationsController {
+func NewAdminNotificationsController(service *push.Service, weightReminder *reminders.UserReminder) *AdminNotificationsController {
 	return &AdminNotificationsController{service: service, weightReminder: weightReminder}
 }
 
@@ -104,24 +104,25 @@ func (c *AdminNotificationsController) Broadcast(ctx context.Context, in Broadca
 	})
 }
 
-// SendWeightReminder fires the same orchestrator the cron job
-// uses on Sunday morning, on demand. The admin can use this to
-// rehearsal-test the full SMTP + push pipeline end-to-end
-// without waiting until Sunday.
+// SendAllDueReminders fires the same orchestrator the hourly tick
+// uses, on demand. The admin can use this to rehearsal-test the
+// full per-user pipeline end-to-end without waiting for the next
+// tick. The orchestrator finds every user whose next_fire_at is
+// at or before now and fires each user's chosen channels.
 //
-// Returns the orchestrator's RunResult so the route can render
-// a result card showing email/push counts and any failed
-// email addresses. The "attempted" return mirrors the
-// orchestrator's contract: false when the user list was
-// unreadable (ListError set on the result).
+// Returns the orchestrator's TickResult so the route can render
+// a result card showing per-user outcomes (email/push sent,
+// skipped, or failed) plus any aggregate errors. The "attempted"
+// return mirrors the orchestrator's contract: false when the
+// user list was unreadable (ListError set on the result).
 //
 // Returns ErrWeightReminderNotConfigured when the orchestrator
 // is nil (e.g. the reminders package failed to initialise at
 // startup — a separate path from the orchestrator's own
 // error returns).
-func (c *AdminNotificationsController) SendWeightReminder(ctx context.Context) (reminders.RunResult, bool, error) {
+func (c *AdminNotificationsController) SendAllDueReminders(ctx context.Context) (reminders.TickResult, bool, error) {
 	if c.weightReminder == nil {
-		return reminders.RunResult{}, false, ErrWeightReminderNotConfigured
+		return reminders.TickResult{}, false, ErrWeightReminderNotConfigured
 	}
 	result, attempted := c.weightReminder.Run(ctx)
 	return result, attempted, nil
