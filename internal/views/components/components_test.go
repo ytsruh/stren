@@ -91,7 +91,7 @@ func TestStatCard(t *testing.T) {
 	if !strings.Contains(html, "Total Sets") {
 		t.Error("expected label")
 	}
-	if !strings.Contains(html, `class="card flex flex-col justify-around gap-0 md:gap-2"`) {
+	if !strings.Contains(html, `class="card flex flex-col justify-center gap-1 md:gap-2"`) {
 		t.Error("expected card class")
 	}
 }

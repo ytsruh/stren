@@ -50,12 +50,12 @@ type StatCardProps struct {
 }
 
 templ StatCard(props StatCardProps) {
-	<div class={ "card flex flex-col justify-around gap-0 md:gap-2" + props.Class }>
+	<div class={ "card flex flex-col justify-center gap-1 md:gap-2" + props.Class }>
 		<header>
-			<h4 class="text-xl sm:text-4xl">{ props.Value }</h4>
+			<p class="text-muted-foreground text-sm sm:text-base">{ props.Label }</p>
 		</header>
 		<section class="">
-			<p class="text-muted-foreground text-base sm:text-lg">{ props.Label }</p>
+			<h4 class="text-xl sm:text-4xl">{ props.Value }</h4>
 		</section>
 	</div>
 }
