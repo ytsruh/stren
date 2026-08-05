@@ -436,17 +436,25 @@ func TestCompareModal_OmitsDeltaWhenEmpty(t *testing.T) {
 }
 
 // TestCompareBar_HiddenByDefault ensures the bar starts hidden so the
-// table is unobstructed on initial page load.
+// table is unobstructed on initial page load, and is rendered as a
+// fixed-positioned floating bar (not an in-flow inline card) so it
+// stays visible while the user scrolls.
 func TestCompareBar_HiddenByDefault(t *testing.T) {
 	html := renderToString(t, CompareBar())
 	if !strings.Contains(html, `id="weight-compare-bar"`) {
 		t.Fatal("expected compare bar in DOM")
 	}
-	if !strings.Contains(html, `class="hidden card p-3 mb-4`) {
-		t.Error("expected compare bar to start hidden and rendered as an inline card")
+	if !strings.Contains(html, `class="hidden`) {
+		t.Error("expected compare bar to start hidden")
 	}
-	if strings.Contains(html, `fixed bottom-0`) {
-		t.Error("expected compare bar to no longer be position:fixed")
+	if !strings.Contains(html, `fixed`) {
+		t.Error("expected compare bar to be position:fixed (floating)")
+	}
+	if !strings.Contains(html, `bottom-4`) {
+		t.Error("expected compare bar to be anchored to the bottom of the viewport")
+	}
+	if strings.Contains(html, `mb-4 `) {
+		t.Error("expected compare bar to no longer carry the inline mb-4 margin")
 	}
 	if !strings.Contains(html, `id="weight-compare-go"`) {
 		t.Error("expected compare button in bar")

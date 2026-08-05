@@ -14,13 +14,17 @@ import (
 // the chart label, the table column, and the progress card values.
 templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated bool, isAdmin bool, targetWeight *float64, weightUnit string) {
 	{{
-		// Lift the "what's the latest reading" computation up out of
-		// the progress card so the card stays a pure render. The card
-		// is hidden when there's no target or no entries, so the
-		// pre-computed values are only consumed in that case.
-		current := latestWeight(entries)
+		// Sort once and pass the same sorted slice to the chart and
+		// the progress card. The repo returns entries in
+		// reverse-chronological order (newest first), the chart needs
+		// ascending (left-to-right line), and the progress card needs
+		// the most recent reading. Sorting in one place means the
+		// chart and the card are guaranteed to agree on which entry
+		// is "current".
+		sorted := sortAscending(entries)
+		current := lastWeight(sorted)
 		var pct float64
-		if targetWeight != nil {
+		if targetWeight != nil && len(sorted) > 0 {
 			pct = weightProgress(current, *targetWeight)
 		}
 	}}
@@ -62,7 +66,7 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 					map[string]bool{"sm:w-3/4": targetWeight != nil},
 				) }
 				>
-					@components.Chart(chartDataForWeight(entries, weightUnit))
+					@components.Chart(chartDataForWeight(sorted, weightUnit))
 				</div>
 				if targetWeight != nil {
 					<div class="w-full sm:w-1/4 sm:h-40">
@@ -82,24 +86,33 @@ templ WeightPage(entries []models.WeightEntry, userName string, isAuthenticated 
 		<div id="weight-compare-modal-container"></div>
 		@WeightCompareScript()
 		@WeightExportScript()
+		// Pad the bottom of <main> while the floating CompareBar is
+		// visible so the last row of the weight table isn't hidden
+		// behind it. The bar is `position: fixed` so it doesn't take
+		// any space in the normal flow; this rule reclaims that
+		// space at the page level. Scoped via :has() so it only
+		// applies to pages that actually render the bar (no other
+		// page carries an element with id="weight-compare-bar").
+		<style>
+			main:has(#weight-compare-bar:not(.hidden)) {
+				padding-bottom: 6rem;
+			}
+		</style>
 	}
 }
 
 // chartDataForWeight converts a list of weight entries into the generic Chart
-// props expected by components.Chart. Entries are sorted ascending by date so
-// the line runs left-to-right. Labels are short dates ("10 Jun"). A second
-// dataset containing a least-squares regression line is appended so the
-// user can see the overall trend at a glance. The trendline is rendered
-// dashed and hidden from the legend via opt-in flags on ChartDataset. The
-// chart renders nothing when fewer than 2 entries are provided (handled
-// inside Chart). weightUnit is the user's preferred unit and drives the
-// dataset label.
-func chartDataForWeight(entries []models.WeightEntry, weightUnit string) components.ChartProps {
-	sorted := make([]models.WeightEntry, len(entries))
-	copy(sorted, entries)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
-	})
+// props expected by components.Chart. The caller is expected to pass the
+// entries already sorted ascending by CreatedAt (see sortAscending); the
+// chart and the progress card share the same sorted slice so the line and
+// the "current" value agree on which entry is most recent. Labels are short
+// dates ("10 Jun"). A second dataset containing a least-squares regression
+// line is appended so the user can see the overall trend at a glance. The
+// trendline is rendered dashed and hidden from the legend via opt-in flags
+// on ChartDataset. The chart renders nothing when fewer than 2 entries are
+// provided (handled inside Chart). weightUnit is the user's preferred unit
+// and drives the dataset label.
+func chartDataForWeight(sorted []models.WeightEntry, weightUnit string) components.ChartProps {
 	labels := make([]string, len(sorted))
 	values := make([]float64, len(sorted))
 	for i, e := range sorted {
@@ -125,18 +138,40 @@ func chartDataForWeight(entries []models.WeightEntry, weightUnit string) compone
 	}
 }
 
-// latestWeight returns the weight from the most recent entry. The slice
-// is sorted defensively to match the order used by the chart, so the
-// caller can pass the entries in any order. Returns 0 for an empty slice.
-func latestWeight(entries []models.WeightEntry) float64 {
+// sortAscending returns a copy of entries sorted oldest-first by
+// CreatedAt. The repository returns entries in reverse-chronological
+// order; the chart and the progress card both want ascending. The
+// input is left untouched so callers can keep their original slice
+// (e.g. the table still renders newest-first).
+func sortAscending(entries []models.WeightEntry) []models.WeightEntry {
 	if len(entries) == 0 {
-		return 0
+		return nil
 	}
-	sorted := append([]models.WeightEntry(nil), entries...)
+	sorted := make([]models.WeightEntry, len(entries))
+	copy(sorted, entries)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].CreatedAt.Before(sorted[j].CreatedAt)
 	})
+	return sorted
+}
+
+// lastWeight returns the weight from the most recent entry of a slice
+// already sorted ascending by CreatedAt. Returns 0 for an empty slice.
+// The caller is expected to have sorted with sortAscending.
+func lastWeight(sorted []models.WeightEntry) float64 {
+	if len(sorted) == 0 {
+		return 0
+	}
 	return sorted[len(sorted)-1].Weight
+}
+
+// latestWeight returns the weight from the most recent entry. The slice
+// is sorted defensively so the caller can pass the entries in any order.
+// Returns 0 for an empty slice. Prefer lastWeight when the caller has
+// already sorted ascending (e.g. inside WeightPage) — it avoids the
+// redundant sort.
+func latestWeight(entries []models.WeightEntry) float64 {
+	return lastWeight(sortAscending(entries))
 }
 
 // WeightList renders a table of weight entries.
@@ -231,24 +266,43 @@ templ WeightEmptyState() {
 // WeightProgressCard renders a small card summarising progress towards the
 // user's body-weight goal. The caller is responsible for pre-computing
 // the current weight and the clamped percent (typically via
-// latestWeight and weightProgress), so this template stays a pure
+// lastWeight and weightProgress), so this template stays a pure
 // render. The card is hidden by the caller when targetWeight is nil or
 // there are no entries. weightUnit is the user's preferred unit and
-// drives the "Current" and "Target" values.
+// drives the "Current" and "Target" values, plus the "to go / to lose"
+// gap line that helps the user see how far they are from their goal in
+// their preferred unit.
+//
+// Layout:
+//   - Mobile (< sm): a single horizontal row of three equal-size
+//     stats — Progress %, Current weight, Target weight — with the
+//     gap line tucked underneath. The card has the full container
+//     width here, so each stat gets ~33 % and stays legible.
+//   - sm and up: the percent promotes to a large headline with the
+//     gap line directly below it, and Current / Target sit in a
+//     2-column grid underneath. The card is one quarter of the row
+//     at this size, so stacking the percent above the stat grid
+//     reads better than three cramped columns.
 templ WeightProgressCard(current, target, pct float64, weightUnit string) {
-	<div class="card p-4 h-full flex flex-row md:flex-col gap-3 justify-around md:justify-center">
-		<div>
-			<p class="text-base text-muted-foreground">Progress</p>
-			<p class="text-3xl font-semibold">{ fmt.Sprintf("%.0f%%", pct) }</p>
+	<div class="card p-4 h-full flex flex-col gap-3 justify-center">
+		<div class="hidden sm:block">
+			<p class="text-sm text-muted-foreground">Progress</p>
+			<p class="text-3xl font-semibold">{ formatPercent(pct) }</p>
+			<p class="text-sm text-muted-foreground">{ weightGapLine(current, target, weightUnit) }</p>
 		</div>
-		<dl class="grid grid-cols-2 gap-5 md:gap-2 text-base md:text-xs">
+		<dl class="grid grid-cols-3 sm:grid-cols-2 gap-2 text-sm sm:text-xs">
+			<div class="sm:hidden">
+				<dt class="text-muted-foreground">Progress</dt>
+				<dd class="text-lg font-semibold">{ formatPercent(pct) }</dd>
+				<dd class="text-sm text-muted-foreground sm:hidden">{ weightGapLine(current, target, weightUnit) }</dd>
+			</div>
 			<div>
 				<dt class="text-muted-foreground">Current</dt>
-				<dd class="text-base">{ models.FormatWeight(current, weightUnit) }</dd>
+				<dd class="text-lg sm:text-xs">{ models.FormatWeight(current, weightUnit) }</dd>
 			</div>
 			<div>
 				<dt class="text-muted-foreground">Target</dt>
-				<dd class="text-base">{ models.FormatWeight(target, weightUnit) }</dd>
+				<dd class="text-lg sm:text-xs">{ models.FormatWeight(target, weightUnit) }</dd>
 			</div>
 		</dl>
 	</div>
@@ -270,6 +324,39 @@ func weightProgress(current, target float64) float64 {
 		pct = 100
 	}
 	return pct
+}
+
+// formatPercent renders a clamped [0, 100] percent as a rounded integer
+// followed by "%". Centralised so every place that surfaces the
+// progress percent formats it the same way.
+func formatPercent(pct float64) string {
+	return fmt.Sprintf("%.0f%%", pct)
+}
+
+// weightGapLine returns a short, direction-aware line describing how
+// far the user's current weight is from their target. The wording
+// ("to go" vs "to lose") depends on the sign of the gap, so the
+// percentage above is paired with an action the user can interpret:
+//   - current 67.6, target 70 → "2.4 kg to go"
+//   - current 95,   target 90 → "5.0 kg to lose"
+//   - within ±0.05          → "At target"
+//
+// A zero target returns "" so the caller can render an empty line
+// (the card is normally hidden in that case, but the guard keeps
+// arithmetic from dividing by zero).
+func weightGapLine(current, target float64, unit string) string {
+	if target == 0 {
+		return ""
+	}
+	gap := target - current
+	switch {
+	case gap > 0.05:
+		return fmt.Sprintf("%.1f %s to go", gap, unit)
+	case gap < -0.05:
+		return fmt.Sprintf("%.1f %s to lose", -gap, unit)
+	default:
+		return "At target"
+	}
 }
 
 // WeightCompareScript renders the inline JavaScript that wires up the

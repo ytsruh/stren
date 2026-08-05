@@ -40,17 +40,6 @@ templ CompareModal(
 		onclick="if(event.target===this)this.close()"
 	>
 		<div>
-			// <header>
-			// 	<h3 class="text-lg font-semibold">Compare photos</h3>
-			// 	<p class="text-sm text-muted-foreground">
-			// 		{ beforeLabel }
-			// 		→
-			// 		{ afterLabel }
-			// 		if deltaText != "" {
-			// 			· { deltaText }
-			// 		}
-			// 	</p>
-			// </header>
 			<div
 				id="weight-compare-slider"
 				class="image-compare"
@@ -58,15 +47,6 @@ templ CompareModal(
 				<img src={ beforeURL } alt={ "Weight photo from " + beforeLabel }/>
 				<img src={ afterURL } alt={ "Weight photo from " + afterLabel }/>
 			</div>
-			// <footer class="flex justify-end">
-			// 	<button
-			// 		type="button"
-			// 		class="btn-outline"
-			// 		onclick="document.getElementById('weight-compare-dialog').close()"
-			// 	>
-			// 		Close
-			// 	</button>
-			// </footer>
 		</div>
 	</dialog>
 	<script>
@@ -92,16 +72,35 @@ templ CompareModal(
 				return window.innerWidth < breakpoint;
 			}
 
+			// buildOptions configures the image-compare-viewer instance.
+			// The options below are the subset of the library API we
+			// actually use; the rest stay at their library defaults.
+			//   - controlColor / controlShadow: brand-orange handle, with
+			//     a soft drop shadow so it stays visible against busy photos.
+			//   - addCircle: false / addCircleBlur: true: square handle
+			//     with a soft blur halo (the default circular handle
+			//     fights the square cards in our UI).
+			//   - showLabels + labelOptions: render the "before / after"
+			//     labels supplied by the server on each side of the
+			//     slider. onHover: false keeps them pinned so the user
+			//     always knows which side is which.
+			//   - smoothing + smoothingAmount: smooth the slider motion
+			//     on touch / drag instead of jumping in pixel steps.
+			//   - hoverStart: false: the slider only moves on click /
+			//     drag, not when the cursor just enters the image —
+			//     the photo compare is a deliberate gesture.
+			//   - verticalMode: switches to a vertical drag on screens
+			//     narrower than the breakpoint passed in via
+			//     data-vertical-breakpoint.
+			//   - startingPoint: 50: the slider starts in the middle so
+			//     the user sees a bit of both photos on first paint.
+			//   - fluidMode: true: the viewer fills the dialog width.
 			function buildOptions() {
 				return {
-				 	controlColor: "#f54900",
-				  controlShadow: true,
-				  addCircle: false,
-				  addCircleBlur: true,
-					//controlColor: '#73c781',
-					//controlShadow: true,
-					//addCircle: true,
-					//addCircleBlur: true,
+					controlColor: "#f54900",
+					controlShadow: true,
+					addCircle: false,
+					addCircleBlur: true,
 					showLabels: true,
 					labelOptions: { before: labelA, after: labelB, onHover: false },
 					smoothing: true,
@@ -162,17 +161,21 @@ templ CompareModal(
 	</script>
 }
 
-// CompareBar renders the inline card that becomes visible on the weight
-// list page once the user starts selecting weight entries for
-// comparison. The bar is hidden by default; the inline script in
+// CompareBar renders a floating action bar that becomes visible on
+// the weight list page once the user starts selecting weight entries
+// for comparison. The bar is hidden by default; the inline script in
 // weight/list.templ toggles its visibility, updates the selection
-// count, and writes the two selected entry IDs into the hidden inputs
-// that the "Compare" button submits via hx-include.
+// count, and writes the two selected entry IDs into the hidden
+// inputs that the "Compare" button submits via hx-include.
 //
-// Rendered in the normal page flow (above the weight table) so the
-// sidebar never obscures it and mobile users see it in context with
-// the table. The bar collapses back into the page when no entries are
-// selected, and the table shifts up to take its place.
+// Position: the bar is `fixed` to the bottom of the viewport with a
+// 16px inset on all sides (capped to the layout's max-w-3xl column
+// width on sm+ and centred) so it stays visible while the user
+// scrolls the table. The `mb-4` margin that the bar used to carry
+// is gone because fixed-positioned elements don't participate in
+// normal flow; instead, a CSS `:has()` rule on the weight list page
+// adds equivalent bottom padding to <main> while the bar is shown
+// so the last table row isn't hidden behind it.
 //
 // The button is disabled until exactly 2 entries are selected. The
 // helper text switches between "Select one more" and "Ready to
@@ -180,7 +183,7 @@ templ CompareModal(
 templ CompareBar() {
 	<div
 		id="weight-compare-bar"
-		class="hidden card p-3 mb-4 flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+		class="hidden fixed bottom-4 inset-x-4 sm:max-w-3xl sm:mx-auto z-40 card p-3 rounded-lg shadow-lg flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
 		role="region"
 		aria-label="Compare weight photos"
 	>

@@ -26,6 +26,7 @@ templ WeightForm(userName string, isAuthenticated bool, isAdmin bool, weightUnit
 					<input
 						class="input"
 						type="number"
+						inputmode="decimal"
 						id="weight"
 						name="weight"
 						step="0.1"
@@ -107,12 +108,13 @@ templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated
 					<input
 						class="input"
 						type="number"
+						inputmode="decimal"
 						id="weight"
 						name="weight"
 						step="0.1"
 						min="0"
 						max="1000"
-						value={ fmt.Sprintf("%.1f", entry.Weight) }
+						value={ weightInputValue(entry.Weight) }
 						placeholder="0.0"
 						required
 					/>
@@ -165,23 +167,6 @@ templ EditWeightForm(entry *models.WeightEntry, userName string, isAuthenticated
 	}
 }
 
-// WeightFormSuccess is shown after successful form submission
-templ WeightFormSuccess(message string, stayOnPage bool) {
-	@views.Toast("success", "Weight saved!", message)
-	if !stayOnPage {
-		<div class="mt-6 flex flex-col gap-3 sm:flex-row">
-			<a href="/weight" class="btn-outline">
-				@components.Icon(components.IconProps{Name: "arrow-left", Size: 18})
-				Back to Weight
-			</a>
-			<a href="/weight/new" class="btn">
-				@components.Icon(components.IconProps{Name: "plus", Size: 18})
-				Log Another
-			</a>
-		</div>
-	}
-}
-
 // WeightFormError shows form validation errors
 templ WeightFormError(message string) {
 	@views.Toast("error", "Error", message)
@@ -197,4 +182,13 @@ templ WeightFormSuccessToast(title string, message string) {
 // WeightDeleteSuccess returns the toast for successful deletion (for HTMX responses)
 templ WeightDeleteSuccess() {
 	@views.Toast("success", "Weight entry deleted!", "")
+}
+
+// weightInputValue formats a weight value for the <input type="number">
+// value attribute. The number-only form (no unit suffix) matches what
+// the browser expects, and the one-decimal precision mirrors the
+// input's step="0.1" so a re-rendered form pre-fills with a value
+// the user can submit without a "please enter a valid step" warning.
+func weightInputValue(weight float64) string {
+	return fmt.Sprintf("%.1f", weight)
 }

@@ -31,35 +31,18 @@ type PhotoUploadProps struct {
 // the admin has confirmed the removal; the route clears the
 // photo on save.
 templ PhotoUpload(props PhotoUploadProps) {
-	{{
-		name := props.Name
-		if name == "" {
-			name = "photo"
-		}
-		maxSize := props.MaxSizeMB
-		if maxSize <= 0 {
-			maxSize = 5
-		}
-		inputID := "photo-input-" + name
-		previewID := "photo-preview-" + name
-		hiddenID := "photo-key-" + name
-		currentID := "photo-current-" + name
-		removeBtnID := "photo-remove-" + name
-		removeFieldID := "photo-remove-field-" + name
-		spinnerID := "photo-spinner-" + name
-	}}
+	{{ name := photoWidgetName(props.Name) }}
 	<div
 		class="grid gap-2"
-		data-photo-upload={ props.Name }
-		data-max-size-mb="5"
+		data-photo-upload={ name }
 		data-remove-label="Remove current photo"
 		data-undo-label="Undo remove"
 		data-confirm-message="Remove this photo? It will be deleted when you save."
 	>
-		<label for={ inputID }>{ props.Label }</label>
+		<label for={ "photo-input-" + name }>{ props.Label }</label>
 		if props.CurrentURL != "" {
 			<div class="flex items-start justify-between gap-3">
-				<div id={ currentID } class="flex items-start gap-4 transition-opacity">
+				<div id={ "photo-current-" + name } class="flex items-start gap-4 transition-opacity">
 					<img
 						src={ templ.SafeURL(props.CurrentURL) }
 						alt="Current photo"
@@ -69,7 +52,7 @@ templ PhotoUpload(props PhotoUploadProps) {
 				<div class="flex items-center gap-2 pt-1">
 					<button
 						type="button"
-						id={ removeBtnID }
+						id={ "photo-remove-" + name }
 						class="btn btn-sm-outline"
 						title="Remove current photo"
 						aria-label="Remove current photo"
@@ -79,7 +62,7 @@ templ PhotoUpload(props PhotoUploadProps) {
 					</button>
 					<input
 						type="hidden"
-						id={ removeFieldID }
+						id={ "photo-remove-field-" + name }
 						name="remove_photo"
 						value=""
 					/>
@@ -89,22 +72,22 @@ templ PhotoUpload(props PhotoUploadProps) {
 		<input
 			class="input pt-2"
 			type="file"
-			id={ inputID }
+			id={ "photo-input-" + name }
 			accept="image/*"
 		/>
 		<input
 			type="hidden"
-			id={ hiddenID }
+			id={ "photo-key-" + name }
 			name="photo_key"
 			value={ props.CurrentKey }
 		/>
 		<div class="flex items-center gap-3">
 			<img
-				id={ previewID }
+				id={ "photo-preview-" + name }
 				class="size-32 rounded-md object-cover border hidden"
 				alt="New photo preview"
 			/>
-			<span id={ spinnerID } class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground">
+			<span id={ "photo-spinner-" + name } class="htmx-indicator flex items-center gap-2 text-sm text-muted-foreground">
 				<span class="animate-spin">
 					@components.Icon(components.IconProps{Name: "loader", Size: 14})
 				</span>
@@ -307,4 +290,17 @@ templ PhotoUpload(props PhotoUploadProps) {
 			});
 		})();
 	</script>
+}
+
+// photoWidgetName resolves the name used to scope the widget's DOM
+// IDs (photo-input-{name}, photo-preview-{name}, etc.) and its
+// data-photo-upload attribute. Empty names are treated as the
+// default "photo" so the widget always produces a stable set of
+// IDs (an empty suffix would yield "photo-input-" which is not a
+// valid id).
+func photoWidgetName(name string) string {
+	if name == "" {
+		return "photo"
+	}
+	return name
 }
