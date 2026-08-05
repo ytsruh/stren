@@ -56,7 +56,17 @@ templ Layout(data PageData) {
 			</script>
 			<link rel="stylesheet" href="/css/styles.css"/>
 			<link rel="stylesheet" href="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.css"/>
-			<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+			<script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+			// Pin htmx 1.x defaults we rely on. htmx 2 flipped
+			// `scrollBehavior` from "smooth" to "auto"; the
+			// exercise-history pagination uses `hx-push-url="true"`
+			// so restoring the v1 behaviour keeps the page-change
+			// animation identical to today.
+			<script>
+				if (window.htmx) {
+					htmx.config.scrollBehavior = 'smooth';
+				}
+			</script>
 			<script src="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.js" defer></script>
 			<script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/js/all.min.js" defer></script>
 			// canvas-confetti is loaded on every page so the goals
