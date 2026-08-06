@@ -28,16 +28,17 @@ SIM_UUID_RE = [A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}
 # `simctl boot` starts the device headless.
 SIMULATOR_APP = $(shell xcode-select -p)/Applications/Simulator.app
 
-.PHONY: help gen build boot run clean
+.PHONY: help gen build boot run clean release
 
 help:
 	@echo "Stren iOS — available targets:"
 	@echo ""
-	@echo "  make gen    Regenerate $(XCODEPROJ) from project.yml"
-	@echo "  make build  Compile for the booted simulator"
-	@echo "  make boot   Boot the first available iPhone simulator (no-op if one is already running)"
-	@echo "  make run    Build, install, and launch on the booted simulator (auto-boots one if needed)"
-	@echo "  make clean  Wipe build artifacts"
+	@echo "  make gen      Regenerate $(XCODEPROJ) from project.yml"
+	@echo "  make build    Compile for the booted simulator"
+	@echo "  make boot     Boot the first available iPhone simulator (no-op if one is already running)"
+	@echo "  make run      Build, install, and launch on the booted simulator (auto-boots one if needed)"
+	@echo "  make release  Archive a Release build and open Xcode's Organizer to install on a connected iPhone"
+	@echo "  make clean    Wipe build artifacts"
 	@echo ""
 	@echo "Override the destination with DESTINATION=...  e.g."
 	@echo "  make run DESTINATION='platform=iOS Simulator,name=iPhone 15 Pro'"
@@ -156,3 +157,39 @@ clean:
 		-project $(XCODEPROJ) \
 		-scheme $(SCHEME) \
 		clean 2>/dev/null || true
+
+# `release` produces a signed Release build for a real iOS
+# device and hands it off to Xcode's Organizer. The user
+# then picks "Distribute App" → "Development" → their
+# iPhone to install. The base URL comes from
+# Stren/Configs/Release.xcconfig (https://stren.ytsruh.com/
+# api/v1) so the on-device build talks to the production
+# server, not the localhost dev one used by `make run`.
+#
+# Signing is automatic via Xcode's personal-team
+# provisioning. On first run Xcode will prompt for your
+# Apple ID in the Organizer; subsequent runs reuse the
+# cached profile. `-allowProvisioningUpdates` is a no-op
+# once everything is set up, so it's safe to pass every
+# time. To make unattended builds work, set DEVELOPMENT_TEAM
+# in the env or in Release.xcconfig.
+#
+# IMPORTANT: like `run`, this recipe body MUST be one
+# continuous shell block. Every `#` comment without a
+# trailing `\` would break the continuation chain. All
+# explanatory comments live above the recipe, not inside.
+release:
+	@ARCHIVE_DIR=$$(pwd)/build/Stren.xcarchive; \
+	mkdir -p build && \
+	xcodebuild \
+	-project $(XCODEPROJ) \
+	-scheme $(SCHEME) \
+	-configuration Release \
+	-destination 'generic/platform=iOS' \
+	-archivePath "$$ARCHIVE_DIR" \
+	-allowProvisioningUpdates \
+	archive && \
+	open "$$ARCHIVE_DIR" && \
+	echo "" && \
+	echo "✓ Release archive at $$ARCHIVE_DIR" && \
+	echo "  Organizer should be open. Click 'Distribute App' → 'Development' → pick your iPhone."

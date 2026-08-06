@@ -36,7 +36,7 @@
 		</dict>
 	</dict>
 	<key>STREN_API_BASE_URL</key>
-	<string>$(STREN_API_BASE_URL)</string>
+	<string>$(STREN_API_SCHEME)://$(STREN_API_HOST)$(STREN_API_PATH)</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Inter_18pt-Regular.ttf</string>

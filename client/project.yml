@@ -70,13 +70,23 @@ targets:
           - Inter_18pt-Medium.ttf
           - Inter_18pt-SemiBold.ttf
           - Inter_18pt-Bold.ttf
-        STREN_API_BASE_URL: $(STREN_API_BASE_URL)
+        STREN_API_BASE_URL: $(STREN_API_SCHEME)://$(STREN_API_HOST)$(STREN_API_PATH)
+    # Per-build-configuration xcconfig files. XcodeGen
+    # attaches these to the target so every build pulls the
+    # matching STREN_API_BASE_URL out of Info.plist via the
+    # `$(STREN_API_BASE_URL)` reference above. Debug keeps
+    # the localhost dev server (simulator-only); Release
+    # points at the production HTTPS server for on-device
+    # installs.
+    configFiles:
+      Debug: Stren/Configs/Debug.xcconfig
+      Release: Stren/Configs/Release.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ytsruh.stren
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 schemes:
   Stren:
