@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./basecoat.css";
+@import "./basecoat-compat.css";
 
 /* Mobile-safe toaster: avoid iPhone home indicator + curved corner clipping */
 @media (hover: none) and (pointer: coarse) {

@@ -1,0 +1,9 @@
+# Vendored third-party assets / generated build output.
+# Marked linguist-vendored so GitHub excludes them from the repo's
+# primary language stats — keeps the project identified as Go rather
+# than CSS/JS even with the basecoat sources and Tailwind build output
+# in the tree.
+public/css/styles.css        linguist-vendored
+public/js/basecoat.js        linguist-vendored
+styles/basecoat.css          linguist-vendored
+styles/basecoat-compat.css   linguist-vendored
