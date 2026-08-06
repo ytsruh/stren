@@ -76,24 +76,17 @@ struct ExerciseListView: View {
     }
 }
 
-/// One row in the exercise list. Shows the name and, if
-/// present, a short description below it in the muted
-/// secondary colour.
+/// One row in the exercise list. Shows the exercise name;
+/// the description is intentionally omitted here because
+/// every row is the same kind of "tap for history" link
+/// and a long description under every name just adds noise.
 struct ExerciseRow: View {
     let exercise: ExerciseDTO
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DSSpacing.xxs) {
-            Text(exercise.name)
-                .font(.body.weight(.semibold))
-            if !exercise.description.isEmpty {
-                Text(exercise.description)
-                    .font(.footnote)
-                    .foregroundStyle(DSColors.textSecondary)
-                    .lineLimit(2)
-            }
-        }
-        .padding(.vertical, DSSpacing.xxs)
+        Text(exercise.name)
+            .font(.body.weight(.semibold))
+            .padding(.vertical, DSSpacing.xxs)
     }
 }
 

@@ -19,8 +19,7 @@ struct ExerciseHistoryView: View {
     @State private var isLoading: Bool = true
     @State private var errorMessage: String?
     @State private var currentPage: Int = 1
-
-    private let pageSize: Int = 25
+    @State private var selectedDate: Date?
 
     var body: some View {
         content
@@ -54,7 +53,7 @@ struct ExerciseHistoryView: View {
                 statsSection
                 Section("Sets") {
                     ForEach(page?.entries ?? []) { entry in
-                        SetRow(entry: entry, weightUnit: weightUnit)
+                        HistorySetRow(entry: entry, weightUnit: weightUnit)
                     }
                 }
                 paginationSection
@@ -77,13 +76,131 @@ struct ExerciseHistoryView: View {
                         x: .value("Date", point.date),
                         y: .value("Max weight", point.weight)
                     )
+                    // Highlight marks drawn in chart
+                    // coordinate space (RuleMark / PointMark
+                    // must live inside `Chart { ... }` — the
+                    // .chartOverlay content is a plain View and
+                    // can only host the floating card).
+                    if let selectedDate,
+                       let nearest = nearestPoint(to: selectedDate),
+                       point.id == nearest.id {
+                        RuleMark(x: .value("Selected", nearest.date))
+                            .foregroundStyle(DSColors.textSecondary.opacity(0.35))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            .zIndex(-1)
+                        PointMark(
+                            x: .value("Date", nearest.date),
+                            y: .value("Max weight", nearest.weight)
+                        )
+                        .foregroundStyle(DSColors.accent)
+                        .symbolSize(120)
+                    }
                 }
                 .frame(height: 200)
+                .chartYScale(domain: chartYDomain)
                 .chartYAxis {
-                    AxisMarks(position: .leading)
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                        AxisGridLine()
+                        AxisTick()
+                        AxisValueLabel {
+                            if let weight = value.as(Double.self) {
+                                Text("\(Int(weight.rounded())) \(weightUnit)")
+                                    .font(.caption2)
+                            }
+                        }
+                    }
+                }
+                .chartXSelection(value: $selectedDate)
+                .chartOverlay { proxy in
+                    if let selectedDate,
+                       let nearest = nearestPoint(to: selectedDate),
+                       let xPos = proxy.position(forX: nearest.date),
+                       let yPos = proxy.position(forY: nearest.weight) {
+                        // Floating card overlay. The proxy
+                        // returns positions in the chart's
+                        // content area; we clamp the x so the
+                        // card never runs off the chart edges.
+                        GeometryReader { geometry in
+                            let cardHalfWidth: CGFloat = 50
+                            let minX = cardHalfWidth + 4
+                            let maxX = geometry.size.width - cardHalfWidth - 4
+                            let clampedX = min(max(xPos, minX), maxX)
+                            let clampedY = max(yPos - 28, 20)
+
+                            chartTooltip(for: nearest)
+                                .position(x: clampedX, y: clampedY)
+                        }
+                    }
                 }
             }
         }
+    }
+
+    /// Y-axis domain for the progress chart. Rounds the data's
+    /// min/max out to a "nice" step and then pads by 10% on
+    /// each side so the line doesn't kiss the top and bottom
+    /// edges. The nice-step rounding keeps the axis from
+    /// snapping to the next round number below the data (e.g.
+    /// anchoring to 10 when the data actually starts at 11).
+    private var chartYDomain: ClosedRange<Double> {
+        let weights = chartPoints.map(\.weight)
+        let rawLo = weights.min() ?? 0
+        let rawHi = weights.max() ?? 0
+        let step = Self.niceStep(for: rawHi - rawLo)
+        let lo = (rawLo / step).rounded(.down) * step
+        let hi = (rawHi / step).rounded(.up) * step
+        let pad = max((hi - lo) * 0.1, step)
+        return (lo - pad)...(hi + pad)
+    }
+
+    /// Picks a "nice" tick step (1, 2.5, 5, 10, …) sized to
+    /// the data's range so axis labels read as clean numbers.
+    private static func niceStep(for range: Double) -> Double {
+        switch range {
+        case ..<5:    return 1
+        case ..<20:   return 2.5
+        case ..<50:   return 5
+        case ..<200:  return 10
+        case ..<500:  return 25
+        default:      return 50
+        }
+    }
+
+    /// Returns the chart point whose date is closest to the
+    /// given target, or nil if the chart has no data. Used by
+    /// the tooltip to snap the user's touch to a real
+    /// observation.
+    private func nearestPoint(to date: Date) -> ChartPoint? {
+        chartPoints.min { lhs, rhs in
+            abs(lhs.date.timeIntervalSince(date)) < abs(rhs.date.timeIntervalSince(date))
+        }
+    }
+
+    /// Small floating card showing the date and weight for the
+    /// highlighted chart point. Positioned by the caller via
+    /// `.position(x:y:)` so the card sits above the dot.
+    @ViewBuilder
+    private func chartTooltip(for point: ChartPoint) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(point.date.formatted(.dateTime.day().month(.abbreviated).year()))
+                .font(.caption2)
+                .foregroundStyle(DSColors.textSecondary)
+            Text("\(Int(point.weight.rounded())) \(weightUnit)")
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(DSColors.text)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(DSColors.surface)
+                .shadow(color: .black.opacity(0.15), radius: 4, y: 1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(DSColors.separator, lineWidth: 0.5)
+        )
+        .fixedSize()
     }
 
     @ViewBuilder
@@ -106,7 +223,7 @@ struct ExerciseHistoryView: View {
                             .foregroundStyle(DSColors.text)
                     }
                     HStack {
-                        Text("Last on")
+                        Text("Last")
                         Spacer()
                         Text(lastSet.createdAt, format: .dateTime.day().month().year())
                             .foregroundStyle(DSColors.textSecondary)
@@ -118,17 +235,29 @@ struct ExerciseHistoryView: View {
 
     @ViewBuilder
     private var paginationSection: some View {
-        HStack {
-            Button("Previous") { currentPage = max(1, currentPage - 1) }
-                .disabled(!(page?.hasPrev ?? false))
-            Spacer()
-            Text("Page \(currentPage)")
-                .font(.footnote)
+        HStack(spacing: DSSpacing.sm) {
+            Button { currentPage = max(1, currentPage - 1) } label: {
+                Image(systemName: "chevron.left")
+                    .font(.footnote.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(DSColors.textSecondary)
+            .disabled(!(page?.hasPrev ?? false))
+
+            Text("\(currentPage)")
+                .font(.footnote.weight(.semibold).monospacedDigit())
                 .foregroundStyle(DSColors.textSecondary)
-            Spacer()
-            Button("Next") { currentPage += 1 }
-                .disabled(!(page?.hasNext ?? false))
+                .frame(minWidth: 20)
+
+            Button { currentPage += 1 } label: {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(DSColors.textSecondary)
+            .disabled(!(page?.hasNext ?? false))
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var emptyState: some View {
@@ -154,14 +283,19 @@ struct ExerciseHistoryView: View {
     // MARK: - Data
 
     private func load() async {
-        if page == nil { isLoading = true }
+        let isFirstLoad = page == nil
+        if isFirstLoad { isLoading = true }
         defer { isLoading = false }
         do {
             let result = try await env.api.getExerciseHistory(id: exercise.id, page: currentPage)
             page = result
-            // Refresh the chart in the background; pagination
-            // should feel snappy.
-            Task { await loadChart() }
+            // The chart is a lifetime view of all sets, so it
+            // only needs to be fetched once — not on every page
+            // change. Caching the points makes pagination feel
+            // instant.
+            if isFirstLoad {
+                Task { await loadChart() }
+            }
         } catch let error as APIError {
             if case .unauthorized = error { return }
             errorMessage = error.errorDescription
@@ -204,6 +338,30 @@ private struct ChartPoint: Identifiable {
     let date: Date
     let weight: Double
     var id: TimeInterval { date.timeIntervalSince1970 }
+}
+
+/// A single row in the exercise-history list. Intentionally
+/// narrower than the dashboard's `SetRow`: the exercise name
+/// is implicit (we're already inside that exercise's screen),
+/// notes are dropped, and the time of day is hidden in favour
+/// of the date so rows scan cleanly when paging through
+/// history.
+private struct HistorySetRow: View {
+    let entry: ExerciseEntryDTO
+    let weightUnit: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(entry.createdAt, format: .dateTime.day().month(.abbreviated).year())
+                .font(.subheadline)
+                .foregroundStyle(DSColors.textSecondary)
+            Spacer()
+            Text("\(entry.reps) × \(String(format: "%.1f", entry.weight)) \(weightUnit)")
+                .font(.body.weight(.semibold).monospacedDigit())
+                .foregroundStyle(DSColors.text)
+        }
+        .padding(.vertical, DSSpacing.xxs)
+    }
 }
 
 #Preview {
