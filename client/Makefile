@@ -28,7 +28,7 @@ SIM_UUID_RE = [A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}
 # `simctl boot` starts the device headless.
 SIMULATOR_APP = $(shell xcode-select -p)/Applications/Simulator.app
 
-.PHONY: help gen build boot run test clean
+.PHONY: help gen build boot run clean
 
 help:
 	@echo "Stren iOS — available targets:"
@@ -37,7 +37,6 @@ help:
 	@echo "  make build  Compile for the booted simulator"
 	@echo "  make boot   Boot the first available iPhone simulator (no-op if one is already running)"
 	@echo "  make run    Build, install, and launch on the booted simulator (auto-boots one if needed)"
-	@echo "  make test   Run the unit-test target on the simulator"
 	@echo "  make clean  Wipe build artifacts"
 	@echo ""
 	@echo "Override the destination with DESTINATION=...  e.g."
@@ -150,14 +149,6 @@ run: build
 	echo "" && \
 	echo "✓ Stren is running on $$DEVICE (pid $$PID)" && \
 	echo "  The Simulator window should be on screen. If not, run: open \"$(SIMULATOR_APP)\""
-
-test:
-	xcodebuild \
-		-project $(XCODEPROJ) \
-		-scheme $(SCHEME) \
-		-configuration Debug \
-		-destination '$(DESTINATION)' \
-		test
 
 clean:
 	rm -rf build
