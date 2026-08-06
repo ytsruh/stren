@@ -1,7 +1,9 @@
 package models
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"stren/internal/db"
 )
@@ -177,5 +179,213 @@ func TestUser_HasWeightGoal(t *testing.T) {
 				t.Errorf("HasWeightGoal() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// --- Reminder preferences ---
+
+func TestUserRepository_UpdateUserReminder_RoundTrips(t *testing.T) {
+	// A full prefs update followed by GetUserByID must return the
+	// exact same values. The mapping has to survive the round-trip
+	// because the /profile form re-renders from the same row.
+	repo, database := userTestHarness(t)
+	defer database.Close()
+
+	created := &User{
+		Name:         "Reminder Round Trip",
+		Email:        "reminder-rt@example.com",
+		PasswordHash: "hash",
+	}
+	if err := repo.CreateUser(created); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	day := 3 // Wednesday
+	next := time.Date(2026, 8, 12, 18, 0, 0, 0, time.UTC)
+	prefs := ReminderPreferences{
+		Enabled:      true,
+		Frequency:    ReminderBiweekly,
+		DayOfWeek:    &day,
+		Time:         "18:00",
+		EmailEnabled: true,
+		PushEnabled:  false,
+		NextFireAt:   &next,
+	}
+	if err := repo.UpdateUserReminder(created.ID, prefs); err != nil {
+		t.Fatalf("UpdateUserReminder: %v", err)
+	}
+
+	got, err := repo.GetUserByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if !got.ReminderEnabled {
+		t.Error("ReminderEnabled = false, want true")
+	}
+	if got.ReminderFrequency != ReminderBiweekly {
+		t.Errorf("ReminderFrequency = %q, want %q", got.ReminderFrequency, ReminderBiweekly)
+	}
+	if got.ReminderDayOfWeek == nil || *got.ReminderDayOfWeek != 3 {
+		t.Errorf("ReminderDayOfWeek = %v, want 3", got.ReminderDayOfWeek)
+	}
+	if got.ReminderTime != "18:00" {
+		t.Errorf("ReminderTime = %q, want %q", got.ReminderTime, "18:00")
+	}
+	if !got.ReminderEmailEnabled {
+		t.Error("ReminderEmailEnabled = false, want true")
+	}
+	if got.ReminderPushEnabled {
+		t.Error("ReminderPushEnabled = true, want false")
+	}
+	if got.ReminderNextFireAt == nil || !got.ReminderNextFireAt.Equal(next) {
+		t.Errorf("ReminderNextFireAt = %v, want %v", got.ReminderNextFireAt, next)
+	}
+}
+
+func TestUserRepository_UpdateUserReminder_RejectsBadFrequency(t *testing.T) {
+	// A malformed frequency must fail before hitting the DB. This
+	// is the trust-boundary check: the form picker can only emit the
+	// four known values, but a hand-rolled POST should not silently
+	// write a typo.
+	repo, database := userTestHarness(t)
+	defer database.Close()
+
+	created := &User{Name: "x", Email: "x@example.com", PasswordHash: "h"}
+	if err := repo.CreateUser(created); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	err := repo.UpdateUserReminder(created.ID, ReminderPreferences{
+		Enabled:   true,
+		Frequency: ReminderFrequency("yearly"),
+		Time:      "09:00",
+	})
+	if err == nil {
+		t.Error("expected error for invalid frequency, got nil")
+	}
+}
+
+func TestUserRepository_UpdateUserReminder_DayOfWeekNullable(t *testing.T) {
+	// Daily reminders should round-trip with a nil DayOfWeek
+	// (the form does not show the picker, so it does not submit a
+	// value). The repo must write SQL NULL, not 0 (which the
+	// picker would re-render as Sunday).
+	repo, database := userTestHarness(t)
+	defer database.Close()
+
+	created := &User{Name: "x", Email: "x@example.com", PasswordHash: "h"}
+	if err := repo.CreateUser(created); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := repo.UpdateUserReminder(created.ID, ReminderPreferences{
+		Enabled:      true,
+		Frequency:    ReminderDaily,
+		Time:         "07:00",
+		EmailEnabled: true,
+	}); err != nil {
+		t.Fatalf("UpdateUserReminder: %v", err)
+	}
+
+	got, err := repo.GetUserByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if got.ReminderDayOfWeek != nil {
+		t.Errorf("ReminderDayOfWeek = %d, want nil for daily", *got.ReminderDayOfWeek)
+	}
+}
+
+func TestUserRepository_ListUsersDueForReminder(t *testing.T) {
+	// Three users: one due, one not due, one off. The query must
+	// return only the due row, regardless of the off row's NULL
+	// next_fire_at or the future-dated row.
+	repo, database := userTestHarness(t)
+	defer database.Close()
+
+	now := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
+	past := now.Add(-1 * time.Hour)
+	future := now.Add(24 * time.Hour)
+	day := 3
+
+	mk := func(name, email string, prefs ReminderPreferences) string {
+		u := &User{Name: name, Email: email, PasswordHash: "h"}
+		if err := repo.CreateUser(u); err != nil {
+			t.Fatalf("CreateUser %s: %v", name, err)
+		}
+		if err := repo.UpdateUserReminder(u.ID, prefs); err != nil {
+			t.Fatalf("UpdateUserReminder %s: %v", name, err)
+		}
+		return u.ID
+	}
+	dueID := mk("Due", "due@example.com", ReminderPreferences{
+		Enabled: true, Frequency: ReminderWeekly, DayOfWeek: &day,
+		Time: "10:00", EmailEnabled: true, NextFireAt: &past,
+	})
+	_ = mk("Future", "future@example.com", ReminderPreferences{
+		Enabled: true, Frequency: ReminderWeekly, DayOfWeek: &day,
+		Time: "10:00", EmailEnabled: true, NextFireAt: &future,
+	})
+	_ = mk("Off", "off@example.com", ReminderPreferences{
+		Enabled: false, Frequency: ReminderOff, Time: "10:00",
+	})
+
+	users, err := repo.ListUsersDueForReminder(context.Background(), now)
+	if err != nil {
+		t.Fatalf("ListUsersDueForReminder: %v", err)
+	}
+	if len(users) != 1 {
+		t.Fatalf("len(users) = %d, want 1", len(users))
+	}
+	if users[0].ID != dueID {
+		t.Errorf("users[0].ID = %q, want %q", users[0].ID, dueID)
+	}
+}
+
+func TestUserRepository_MarkUserReminderFired_AdvancesNextFire(t *testing.T) {
+	// After the orchestrator fires, the tick must not pick the
+	// user up again until the new next_fire_at passes. The repo's
+	// MarkUserReminderFired is the only path that advances it.
+	repo, database := userTestHarness(t)
+	defer database.Close()
+
+	created := &User{Name: "Fired", Email: "fired@example.com", PasswordHash: "h"}
+	if err := repo.CreateUser(created); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	day := 0
+	first := time.Date(2026, 8, 9, 9, 0, 0, 0, time.UTC)
+	if err := repo.UpdateUserReminder(created.ID, ReminderPreferences{
+		Enabled: true, Frequency: ReminderWeekly, DayOfWeek: &day,
+		Time: "09:00", EmailEnabled: true, NextFireAt: &first,
+	}); err != nil {
+		t.Fatalf("UpdateUserReminder: %v", err)
+	}
+
+	second := time.Date(2026, 8, 16, 9, 0, 0, 0, time.UTC)
+	firedAt := time.Date(2026, 8, 9, 9, 1, 0, 0, time.UTC)
+	if err := repo.MarkUserReminderFired(context.Background(), created.ID, firedAt, second); err != nil {
+		t.Fatalf("MarkUserReminderFired: %v", err)
+	}
+
+	got, err := repo.GetUserByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if got.ReminderNextFireAt == nil || !got.ReminderNextFireAt.Equal(second) {
+		t.Errorf("ReminderNextFireAt = %v, want %v", got.ReminderNextFireAt, second)
+	}
+	if got.ReminderLastFiredAt == nil || !got.ReminderLastFiredAt.Equal(firedAt) {
+		t.Errorf("ReminderLastFiredAt = %v, want %v", got.ReminderLastFiredAt, firedAt)
+	}
+
+	// And the "due now" query at the original fire time must no
+	// longer pick this user up.
+	due, err := repo.ListUsersDueForReminder(context.Background(), firedAt)
+	if err != nil {
+		t.Fatalf("ListUsersDueForReminder: %v", err)
+	}
+	for _, u := range due {
+		if u.ID == created.ID {
+			t.Error("user still appears due after MarkUserReminderFired advanced next_fire_at")
+		}
 	}
 }

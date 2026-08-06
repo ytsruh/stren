@@ -206,6 +206,60 @@ func TestWeightPage_ProgressCardHiddenWithoutEntries(t *testing.T) {
 	}
 }
 
+// chartCardClass is the class used by the chart wrapper div in
+// list.templ. Used by the empty/single-entry regression tests below
+// to assert that the wrapper itself is not rendered (instead of
+// just being empty inside).
+const chartCardClass = `card p-2`
+
+// TestWeightPage_ChartWrapperHiddenWithFewerThanTwoEntries locks in
+// the fix for the "weird grey box at the top of the page" bug: the
+// chart card (`card p-2` wrapper + `h-40`) is only rendered when
+// there are at least two entries, since Chart.js itself renders
+// nothing with fewer than two data points and the empty wrapper
+// was producing an empty grey card above the list.
+func TestWeightPage_ChartWrapperHiddenWithFewerThanTwoEntries(t *testing.T) {
+	day := time.Date(2026, 1, 9, 8, 0, 0, 0, time.UTC)
+	target := 80.0
+
+	t.Run("no entries: no chart card", func(t *testing.T) {
+		html := renderToString(t, WeightPage(nil, "Test User", true, false, &target, "kg"))
+		if strings.Contains(html, chartCardClass) {
+			t.Error("expected chart card wrapper to be omitted when there are no entries")
+		}
+	})
+
+	t.Run("one entry: no chart card", func(t *testing.T) {
+		// Single-entry case was the user-reported "still asking for a
+		// first entry" symptom: with one entry the chart inside the
+		// wrapper rendered nothing (Chart needs >= 2 labels), leaving
+		// the grey card visible.
+		entries := []models.WeightEntry{
+			{ID: "w1", Weight: 80, CreatedAt: day},
+		}
+		html := renderToString(t, WeightPage(entries, "Test User", true, false, &target, "kg"))
+		if strings.Contains(html, chartCardClass) {
+			t.Error("expected chart card wrapper to be omitted when there is one entry")
+		}
+	})
+
+	t.Run("two entries: chart card present", func(t *testing.T) {
+		entries := []models.WeightEntry{
+			{ID: "w1", Weight: 80, CreatedAt: day},
+			{ID: "w2", Weight: 79, CreatedAt: day.Add(24 * time.Hour)},
+		}
+		html := renderToString(t, WeightPage(entries, "Test User", true, false, &target, "kg"))
+		if !strings.Contains(html, chartCardClass) {
+			t.Error("expected chart card wrapper to be rendered when there are two or more entries")
+		}
+		// And the progress card should be present because the user
+		// has a target weight and we have >= 2 entries.
+		if !strings.Contains(html, "Progress") {
+			t.Error("expected progress card to render when a target weight and >=2 entries are set")
+		}
+	})
+}
+
 // TestWeightRow_RendersCompareCheckboxWhenPhoto ensures entries that
 // have a photo expose a checkbox so the user can pick them for the
 // image-comparison feature.
@@ -382,17 +436,25 @@ func TestCompareModal_OmitsDeltaWhenEmpty(t *testing.T) {
 }
 
 // TestCompareBar_HiddenByDefault ensures the bar starts hidden so the
-// table is unobstructed on initial page load.
+// table is unobstructed on initial page load, and is rendered as a
+// fixed-positioned floating bar (not an in-flow inline card) so it
+// stays visible while the user scrolls.
 func TestCompareBar_HiddenByDefault(t *testing.T) {
 	html := renderToString(t, CompareBar())
 	if !strings.Contains(html, `id="weight-compare-bar"`) {
 		t.Fatal("expected compare bar in DOM")
 	}
-	if !strings.Contains(html, `class="hidden card p-3 mb-4`) {
-		t.Error("expected compare bar to start hidden and rendered as an inline card")
+	if !strings.Contains(html, `class="hidden`) {
+		t.Error("expected compare bar to start hidden")
 	}
-	if strings.Contains(html, `fixed bottom-0`) {
-		t.Error("expected compare bar to no longer be position:fixed")
+	if !strings.Contains(html, `fixed`) {
+		t.Error("expected compare bar to be position:fixed (floating)")
+	}
+	if !strings.Contains(html, `bottom-4`) {
+		t.Error("expected compare bar to be anchored to the bottom of the viewport")
+	}
+	if strings.Contains(html, `mb-4 `) {
+		t.Error("expected compare bar to no longer carry the inline mb-4 margin")
 	}
 	if !strings.Contains(html, `id="weight-compare-go"`) {
 		t.Error("expected compare button in bar")

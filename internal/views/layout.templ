@@ -4,14 +4,14 @@ import "stren/internal/models"
 import "stren/internal/views/components"
 
 type PageData struct {
-	Title             string
-	ExerciseEntries   []models.ExerciseEntry
-	Exercises         []models.Exercise
-	ExerciseEntry     *models.ExerciseEntry
-	UserName          string
-	IsAuthenticated   bool
-	IsAdmin           bool
-	CurrentPath       string
+	Title           string
+	ExerciseEntries []models.ExerciseEntry
+	Exercises       []models.Exercise
+	ExerciseEntry   *models.ExerciseEntry
+	UserName        string
+	IsAuthenticated bool
+	IsAdmin         bool
+	CurrentPath     string
 }
 
 // Layout is the base layout for all pages
@@ -56,9 +56,27 @@ templ Layout(data PageData) {
 			</script>
 			<link rel="stylesheet" href="/css/styles.css"/>
 			<link rel="stylesheet" href="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.css"/>
-			<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+			<script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+			// Pin htmx 1.x defaults we rely on. htmx 2 flipped
+			// `scrollBehavior` from "smooth" to "auto"; the
+			// exercise-history pagination uses `hx-push-url="true"`
+			// so restoring the v1 behaviour keeps the page-change
+			// animation identical to today.
+			<script>
+				if (window.htmx) {
+					htmx.config.scrollBehavior = 'smooth';
+				}
+			</script>
 			<script src="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.js" defer></script>
-			<script src="https://cdn.jsdelivr.net/npm/basecoat-css@0.3.11/dist/js/all.min.js" defer></script>
+			<script src="/js/basecoat.js" defer></script>
+			// canvas-confetti is loaded on every page so the goals
+			// page can fire its celebration burst without a per-page
+			// script tag. The library is a small (~9KB) zero-dep
+			// function (window.confetti) and is a no-op when no
+			// event fires. Loaded after the basecoat script so
+			// blocking-CDN failures don't disrupt the rest of the
+			// app.
+			<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
 		</head>
 		<body>
 			if data.IsAuthenticated {
@@ -134,6 +152,17 @@ templ Layout(data PageData) {
 											<span>Weight</span>
 										</a>
 									</li>
+									<li>
+										<a
+											href="/goals"
+											if data.CurrentPath == "/goals" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "target", Size: 18})
+											<span>Goals</span>
+										</a>
+									</li>
 								</ul>
 							</div>
 							if data.IsAdmin {
@@ -162,31 +191,31 @@ templ Layout(data PageData) {
 												<span>Users</span>
 											</a>
 										</li>
-						<li>
-							<a
-								href="/admin/feedback"
-								if data.CurrentPath == "/admin/feedback" {
-									aria-current="page"
-								}
-							>
-								@components.Icon(components.IconProps{Name: "message", Size: 18})
-								<span>Feedback</span>
-							</a>
-						</li>
-						<li>
-							<a
-								href="/admin/notifications"
-								if data.CurrentPath == "/admin/notifications" {
-									aria-current="page"
-								}
-							>
-								@components.Icon(components.IconProps{Name: "bell", Size: 18})
-								<span>Notifications</span>
-							</a>
-						</li>
-					</ul>
-				</div>
-			}
+										<li>
+											<a
+												href="/admin/feedback"
+												if data.CurrentPath == "/admin/feedback" {
+													aria-current="page"
+												}
+											>
+												@components.Icon(components.IconProps{Name: "message", Size: 18})
+												<span>Feedback</span>
+											</a>
+										</li>
+										<li>
+											<a
+												href="/admin/notifications"
+												if data.CurrentPath == "/admin/notifications" {
+													aria-current="page"
+												}
+											>
+												@components.Icon(components.IconProps{Name: "bell", Size: 18})
+												<span>Notifications</span>
+											</a>
+										</li>
+									</ul>
+								</div>
+							}
 							<div>
 								<h3>Account</h3>
 								<ul>
@@ -275,37 +304,39 @@ templ Layout(data PageData) {
 					{ children... }
 				</div>
 			</main>
-		<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
-			<form method="dialog">
-				<header>
-					<h3>Confirm</h3>
-					<p id="confirm-message"></p>
-				</header>
-				<footer class="flex items-center gap-3">
-					<button type="button" commandfor="confirm-dialog" command="close" class="btn-outline">Cancel</button>
-					{{/*
-						The OK button defaults to `btn-destructive`
-						because the dialog was originally built for
-						"are you sure you want to delete …?"
-						confirmations (the only htmx-confirm uses in
-						the app today). Non-destructive callers
-						(e.g. the weight export) swap the class to
-						`btn` (or another non-destructive variant)
-						right before showModal() and restore the
-						original className on the dialog's `close`
-						event — see WeightExportScript in
-						internal/views/weight/list.templ for the
-						canonical example.
-					*/}}
-					<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
-						<span class="btn-text">Confirm</span>
-						<span id="confirm-spinner" class="htmx-indicator flex items-center justify-center animate-spin">
-							@components.Icon(components.IconProps{Name: "loader", Size: 18})
-						</span>
-					</button>
-				</footer>
-			</form>
-		</dialog>
+			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
+				<form method="dialog">
+					<header>
+						<h3>Confirm</h3>
+						<p id="confirm-message"></p>
+					</header>
+					<footer class="flex items-center gap-3">
+						<button type="button" commandfor="confirm-dialog" command="close" class="btn-outline">Cancel</button>
+						{{
+							/*
+								The OK button defaults to `btn-destructive`
+								because the dialog was originally built for
+								"are you sure you want to delete …?"
+								confirmations (the only htmx-confirm uses in
+								the app today). Non-destructive callers
+								(e.g. the weight export) swap the class to
+								`btn` (or another non-destructive variant)
+								right before showModal() and restore the
+								original className on the dialog's `close`
+								event — see WeightExportScript in
+								internal/views/weight/list.templ for the
+								canonical example.
+							*/
+						}}
+						<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
+							<span class="btn-text">Confirm</span>
+							<span id="confirm-spinner" class="htmx-indicator flex items-center justify-center animate-spin">
+								@components.Icon(components.IconProps{Name: "loader", Size: 18})
+							</span>
+						</button>
+					</footer>
+				</form>
+			</dialog>
 			<script>
 				document.body.addEventListener('htmx:confirm', function(evt) {
 					if (!evt.target.hasAttribute('hx-confirm')) return;
@@ -329,7 +360,7 @@ templ Layout(data PageData) {
 					}, 500);
 				});
 			</script>
-		<script>
+			<script>
 			if ('serviceWorker' in navigator) {
 				navigator.serviceWorker.register('/sw.js').catch(function(err) {
 					console.error('Service worker registration failed:', err);
@@ -348,21 +379,21 @@ templ Layout(data PageData) {
 				});
 			}
 		</script>
-		<script src="/js/push.js" defer></script>
-		<div id="toaster" class="toaster"></div>
-		// Hidden toast templates. Widgets that need to render a
-		// toast from client-side code (e.g. the weight photo
-		// widget, which uploads directly to R2 via a presigned
-		// URL and so can't piggy-back its toast onto the upload
-		// response) clone the right template and fill in the
-		// title/description. The exercise image widget uses the
-		// server-rendered views.Toast directly via htmx and
-		// doesn't need these. The icon SVGs are defined once
-		// here so they don't get duplicated into client-side JS.
-		@toastTemplate("success")
-		@toastTemplate("error")
-		@toastTemplate("warning")
-		@toastTemplate("default")
+			<script src="/js/push.js" defer></script>
+			<div id="toaster" class="toaster"></div>
+			// Hidden toast templates. Widgets that need to render a
+			// toast from client-side code (e.g. the weight photo
+			// widget, which uploads directly to R2 via a presigned
+			// URL and so can't piggy-back its toast onto the upload
+			// response) clone the right template and fill in the
+			// title/description. The exercise image widget uses the
+			// server-rendered views.Toast directly via htmx and
+			// doesn't need these. The icon SVGs are defined once
+			// here so they don't get duplicated into client-side JS.
+			@toastTemplate("success")
+			@toastTemplate("error")
+			@toastTemplate("warning")
+			@toastTemplate("default")
 		</body>
 	</html>
 }

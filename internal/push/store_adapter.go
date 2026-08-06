@@ -20,6 +20,7 @@ import (
 type StoreAdapter struct {
 	Repo interface {
 		ListAll(ctx context.Context) ([]models.PushSubscription, error)
+		ListForUser(ctx context.Context, userID string) ([]models.PushSubscription, error)
 		DeleteByEndpoint(ctx context.Context, endpoint string) error
 	}
 }
@@ -28,6 +29,7 @@ type StoreAdapter struct {
 // push.NewService.
 func NewStoreAdapter(repo interface {
 	ListAll(ctx context.Context) ([]models.PushSubscription, error)
+	ListForUser(ctx context.Context, userID string) ([]models.PushSubscription, error)
 	DeleteByEndpoint(ctx context.Context, endpoint string) error
 }) *StoreAdapter {
 	return &StoreAdapter{Repo: repo}
@@ -40,6 +42,23 @@ func (a *StoreAdapter) ListAll(ctx context.Context) ([]Subscription, error) {
 	if err != nil {
 		return nil, err
 	}
+	return subscriptionsToWire(rows), nil
+}
+
+// ListForUser returns only the subscriptions belonging to userID in
+// the wire-level form. Used by push.Service.BroadcastToUser.
+func (a *StoreAdapter) ListForUser(ctx context.Context, userID string) ([]Subscription, error) {
+	rows, err := a.Repo.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return subscriptionsToWire(rows), nil
+}
+
+// subscriptionsToWire is the shared conversion helper so the two list
+// paths cannot drift (e.g. a future push.Subscription field added in
+// one place but not the other).
+func subscriptionsToWire(rows []models.PushSubscription) []Subscription {
 	out := make([]Subscription, len(rows))
 	for i, r := range rows {
 		out[i] = Subscription{
@@ -48,7 +67,7 @@ func (a *StoreAdapter) ListAll(ctx context.Context) ([]Subscription, error) {
 			Auth:     r.Auth,
 		}
 	}
-	return out, nil
+	return out
 }
 
 // DeleteByEndpoint delegates to the underlying repository. It is

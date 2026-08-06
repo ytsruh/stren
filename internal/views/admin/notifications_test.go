@@ -8,21 +8,30 @@ import (
 	"stren/internal/reminders"
 )
 
+// renderToString is the templ test helper used by this file. It
+// lives in views_test.go (same package) and renders a templ
+// component into a string the test can substring-check.
+
 func TestAdminWeightReminderResult_ShowsCounts(t *testing.T) {
-	// Happy path: 5 users, 5 emails sent, 0 failed, push
-	// reached 4 devices. The card must surface every
-	// important number so the admin can confirm the run
-	// looked right at a glance.
-	html := renderToString(t, AdminWeightReminderResult(reminders.RunResult{
-		Users:      5,
-		EmailsSent: 5,
-		PushSent:   4,
-		Duration:   1234 * time.Millisecond,
+	// Happy path: 5 users due, all 5 emails sent, push
+	// reached 4 devices across the per-user broadcasts.
+	// The card must surface the aggregate counts so the
+	// admin can confirm the run looked right at a glance.
+	html := renderToString(t, AdminWeightReminderResult(reminders.TickResult{
+		Users:    5,
+		Duration: 1234 * time.Millisecond,
+		Results: []reminders.UserReminderResult{
+			{UserName: "Alice", UserEmail: "alice@example.com", EmailSent: true, PushSent: 1},
+			{UserName: "Bob", UserEmail: "bob@example.com", EmailSent: true, PushSent: 1},
+			{UserName: "Carol", UserEmail: "carol@example.com", EmailSent: true, PushSent: 1},
+			{UserName: "Dave", UserEmail: "dave@example.com", EmailSent: true, PushSent: 1},
+			{UserName: "Eve", UserEmail: "eve@example.com", EmailSent: true},
+		},
 	}))
 
 	for _, want := range []string{
-		"Weekly weight reminder sent",
-		">5</dd>",     // Users
+		"Weight reminders fired",
+		">5</dd>",     // Users due
 		"Emails sent", // the "Emails sent" label
 		"Push sent",
 		"Duration:",
@@ -34,68 +43,81 @@ func TestAdminWeightReminderResult_ShowsCounts(t *testing.T) {
 	}
 }
 
-func TestAdminWeightReminderResult_ShowsFailedAddresses(t *testing.T) {
-	// Partial failure: 3 of 5 users got the email; the
-	// card must list the failed addresses inline so the
-	// operator can spot a pattern.
-	html := renderToString(t, AdminWeightReminderResult(reminders.RunResult{
-		Users:                 5,
-		EmailsSent:            3,
-		EmailsFailed:          2,
-		EmailsFailedAddresses: []string{"alice@example.com", "bob@example.com"},
+func TestAdminWeightReminderResult_ShowsPerUserOutcomes(t *testing.T) {
+	// Partial failure: 3 of 5 users got the email, one
+	// had a transport error, one had push disabled. The
+	// card must break each user's outcome out into the
+	// three states (sent / skipped / failed) so the
+	// operator can spot patterns without grepping logs.
+	html := renderToString(t, AdminWeightReminderResult(reminders.TickResult{
+		Users:    3,
+		Duration: 200 * time.Millisecond,
+		Results: []reminders.UserReminderResult{
+			{UserName: "Alice", UserEmail: "alice@example.com", EmailSent: true, PushSkipped: true, PushSkipReason: "user has push disabled"},
+			{UserName: "Bob", UserEmail: "bob@example.com", EmailFailed: true},
+			{UserName: "Carol", UserEmail: "carol@example.com", EmailSent: true, PushSent: 1},
+		},
 	}))
 
 	if !strings.Contains(html, "Emails failed:") {
 		t.Error("expected 'Emails failed:' label")
 	}
-	if !strings.Contains(html, "Failed email addresses (2)") {
-		t.Error("expected failed-addresses details header with count")
+	if !strings.Contains(html, "Per-user outcomes (3)") {
+		t.Error("expected per-user outcomes header with count")
 	}
-	for _, addr := range []string{"alice@example.com", "bob@example.com"} {
-		if !strings.Contains(html, addr) {
-			t.Errorf("expected failed address %q in card", addr)
-		}
+	if !strings.Contains(html, "alice@example.com") {
+		t.Error("expected alice@example.com in per-user list")
 	}
-}
-
-func TestAdminWeightReminderResult_ShowsPushError(t *testing.T) {
-	// The push service itself errored (e.g. the store was
-	// unreadable). The card must surface the error message
-	// rather than just the broadcast counts.
-	html := renderToString(t, AdminWeightReminderResult(reminders.RunResult{
-		Users:     2,
-		PushError: "push service unreachable",
-	}))
-
-	if !strings.Contains(html, "Push service error: push service unreachable") {
-		t.Error("expected push service error message in card")
+	if !strings.Contains(html, "push skipped") {
+		t.Error("expected 'push skipped' outcome for Alice")
+	}
+	if !strings.Contains(html, "email failed") {
+		t.Error("expected 'email failed' outcome for Bob")
 	}
 }
 
-func TestAdminWeightReminderResult_CapsFailedAddresses(t *testing.T) {
-	// When there are more failed addresses than the
-	// in-card cap, the list is still rendered (no data
-	// loss) and a "Showing all N addresses" hint keeps
-	// the operator from misreading the truncated list.
-	html := renderToString(t, AdminWeightReminderResult(reminders.RunResult{
-		Users:        30,
-		EmailsSent:   5,
-		EmailsFailed: 25,
-		EmailsFailedAddresses: []string{
-			"u1@example.com", "u2@example.com", "u3@example.com",
-			"u4@example.com", "u5@example.com", "u6@example.com",
-			"u7@example.com", "u8@example.com", "u9@example.com",
-			"u10@example.com", "u11@example.com", "u12@example.com",
-			"u13@example.com", "u14@example.com", "u15@example.com",
-			"u16@example.com", "u17@example.com", "u18@example.com",
-			"u19@example.com", "u20@example.com", "u21@example.com",
-			"u22@example.com", "u23@example.com", "u24@example.com",
-			"u25@example.com",
+func TestAdminWeightReminderResult_ShowsPushAggregateFailure(t *testing.T) {
+	// A per-user push broadcast returned a transport
+	// failure (e.g. the user-repo read errored). The card
+	// must surface the per-user push failure so the
+	// operator can see which device fan-outs failed.
+	html := renderToString(t, AdminWeightReminderResult(reminders.TickResult{
+		Users:    2,
+		Duration: 100 * time.Millisecond,
+		Results: []reminders.UserReminderResult{
+			{UserName: "Alice", UserEmail: "alice@example.com", EmailSent: true, PushFailed: 1, PushSkipReason: "db down"},
+			{UserName: "Bob", UserEmail: "bob@example.com", EmailSent: true, PushSkipped: true, PushSkipReason: "no active push subscriptions"},
 		},
 	}))
 
-	if !strings.Contains(html, "Showing all 25 addresses") {
-		t.Error("expected 'Showing all 25 addresses' hint when above cap")
+	if !strings.Contains(html, "Push failed:") {
+		t.Error("expected 'Push failed:' label")
+	}
+	if !strings.Contains(html, "db down") {
+		t.Error("expected per-user push failure reason")
+	}
+}
+
+func TestAdminWeightReminderResult_CapsPerUserList(t *testing.T) {
+	// When there are more per-user rows than the in-card
+	// cap, the list is collapsed and a "Showing all N"
+	// hint keeps the operator from misreading the
+	// truncated list. Mirrors the previous design's
+	// "Showing all N addresses" hint.
+	results := make([]reminders.UserReminderResult, 30)
+	for i := range results {
+		results[i] = reminders.UserReminderResult{
+			UserName: "User", UserEmail: "u@example.com", EmailSent: true,
+		}
+	}
+	html := renderToString(t, AdminWeightReminderResult(reminders.TickResult{
+		Users:    30,
+		Results:  results,
+		Duration: 500 * time.Millisecond,
+	}))
+
+	if !strings.Contains(html, "Showing all 30 users") {
+		t.Error("expected 'Showing all 30 users' hint when above cap")
 	}
 }
 
@@ -103,12 +125,29 @@ func TestAdminWeightReminderResult_DurationFormatsSubSecond(t *testing.T) {
 	// A fast run (under a second) should display in ms,
 	// not as "0.0s" — the operator cares whether the
 	// run was instant or a few hundred ms.
-	html := renderToString(t, AdminWeightReminderResult(reminders.RunResult{
+	html := renderToString(t, AdminWeightReminderResult(reminders.TickResult{
 		Users:    0,
 		Duration: 247 * time.Millisecond,
 	}))
 	if !strings.Contains(html, "247ms") {
 		t.Errorf("expected '247ms' in result card, got: %q", html)
+	}
+}
+
+func TestAdminWeightReminderResult_NoUsersRendersQuietly(t *testing.T) {
+	// When the due-user list is empty (the common case
+	// when nobody has scheduled a reminder for this hour),
+	// the card must still render but with no per-user
+	// section so the admin does not see an empty header.
+	html := renderToString(t, AdminWeightReminderResult(reminders.TickResult{
+		Users:    0,
+		Duration: 5 * time.Millisecond,
+	}))
+	if !strings.Contains(html, "Weight reminders fired") {
+		t.Error("expected title in result card")
+	}
+	if strings.Contains(html, "Per-user outcomes") {
+		t.Error("did not expect per-user section when no users were due")
 	}
 }
 
@@ -123,7 +162,7 @@ func TestAdminNotificationsPage_ContainsWeightReminderButton(t *testing.T) {
 		`hx-post="/admin/notifications/send-weight-reminder"`,
 		`id="weight-reminder-button"`,
 		`id="weight-reminder-spinner"`,
-		`hx-confirm="Send the weekly weight reminder to every user now?`,
+		`Send all due reminders now`,
 		`hx-target="#send-result"`,
 		`hx-disabled-elt="this"`,
 	} {

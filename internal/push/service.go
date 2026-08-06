@@ -14,6 +14,11 @@ type SubscriptionStore interface {
 	// ListAll returns every subscription in the system, regardless of
 	// which user owns it. Used by the admin broadcast.
 	ListAll(ctx context.Context) ([]Subscription, error)
+	// ListForUser returns only the subscriptions that belong to the
+	// given user. Used by the per-user reminder broadcast so a user
+	// with the push channel enabled only gets notifications on their
+	// own devices.
+	ListForUser(ctx context.Context, userID string) ([]Subscription, error)
 	// DeleteByEndpoint removes a single subscription by its push
 	// service endpoint URL. Called when the push service reports the
 	// device as gone (404/410). It is a no-op if the endpoint does
@@ -107,10 +112,37 @@ func (s *Service) Broadcast(ctx context.Context, msg Message) (BroadcastResult, 
 	if err != nil {
 		return BroadcastResult{}, err
 	}
+	return s.fanOut(ctx, subs, msg), nil
+}
 
+// BroadcastToUser sends msg to every subscription owned by userID.
+// Used by the per-user reminder orchestrator so a user with the push
+// channel enabled only sees notifications on their own devices (not
+// every active subscription in the system, which is the admin
+// broadcast's behavior).
+//
+// The contract mirrors Broadcast: a nil result is never returned, and
+// the only error path is the store read failing. A user with zero
+// subscriptions returns a zero result, which the orchestrator
+// translates to "push skipped" rather than "push failed".
+func (s *Service) BroadcastToUser(ctx context.Context, userID string, msg Message) (BroadcastResult, error) {
+	subs, err := s.store.ListForUser(ctx, userID)
+	if err != nil {
+		return BroadcastResult{}, err
+	}
+	return s.fanOut(ctx, subs, msg), nil
+}
+
+// fanOut is the shared worker-pool + result-folding body of
+// Broadcast and BroadcastToUser. Both call it with the already-loaded
+// subscription slice and the message, so the only thing that differs
+// is the store method used to load the subscriptions. Kept private so
+// the public surface stays small and the worker-pool invariants live
+// in one place.
+func (s *Service) fanOut(ctx context.Context, subs []Subscription, msg Message) BroadcastResult {
 	result := BroadcastResult{Total: len(subs)}
 	if len(subs) == 0 {
-		return result, nil
+		return result
 	}
 
 	workers := s.maxWorkers
@@ -182,7 +214,7 @@ func (s *Service) Broadcast(ctx context.Context, msg Message) (BroadcastResult, 
 		}
 	}
 
-	return result, nil
+	return result
 }
 
 // truncate clips a string to max runes with an ellipsis suffix. Used

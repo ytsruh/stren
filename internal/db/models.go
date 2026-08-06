@@ -50,6 +50,19 @@ type Feedback struct {
 	UpdatedAt sql.NullTime
 }
 
+type Goal struct {
+	ID          string
+	UserID      string
+	Title       string
+	Description sql.NullString
+	StartDate   sql.NullTime
+	TargetDate  sql.NullTime
+	EndDate     sql.NullTime
+	CompletedAt sql.NullTime
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type PushSubscription struct {
 	ID         string
 	UserID     string
@@ -61,15 +74,23 @@ type PushSubscription struct {
 }
 
 type User struct {
-	ID           string
-	Name         string
-	Email        string
-	PasswordHash string
-	IsAdmin      int64
-	TargetWeight sql.NullFloat64
-	WeightUnit   string
-	CreatedAt    sql.NullTime
-	UpdatedAt    sql.NullTime
+	ID                   string
+	Name                 string
+	Email                string
+	PasswordHash         string
+	IsAdmin              int64
+	TargetWeight         sql.NullFloat64
+	WeightUnit           string
+	ReminderEnabled      int64
+	ReminderFrequency    string
+	ReminderDayOfWeek    sql.NullInt64
+	ReminderTime         string
+	ReminderEmailEnabled int64
+	ReminderPushEnabled  int64
+	ReminderNextFireAt   sql.NullTime
+	ReminderLastFiredAt  sql.NullTime
+	CreatedAt            sql.NullTime
+	UpdatedAt            sql.NullTime
 }
 
 type WeightEntry struct {

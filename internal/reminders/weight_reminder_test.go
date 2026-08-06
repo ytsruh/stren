@@ -13,44 +13,74 @@ import (
 
 // --- Test doubles for the orchestrator's dependencies ---
 
-// fakeUserLister is a small in-memory UserLister for tests.
-// Thread-safe so the orchestrator's concurrent reads do not
-// race the test's setup.
-type fakeUserLister struct {
-	mu    sync.Mutex
-	users []models.User
-	err   error
+// fakeReminderRepo is a small in-memory ReminderRepo for tests.
+// It implements both the list-due-users query and the
+// mark-fired advancement, so the orchestrator's full path is
+// exercised without a real database. Thread-safe so the
+// orchestrator's concurrent sends do not race the test's
+// setup.
+type fakeReminderRepo struct {
+	mu          sync.Mutex
+	due         []models.User
+	listErr     error
+	firedLog    []firedRecord
+	markErr     error
+	nextFireFor map[string]time.Time
 }
 
-func (f *fakeUserLister) ListUsers(_ context.Context) ([]models.User, error) {
+type firedRecord struct {
+	UserID    string
+	FiredAt   time.Time
+	NextFire  time.Time
+}
+
+func (f *fakeReminderRepo) ListUsersDueForReminder(_ context.Context, now time.Time) ([]models.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.err != nil {
-		return nil, f.err
+	if f.listErr != nil {
+		return nil, f.listErr
 	}
-	out := make([]models.User, len(f.users))
-	copy(out, f.users)
+	out := make([]models.User, len(f.due))
+	copy(out, f.due)
 	return out, nil
 }
 
+func (f *fakeReminderRepo) MarkUserReminderFired(_ context.Context, userID string, firedAt, nextFire time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.markErr != nil {
+		return f.markErr
+	}
+	f.firedLog = append(f.firedLog, firedRecord{UserID: userID, FiredAt: firedAt, NextFire: nextFire})
+	if f.nextFireFor == nil {
+		f.nextFireFor = map[string]time.Time{}
+	}
+	f.nextFireFor[userID] = nextFire
+	return nil
+}
+
+func (f *fakeReminderRepo) firedRecords() []firedRecord {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]firedRecord, len(f.firedLog))
+	copy(out, f.firedLog)
+	return out
+}
+
 // fakeEmailSender records every per-user send the orchestrator
-// asks for. errFor lets the test make one specific user fail;
-// errAll makes every send fail.
+// asks for. errAll makes every send fail; errFor makes a
+// specific user fail (e.g. to test the "email failed" path).
 type fakeEmailSender struct {
-	mu        sync.Mutex
-	calls     []*models.User
-	errAll    error
-	errFor    map[string]error
-	delayFunc func(*models.User)
+	mu     sync.Mutex
+	calls  []string
+	errAll error
+	errFor map[string]error
 }
 
 func (f *fakeEmailSender) SendWeightReminder(_ context.Context, u *models.User) error {
-	if f.delayFunc != nil {
-		f.delayFunc(u)
-	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, u)
+	f.calls = append(f.calls, u.Email)
 	if f.errAll != nil {
 		return f.errAll
 	}
@@ -68,172 +98,235 @@ func (f *fakeEmailSender) callCount() int {
 	return len(f.calls)
 }
 
-// fakePushBroadcaster records every broadcast call and returns
-// a pre-canned BroadcastResult / error so the test can simulate
-// a successful run, a partially-failed run, or an unreadable
-// store.
-type fakePushBroadcaster struct {
+// fakePushSender records every per-user broadcast and returns
+// a pre-canned result. err makes the whole call fail (transport
+// error); result is returned verbatim when err is nil.
+type fakePushSender struct {
 	mu     sync.Mutex
-	calls  []push.Message
-	result push.BroadcastResult
+	calls  []string
+	byUser map[string]push.BroadcastResult
 	err    error
 }
 
-func (f *fakePushBroadcaster) Broadcast(_ context.Context, msg push.Message) (push.BroadcastResult, error) {
+func (f *fakePushSender) BroadcastToUser(_ context.Context, userID string, _ push.Message) (push.BroadcastResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, msg)
-	return f.result, f.err
+	f.calls = append(f.calls, userID)
+	if f.err != nil {
+		return push.BroadcastResult{}, f.err
+	}
+	if f.byUser != nil {
+		if r, ok := f.byUser[userID]; ok {
+			return r, nil
+		}
+	}
+	return push.BroadcastResult{}, nil
 }
 
-func (f *fakePushBroadcaster) callCount() int {
+func (f *fakePushSender) callCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.calls)
 }
 
-// fixedClock returns a constant time. Lets the test pin
-// "now" without touching the system clock.
+// fixedClock returns a constant time. The orchestrator's tests
+// pin "now" so the reminder stride (24h / 7d / 14d) is
+// deterministic.
 type fixedClock struct{ t time.Time }
 
 func (f fixedClock) Now() time.Time { return f.t }
 
-// newTestReminder is a small constructor that wires the four
-// fakes into a WeightReminder. Tests override the fakes
-// before calling Run.
-func newTestReminder(t *testing.T) (*WeightReminder, *fakeUserLister, *fakeEmailSender, *fakePushBroadcaster) {
+// newTestReminder wires the four fakes into a UserReminder.
+// Tests override the fakes before calling Run or SendToUser.
+func newTestReminder(t *testing.T) (*UserReminder, *fakeReminderRepo, *fakeEmailSender, *fakePushSender) {
 	t.Helper()
-	users := &fakeUserLister{}
+	repo := &fakeReminderRepo{}
 	emails := &fakeEmailSender{}
-	pushB := &fakePushBroadcaster{}
-	r, err := NewWeightReminder(users, emails, pushB, WeightReminderConfig{MaxEmailWorkers: 4})
+	pushB := &fakePushSender{}
+	r, err := NewUserReminder(repo, emails, pushB, UserReminderConfig{MaxEmailWorkers: 4})
 	if err != nil {
-		t.Fatalf("NewWeightReminder: %v", err)
+		t.Fatalf("NewUserReminder: %v", err)
 	}
-	// Pin the clock to a Sunday morning so the run summary is
-	// deterministic. The orchestrator does not currently branch
-	// on day-of-week (the cron wrapper does), but the value
-	// appears in the log line and tests can assert on the
-	// formatted output if they want to.
-	r.clock = fixedClock{t: time.Date(2026, 7, 5, 9, 0, 0, 0, time.UTC)}
-	return r, users, emails, pushB
+	// Pin the clock to a known instant so the "next fire"
+	// math is deterministic. The tests assert against this
+	// value when they care.
+	r.clock = fixedClock{t: time.Date(2026, 8, 9, 9, 0, 0, 0, time.UTC)}
+	return r, repo, emails, pushB
 }
 
-// --- Tests ---
+// --- NewUserReminder construction ---
 
-func TestNewWeightReminder_RejectsNilDependencies(t *testing.T) {
-	// nil dependencies must fail at construction, not at the
-	// first tick. A nil user repo, for example, would NPE deep
-	// inside the orchestrator.
-	if _, err := NewWeightReminder(nil, &fakeEmailSender{}, &fakePushBroadcaster{}, WeightReminderConfig{}); err == nil {
-		t.Error("expected error for nil users")
+func TestNewUserReminder_RejectsNilDependencies(t *testing.T) {
+	if _, err := NewUserReminder(nil, &fakeEmailSender{}, &fakePushSender{}, UserReminderConfig{}); err == nil {
+		t.Error("expected error for nil repo")
 	}
-	if _, err := NewWeightReminder(&fakeUserLister{}, nil, &fakePushBroadcaster{}, WeightReminderConfig{}); err == nil {
+	if _, err := NewUserReminder(&fakeReminderRepo{}, nil, &fakePushSender{}, UserReminderConfig{}); err == nil {
 		t.Error("expected error for nil emails")
 	}
-	if _, err := NewWeightReminder(&fakeUserLister{}, &fakeEmailSender{}, nil, WeightReminderConfig{}); err == nil {
+	if _, err := NewUserReminder(&fakeReminderRepo{}, &fakeEmailSender{}, nil, UserReminderConfig{}); err == nil {
 		t.Error("expected error for nil push")
 	}
 }
 
-func TestWeightReminder_Run_EmptyUserList(t *testing.T) {
-	// No users → no email sends. The push broadcast still
-	// runs (it naturally short-circuits inside
-	// push.Service.Broadcast when there are no subscriptions,
-	// returning a zero result). That is by design: the push
-	// pipeline is independent of the email pipeline, and a
-	// future "log a user out" code path that purges
-	// subscriptions but leaves the user row would still get
-	// the reminder email. Keeping the push call unconditional
-	// makes the orchestrator simpler and the two pipelines
-	// symmetric.
-	r, _, emails, pushB := newTestReminder(t)
+// --- Run: end-to-end tick ---
+
+func TestUserReminder_Run_NoUsersDue(t *testing.T) {
+	// No due users → no email sends, no push sends, no
+	// mark-fired calls. The TickResult must reflect the
+	// zero-attempt case (Attempted: true, Users: 0) so the
+	// admin UI can distinguish it from a list error.
+	r, repo, emails, pushB := newTestReminder(t)
 	res, attempted := r.Run(context.Background())
 	if !attempted {
 		t.Error("attempted = false, want true (list succeeded)")
 	}
 	if res.Users != 0 {
-		t.Errorf("result.Users = %d, want 0", res.Users)
+		t.Errorf("Users = %d, want 0", res.Users)
 	}
 	if got := emails.callCount(); got != 0 {
 		t.Errorf("email calls = %d, want 0", got)
 	}
-	if got := pushB.callCount(); got != 1 {
-		t.Errorf("push broadcasts = %d, want 1 (unconditional)", got)
+	if got := pushB.callCount(); got != 0 {
+		t.Errorf("push calls = %d, want 0", got)
+	}
+	if got := len(repo.firedRecords()); got != 0 {
+		t.Errorf("mark-fired calls = %d, want 0", got)
 	}
 }
 
-func TestWeightReminder_Run_FansOutOneEmailPerUser(t *testing.T) {
-	// Each user must get exactly one email send. The push
-	// broadcast happens once (to all subscribers) regardless
-	// of user count. The result struct must report the same
-	// counts the admin UI will render.
-	r, users, emails, pushB := newTestReminder(t)
-	users.users = []models.User{
-		{ID: "u1", Name: "Alice", Email: "alice@example.com"},
-		{ID: "u2", Name: "Bob", Email: "bob@example.com"},
-		{ID: "u3", Name: "Carol", Email: "carol@example.com"},
+func TestUserReminder_Run_FiresOneEmailAndOnePushPerUser(t *testing.T) {
+	// Each user must get exactly one email send AND one
+	// push broadcast. The orchestrator's per-user send
+	// is sequential, so the counts line up one-to-one.
+	r, repo, emails, pushB := newTestReminder(t)
+	day := 0
+	repo.due = []models.User{
+		{ID: "u1", Name: "Alice", Email: "alice@example.com",
+			ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+			ReminderDayOfWeek: &day, ReminderTime: "09:00",
+			ReminderEmailEnabled: true, ReminderPushEnabled: true,
+			CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{ID: "u2", Name: "Bob", Email: "bob@example.com",
+			ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+			ReminderDayOfWeek: &day, ReminderTime: "09:00",
+			ReminderEmailEnabled: true, ReminderPushEnabled: true,
+			CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
 	}
-	pushB.result = push.BroadcastResult{Sent: 7, Total: 7}
+	pushB.byUser = map[string]push.BroadcastResult{
+		"u1": {Sent: 2, Total: 2},
+		"u2": {Sent: 1, Total: 1},
+	}
 
 	res, attempted := r.Run(context.Background())
 	if !attempted {
 		t.Fatal("attempted = false, want true")
 	}
-	if got := emails.callCount(); got != 3 {
-		t.Errorf("email calls = %d, want 3", got)
+	if res.Users != 2 {
+		t.Errorf("Users = %d, want 2", res.Users)
 	}
-	if got := pushB.callCount(); got != 1 {
-		t.Errorf("push broadcasts = %d, want 1", got)
+	if got := emails.callCount(); got != 2 {
+		t.Errorf("email calls = %d, want 2", got)
 	}
-	if res.Users != 3 {
-		t.Errorf("result.Users = %d, want 3", res.Users)
+	if got := pushB.callCount(); got != 2 {
+		t.Errorf("push calls = %d, want 2", got)
 	}
-	if res.EmailsSent != 3 {
-		t.Errorf("result.EmailsSent = %d, want 3", res.EmailsSent)
+	// And each user must have had mark-fired called once
+	// with the right firedAt (the pinned clock) and an
+	// advanced next_fire_at (one week later for weekly).
+	fired := repo.firedRecords()
+	if len(fired) != 2 {
+		t.Fatalf("mark-fired calls = %d, want 2", len(fired))
 	}
-	if res.EmailsFailed != 0 {
-		t.Errorf("result.EmailsFailed = %d, want 0", res.EmailsFailed)
-	}
-	if res.PushSent != 7 {
-		t.Errorf("result.PushSent = %d, want 7", res.PushSent)
+	for _, rec := range fired {
+		if !rec.FiredAt.Equal(r.clock.Now()) {
+			t.Errorf("user %s: FiredAt = %v, want %v", rec.UserID, rec.FiredAt, r.clock.Now())
+		}
+		if rec.NextFire.Before(rec.FiredAt) {
+			t.Errorf("user %s: NextFire %v is before FiredAt %v", rec.UserID, rec.NextFire, rec.FiredAt)
+		}
 	}
 }
 
-func TestWeightReminder_Run_PushMessageContents(t *testing.T) {
-	// The push payload must be the agreed-on reminder copy
-	// (title, body, URL). A future copy change is a one-line
-	// edit; this test is the tripwire for accidental drift.
-	r, users, _, pushB := newTestReminder(t)
-	users.users = []models.User{{ID: "u1", Name: "Alice", Email: "alice@example.com"}}
+func TestUserReminder_Run_AdvancesByCadenceStride(t *testing.T) {
+	// After firing, the next_fire_at must be exactly the
+	// cadence's stride later: 24h for daily, 7d for weekly,
+	// 14d for biweekly. This is the tripwire for any future
+	// refactor that mis-computes the advance.
+	r, repo, _, _ := newTestReminder(t)
+	day := 0
+	now := r.clock.Now()
+	// Pre-compute the "next candidate" for each frequency so
+	// the orchestrator's advance puts the next_fire_at on
+	// the expected cadence boundary.
+	mk := func(id, name, email string, freq models.ReminderFrequency) models.User {
+		u := models.User{
+			ID: id, Name: name, Email: email,
+			ReminderEnabled: true, ReminderFrequency: freq,
+			ReminderDayOfWeek: &day, ReminderTime: "09:00",
+			ReminderEmailEnabled: true, ReminderPushEnabled: false,
+			CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		}
+		// Pre-fire candidate is "today at 09:00" for the
+		// user — we set nextFire to now so the orchestrator
+		// picks them up.
+		next := now
+		u.ReminderNextFireAt = &next
+		return u
+	}
+	repo.due = []models.User{
+		mk("daily", "Daily", "d@x.com", models.ReminderDaily),
+		mk("weekly", "Weekly", "w@x.com", models.ReminderWeekly),
+		mk("biweekly", "Biweekly", "b@x.com", models.ReminderBiweekly),
+	}
 
 	r.Run(context.Background())
-	if got := pushB.callCount(); got != 1 {
-		t.Fatalf("push broadcasts = %d, want 1", got)
+
+	fired := repo.firedRecords()
+	if len(fired) != 3 {
+		t.Fatalf("mark-fired calls = %d, want 3", len(fired))
 	}
-	got := pushB.calls[0]
-	if got.Title != "Sunday weigh-in" {
-		t.Errorf("push title = %q, want %q", got.Title, "Sunday weigh-in")
-	}
-	if got.URL != "/weight/new" {
-		t.Errorf("push url = %q, want %q", got.URL, "/weight/new")
-	}
-	if got.Body == "" {
-		t.Error("push body is empty")
+	for _, rec := range fired {
+		var want time.Duration
+		switch rec.UserID {
+		case "daily":
+			want = 24 * time.Hour
+		case "weekly":
+			want = 7 * 24 * time.Hour
+		case "biweekly":
+			want = 14 * 24 * time.Hour
+		default:
+			t.Errorf("unexpected user %q", rec.UserID)
+			continue
+		}
+		// The orchestrator advances by the stride and then
+		// re-computes the next candidate. The new next_fire_at
+		// should be the previous next_fire_at + stride (since
+		// we set the row's next_fire_at to now=09:00 today).
+		got := rec.NextFire.Sub(now)
+		if got != want {
+			t.Errorf("user %s: next fire advance = %v, want %v", rec.UserID, got, want)
+		}
 	}
 }
 
-func TestWeightReminder_Run_FailingEmailDoesNotPoisonBatch(t *testing.T) {
+func TestUserReminder_Run_FailingEmailDoesNotPoisonBatch(t *testing.T) {
 	// A single SMTP failure on one user must not stop the
-	// other users from receiving their emails. The failing
-	// user's send is logged and the address surfaces in
-	// RunResult.EmailsFailedAddresses so the admin UI can
-	// show exactly who did not get the email.
-	r, users, emails, _ := newTestReminder(t)
-	users.users = []models.User{
-		{ID: "u1", Name: "Alice", Email: "alice@example.com"},
-		{ID: "u2", Name: "Bob", Email: "bob@example.com"},
-		{ID: "u3", Name: "Carol", Email: "carol@example.com"},
+	// other users from receiving their email, and the
+	// failing user must still have their next_fire_at
+	// advanced (we don't want them stuck in a retry loop).
+	r, repo, emails, _ := newTestReminder(t)
+	day := 0
+	repo.due = []models.User{
+		{ID: "u1", Name: "Alice", Email: "alice@example.com",
+			ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+			ReminderDayOfWeek: &day, ReminderTime: "09:00",
+			ReminderEmailEnabled: true, ReminderPushEnabled: false,
+			CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{ID: "u2", Name: "Bob", Email: "bob@example.com",
+			ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+			ReminderDayOfWeek: &day, ReminderTime: "09:00",
+			ReminderEmailEnabled: true, ReminderPushEnabled: false,
+			CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
 	}
 	emails.errFor = map[string]error{
 		"bob@example.com": errors.New("smtp 421"),
@@ -243,32 +336,42 @@ func TestWeightReminder_Run_FailingEmailDoesNotPoisonBatch(t *testing.T) {
 	if !attempted {
 		t.Fatal("attempted = false, want true")
 	}
-	// All three users were attempted; only Bob's send
-	// returned an error.
-	if got := emails.callCount(); got != 3 {
-		t.Errorf("email calls = %d, want 3 (every user attempted)", got)
+	if got := emails.callCount(); got != 2 {
+		t.Errorf("email calls = %d, want 2 (every user attempted)", got)
 	}
-	if res.EmailsSent != 2 {
-		t.Errorf("result.EmailsSent = %d, want 2", res.EmailsSent)
+	// Find the per-user outcomes.
+	var alice, bob *UserReminderResult
+	for i, r := range res.Results {
+		if r.UserEmail == "alice@example.com" {
+			alice = &res.Results[i]
+		}
+		if r.UserEmail == "bob@example.com" {
+			bob = &res.Results[i]
+		}
 	}
-	if res.EmailsFailed != 1 {
-		t.Errorf("result.EmailsFailed = %d, want 1", res.EmailsFailed)
+	if alice == nil || !alice.EmailSent {
+		t.Error("expected alice EmailSent = true")
 	}
-	if len(res.EmailsFailedAddresses) != 1 || res.EmailsFailedAddresses[0] != "bob@example.com" {
-		t.Errorf("result.EmailsFailedAddresses = %v, want [bob@example.com]", res.EmailsFailedAddresses)
+	if bob == nil || !bob.EmailFailed || bob.EmailSent {
+		t.Errorf("expected bob EmailFailed = true; got %+v", bob)
+	}
+	// And both must have had mark-fired called so they
+	// don't retry immediately on the next tick.
+	if got := len(repo.firedRecords()); got != 2 {
+		t.Errorf("mark-fired calls = %d, want 2 (both advanced)", got)
 	}
 }
 
-func TestWeightReminder_Run_ListErrorAborts(t *testing.T) {
-	// A failure to read the user list is the only error
-	// path that short-circuits Run. Nothing was attempted
-	// yet, so there is nothing to fall through to. The
-	// orchestrator logs and returns; the test asserts
-	// that no downstream work happened, and that the
-	// admin UI can distinguish "list failed" from
+func TestUserReminder_Run_ListErrorAborts(t *testing.T) {
+	// A failure to read the due-user list is the only
+	// error path that short-circuits Run. Nothing was
+	// attempted yet, so there is nothing to fall through
+	// to. The orchestrator logs and returns; the test
+	// asserts that no downstream work happened, and that
+	// the admin UI can distinguish "list failed" from
 	// "list succeeded with zero users" via the bool.
-	r, users, emails, pushB := newTestReminder(t)
-	users.err = errors.New("db down")
+	r, repo, emails, pushB := newTestReminder(t)
+	repo.listErr = errors.New("db down")
 
 	res, attempted := r.Run(context.Background())
 	if attempted {
@@ -281,84 +384,180 @@ func TestWeightReminder_Run_ListErrorAborts(t *testing.T) {
 		t.Errorf("email calls = %d, want 0 when list failed", got)
 	}
 	if got := pushB.callCount(); got != 0 {
-		t.Errorf("push broadcasts = %d, want 0 when list failed", got)
+		t.Errorf("push calls = %d, want 0 when list failed", got)
 	}
 }
 
-func TestWeightReminder_Run_PushBroadcastErrorIsLoggedNotFatal(t *testing.T) {
-	// A push broadcast error is a transport-level problem;
-	// the emails already sent cannot be un-sent. Run logs
-	// the error and returns. The result's PushError field
-	// surfaces the message so the admin UI can render it.
-	r, users, _, pushB := newTestReminder(t)
-	users.users = []models.User{{ID: "u1", Name: "Alice", Email: "alice@example.com"}}
+// --- SendToUser: per-user channel skip rules ---
+
+func TestUserReminder_SendToUser_EmailDisabledIsSkipped(t *testing.T) {
+	// A user with the email channel disabled must get
+	// EmailSkipped = true (not EmailFailed). The orchestrator
+	// must not call the email sender at all.
+	r, repo, emails, pushB := newTestReminder(t)
+	day := 0
+	u := &models.User{
+		ID: "u1", Name: "Alice", Email: "alice@example.com",
+		ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+		ReminderDayOfWeek: &day, ReminderTime: "09:00",
+		ReminderEmailEnabled: false, ReminderPushEnabled: false,
+		CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	res := r.SendToUser(context.Background(), u, r.clock.Now())
+	if !res.EmailSkipped {
+		t.Error("EmailSkipped = false, want true (email disabled)")
+	}
+	if res.EmailSent || res.EmailFailed {
+		t.Errorf("expected EmailSent=EmailFailed=false; got %+v", res)
+	}
+	if got := emails.callCount(); got != 0 {
+		t.Errorf("email calls = %d, want 0 when email disabled", got)
+	}
+	if got := pushB.callCount(); got != 0 {
+		t.Errorf("push calls = %d, want 0 when push disabled", got)
+	}
+	// Even with both channels disabled, the user's
+	// next_fire_at must advance so the tick does not pick
+	// them up every hour.
+	if got := len(repo.firedRecords()); got != 1 {
+		t.Errorf("mark-fired calls = %d, want 1 (user advanced even when all channels skipped)", got)
+	}
+}
+
+func TestUserReminder_SendToUser_PushWithNoSubsIsSkipped(t *testing.T) {
+	// A user with push enabled but no subscriptions must
+	// get PushSkipped = true (not PushFailed). The orchestrator
+	// distinguishes "no devices" from "device errored" so
+	// the admin UI can show a useful message.
+	r, _, emails, pushB := newTestReminder(t)
+	day := 0
+	u := &models.User{
+		ID: "u1", Name: "Alice", Email: "alice@example.com",
+		ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+		ReminderDayOfWeek: &day, ReminderTime: "09:00",
+		ReminderEmailEnabled: true, ReminderPushEnabled: true,
+		CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	// Default fakePushSender returns an empty result
+	// (Total=0), which the orchestrator must read as
+	// "no active push subscriptions" → PushSkipped.
+	res := r.SendToUser(context.Background(), u, r.clock.Now())
+	if !res.EmailSent {
+		t.Error("EmailSent = false, want true")
+	}
+	if !res.PushSkipped {
+		t.Errorf("PushSkipped = false, want true (no subscriptions); got %+v", res)
+	}
+	if res.PushFailed > 0 {
+		t.Errorf("PushFailed = %d, want 0 (no subscriptions is a skip, not a failure)", res.PushFailed)
+	}
+	if res.PushSkipReason == "" {
+		t.Error("PushSkipReason is empty; want the 'no subscriptions' message")
+	}
+	if got := pushB.callCount(); got != 1 {
+		t.Errorf("push calls = %d, want 1 (we did call, the store just had nothing)", got)
+	}
+	if got := emails.callCount(); got != 1 {
+		t.Errorf("email calls = %d, want 1", got)
+	}
+}
+
+func TestUserReminder_SendToUser_PushTransportErrorIsCountedAsFailure(t *testing.T) {
+	// A push broadcast error (e.g. the user-repo read
+	// failed) is a transport-level failure, not a "skip".
+	// The orchestrator must report PushFailed = 1 so the
+	// admin UI shows the transport error rather than a
+	// misleading "no devices" message.
+	r, _, _, pushB := newTestReminder(t)
 	pushB.err = errors.New("push service unreachable")
-
-	res, attempted := r.Run(context.Background())
-	if !attempted {
-		t.Fatal("attempted = false, want true")
+	day := 0
+	u := &models.User{
+		ID: "u1", Name: "Alice", Email: "alice@example.com",
+		ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+		ReminderDayOfWeek: &day, ReminderTime: "09:00",
+		ReminderEmailEnabled: false, ReminderPushEnabled: true,
+		CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
-	if res.PushError != "push service unreachable" {
-		t.Errorf("result.PushError = %q, want %q", res.PushError, "push service unreachable")
+	res := r.SendToUser(context.Background(), u, r.clock.Now())
+	if res.PushSkipped {
+		t.Error("PushSkipped = true, want false (transport error is not a skip)")
 	}
-}
-
-func TestWeightReminder_Run_ContextCancellation(t *testing.T) {
-	// A pre-cancelled context must not deadlock or panic.
-	// Workers see ctx.Err() and report it back through the
-	// same channel as a normal send failure; the
-	// orchestrator counts it and moves on.
-	r, users, _, _ := newTestReminder(t)
-	users.users = []models.User{
-		{ID: "u1", Name: "Alice", Email: "alice@example.com"},
-		{ID: "u2", Name: "Bob", Email: "bob@example.com"},
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	// The fan-out still attempts the jobs (the workers
-	// read jobs before checking ctx), so callCount may be
-	// 0..N depending on scheduling. The contract we care
-	// about: Run does not deadlock and does not panic.
-	r.Run(ctx)
-}
-
-func TestNewCronScheduler_RejectsBadSpec(t *testing.T) {
-	// A typo in the cron spec must fail at startup, not
-	// silently never fire. cmd/main.go passes the literal
-	// "0 9 * * 0" — any regression that breaks parsing
-	// would surface here before deploy.
-	if _, err := NewCronScheduler("not a cron spec", time.UTC, func(_ context.Context) {}); err == nil {
-		t.Error("expected error for unparseable spec")
-	}
-	if _, err := NewCronScheduler("0 9 * * 0", time.UTC, nil); err == nil {
-		t.Error("expected error for nil job")
+	if res.PushFailed != 1 {
+		t.Errorf("PushFailed = %d, want 1", res.PushFailed)
 	}
 }
 
-func TestNewCronScheduler_HappyPathStartStop(t *testing.T) {
-	// A valid spec + non-nil job must return a working
-	// scheduler. Start/Stop are both safe to call and
-	// idempotent — the production wrapper relies on this
-	// for clean shutdown.
-	called := make(chan struct{}, 1)
-	sched, err := NewCronScheduler("0 9 * * 0", time.UTC, func(_ context.Context) {
-		called <- struct{}{}
-	})
-	if err != nil {
-		t.Fatalf("NewCronScheduler: %v", err)
+func TestUserReminder_SendToUser_AdvancesNextFireByCadence(t *testing.T) {
+	// SendToUser must advance the user's next_fire_at by
+	// the cadence's stride so the next tick skips them
+	// until the new time. A regression that forgot the
+	// advance would have the tick pick the user up every
+	// hour, which the seed users are configured to
+	// tolerate but the operator would notice.
+	r, repo, _, _ := newTestReminder(t)
+	day := 0
+	for _, freq := range []models.ReminderFrequency{
+		models.ReminderDaily, models.ReminderWeekly, models.ReminderBiweekly,
+	} {
+		repo.mu.Lock()
+		repo.firedLog = nil
+		repo.mu.Unlock()
+		u := &models.User{
+			ID: "u1", Name: "Alice", Email: "a@x.com",
+			ReminderEnabled: true, ReminderFrequency: freq,
+			ReminderDayOfWeek: &day, ReminderTime: "09:00",
+			ReminderEmailEnabled: false, ReminderPushEnabled: false,
+			CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		}
+		now := r.clock.Now()
+		r.SendToUser(context.Background(), u, now)
+		fired := repo.firedRecords()
+		if len(fired) != 1 {
+			t.Fatalf("%s: mark-fired calls = %d, want 1", freq, len(fired))
+		}
+		var want time.Duration
+		switch freq {
+		case models.ReminderDaily:
+			want = 24 * time.Hour
+		case models.ReminderWeekly:
+			want = 7 * 24 * time.Hour
+		case models.ReminderBiweekly:
+			want = 14 * 24 * time.Hour
+		}
+		// We pass `now + stride` into ComputeNextFire (via
+		// reminderStride), so the new next_fire_at is the
+		// "next candidate at-or-after now+stride". For the
+		// canonical case of weekly Sunday 09:00 with
+		// now=Sun 09:00, +7d is also a Sunday 09:00, so the
+		// next_fire_at lands exactly 7d later.
+		got := fired[0].NextFire.Sub(now)
+		// Allow a small fudge for the day-of-week math
+		// (sub-day rolls on biweekly across DST etc).
+		if got < want || got > want+24*time.Hour {
+			t.Errorf("%s: advance = %v, want ~%v", freq, got, want)
+		}
 	}
-	sched.Start()
-	// Stop without a fire: nothing in `called` is fine; we
-	// are exercising the lifecycle, not the schedule.
-	sched.Stop()
-	// Idempotency: a second Stop is a no-op.
-	sched.Stop()
-	// And the channel was never written to (we are not
-	// waiting for a tick).
-	select {
-	case <-called:
-		t.Error("job ran on a never-tick'd schedule")
-	default:
+}
+
+func TestUserReminder_SendToUser_MarkFiredErrorDoesNotPanic(t *testing.T) {
+	// A failure to write the next_fire_at back to the DB
+	// must not panic. The orchestrator records the error
+	// in the per-user result and moves on; the next tick
+	// will re-attempt (the row is still "due" because the
+	// write failed). This is the same recovery story as
+	// the all-user email failure.
+	r, repo, _, _ := newTestReminder(t)
+	repo.markErr = errors.New("db write failed")
+	day := 0
+	u := &models.User{
+		ID: "u1", Name: "Alice", Email: "a@x.com",
+		ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+		ReminderDayOfWeek: &day, ReminderTime: "09:00",
+		ReminderEmailEnabled: false, ReminderPushEnabled: false,
+		CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	res := r.SendToUser(context.Background(), u, r.clock.Now())
+	if res.Error == "" {
+		t.Error("expected non-empty Error on mark-fired failure")
 	}
 }

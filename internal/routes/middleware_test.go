@@ -335,6 +335,9 @@ func (r *countingUserRepo) UpdateUser(user *models.User) error    { return r.bas
 func (r *countingUserRepo) UpdateUserPassword(id, hash string) error {
 	return r.base.UpdateUserPassword(id, hash)
 }
+func (r *countingUserRepo) UpdateUserReminder(userID string, prefs models.ReminderPreferences) error {
+	return r.base.UpdateUserReminder(userID, prefs)
+}
 
 // TestGetUser_NoClaims asserts that GetUser returns nil when no auth
 // claims are present in the context (e.g. on a public route or in a

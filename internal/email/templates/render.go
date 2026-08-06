@@ -33,6 +33,8 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+
+	"stren/internal/models"
 )
 
 // PasswordResetTTL is how long a freshly-minted password-reset
@@ -99,19 +101,46 @@ func RenderWelcome(name, baseURL string) (html, text string) {
 	return buf.String(), welcomeText(name, baseURL)
 }
 
-// RenderWeightReminder renders the weekly "log your weight"
-// reminder email. The baseURL is threaded into the dashboard
-// button (which points at /weight/new) and the footer's
-// "view on the web" link. Same fallback behavior as
-// RenderWelcome: a templ render error returns the plaintext
-// body and an empty HTML body so the caller can still send a
-// usable email.
-func RenderWeightReminder(name, baseURL string) (html, text string) {
+// RenderWeightReminder renders the per-user "log your weight"
+// reminder email. The cadence is one of models.ReminderDaily /
+// Weekly / Biweekly and is used to pick the email's subject
+// line and a short cadence-aware blurb in the body so the user
+// gets a "Time to log today's weight" email on a daily cadence
+// and a "Sunday weigh-in" email on a weekly cadence, rather
+// than the same Sunday-specific copy every time.
+//
+// The baseURL is threaded into the dashboard button (which
+// points at /weight/new) and the footer's "view on the web"
+// link. Same fallback behavior as RenderWelcome: a templ
+// render error returns the plaintext body and an empty HTML
+// body so the caller can still send a usable email.
+func RenderWeightReminder(name, baseURL string, cadence models.ReminderFrequency) (html, text string) {
+	subject, header := reminderCadenceCopy(cadence)
 	var buf bytes.Buffer
-	if err := WeightReminderEmail(name, baseURL).Render(context.Background(), &buf); err != nil {
-		return "", weightReminderText(name, baseURL)
+	if err := WeightReminderEmail(name, baseURL, subject, header).Render(context.Background(), &buf); err != nil {
+		return "", weightReminderText(name, baseURL, subject, header)
 	}
-	return buf.String(), weightReminderText(name, baseURL)
+	return buf.String(), weightReminderText(name, baseURL, subject, header)
+}
+
+// reminderCadenceCopy returns the (subject, header) pair for
+// the reminder email given the user's chosen cadence. The two
+// strings are split so the templ component can use the same
+// pair (and the plaintext body too) — there's no need to
+// recompute the cadence label in three places.
+func reminderCadenceCopy(cadence models.ReminderFrequency) (subject, header string) {
+	switch cadence {
+	case models.ReminderDaily:
+		return "Time to log your weight", "Today's weigh-in"
+	case models.ReminderWeekly:
+		return "Sunday weigh-in reminder", "It's Sunday — time to log this week's weight."
+	case models.ReminderBiweekly:
+		return "Time to log your weight", "Time to log this week's weight."
+	}
+	// Off / unknown: should not happen (the orchestrator
+	// skips off rows), but fall back to a generic pair so
+	// the email still renders.
+	return "Time to log your weight", "Time to log your weight."
 }
 
 // RenderPasswordReset renders the password-reset email. Takes
@@ -156,18 +185,34 @@ func welcomeText(name, baseURL string) string {
 	)
 }
 
-// weightReminderText is the plaintext body of the weekly
+// weightReminderText is the plaintext body of the per-user
 // "log your weight" reminder email. Kept in Go (not a .templ
 // file) because the body is short and templ would be
 // overkill. The dashboard link points at /weight/new so the
-// recipient lands directly on the new-entry form.
-func weightReminderText(name, baseURL string) string {
+// recipient lands directly on the new-entry form. The cadence
+// label ("Sunday weigh-in" / "Today's weigh-in" / generic) is
+// threaded in from reminderCadenceCopy so the same function
+// is the single source of truth for the cadence-specific
+// copy across HTML and plaintext.
+func weightReminderText(name, baseURL, subject, header string) string {
+	body := ""
+	switch subject {
+	case "Sunday weigh-in reminder":
+		body = "It's Sunday — time to log your weight for the week. " +
+			"A single entry a week is the most reliable way to spot a trend without making the scale a daily event. " +
+			"Tap below to add today's reading, and feel free to add a photo if you want to see your progress over time:"
+	case "Time to log your weight":
+		body = "Time to log your weight. " +
+			"A quick reading keeps your trend line honest. " +
+			"Tap below to add today's entry:"
+	}
+	_ = header
 	return fmt.Sprintf(
 		"Hi %s,\n\n"+
-			"It's Sunday — time to log your weight for the week.\n\n"+
-			"A single entry a week is the most reliable way to spot a trend without making the scale a daily event. Tap below to add today's reading, and feel free to add a photo if you want to see your progress over time:\n%s\n\n"+
+			"%s\n\n"+
+			"%s\n%s\n\n"+
 			"— The Stren team\n",
-		name, baseURL+"/weight/new",
+		name, header, body, baseURL+"/weight/new",
 	)
 }
 

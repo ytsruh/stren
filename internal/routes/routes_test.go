@@ -427,6 +427,29 @@ func (m *mockUserRepository) UpdateUserPassword(userID, passwordHash string) err
 	return errors.New("user not found")
 }
 
+// UpdateUserReminder stores the reminder preferences on the
+// matching user row. The route tests that exercise the
+// reminder save path (e.g. TestProfileUpdateReminder) check
+// the stored values via GetUserByID, so this is the only
+// piece of plumbing the mock needs.
+func (m *mockUserRepository) UpdateUserReminder(userID string, prefs models.ReminderPreferences) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, u := range m.users {
+		if u.ID == userID {
+			m.users[i].ReminderEnabled = prefs.Enabled
+			m.users[i].ReminderFrequency = prefs.Frequency
+			m.users[i].ReminderDayOfWeek = prefs.DayOfWeek
+			m.users[i].ReminderTime = prefs.Time
+			m.users[i].ReminderEmailEnabled = prefs.EmailEnabled
+			m.users[i].ReminderPushEnabled = prefs.PushEnabled
+			m.users[i].ReminderNextFireAt = prefs.NextFireAt
+			return nil
+		}
+	}
+	return errors.New("user not found")
+}
+
 // mockAuthTokenRepo is a no-op AuthTokenRepo used by the
 // route tests that don't exercise the password-reset flow.
 // The recovery controller's tests in
@@ -712,6 +735,143 @@ func (m *mockPushSubscriptionRepository) CountForUser(_ context.Context, userID 
 	return n, nil
 }
 
+// mockGoalRepository satisfies the models.GoalRepo interface for the
+// route tests. It tracks goals per user and supports per-method
+// error injection so handler-level error paths can be exercised
+// without a live DB.
+type mockGoalRepository struct {
+	mu    sync.Mutex
+	goals map[string]*models.Goal
+
+	errCreate       error
+	errGetByID      error
+	errList         error
+	errUpdate       error
+	errMarkComplete error
+	errReopen       error
+	errDelete       error
+}
+
+func newMockGoalRepository() *mockGoalRepository {
+	return &mockGoalRepository{
+		goals: map[string]*models.Goal{},
+	}
+}
+
+func (m *mockGoalRepository) Create(g *models.Goal) error {
+	if m.errCreate != nil {
+		return m.errCreate
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	g.ID = "goal-" + fmt.Sprintf("%d", len(m.goals)+1)
+	cp := *g
+	m.goals[g.ID] = &cp
+	*g = cp
+	return nil
+}
+
+func (m *mockGoalRepository) GetByID(id, userID string) (*models.Goal, error) {
+	if m.errGetByID != nil {
+		return nil, m.errGetByID
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	g, ok := m.goals[id]
+	if !ok || g.UserID != userID {
+		return nil, nil
+	}
+	cp := *g
+	return &cp, nil
+}
+
+func (m *mockGoalRepository) List(userID string) ([]models.Goal, error) {
+	if m.errList != nil {
+		return nil, m.errList
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var active, completed []models.Goal
+	for _, g := range m.goals {
+		if g.UserID != userID {
+			continue
+		}
+		cp := *g
+		if g.CompletedAt != nil {
+			completed = append(completed, cp)
+		} else {
+			active = append(active, cp)
+		}
+	}
+	out := append([]models.Goal{}, active...)
+	out = append(out, completed...)
+	return out, nil
+}
+
+func (m *mockGoalRepository) Update(g *models.Goal, userID string) error {
+	if m.errUpdate != nil {
+		return m.errUpdate
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	existing, ok := m.goals[g.ID]
+	if !ok || existing.UserID != userID {
+		return nil
+	}
+	existing.Title = g.Title
+	existing.Description = g.Description
+	existing.StartDate = g.StartDate
+	existing.TargetDate = g.TargetDate
+	existing.EndDate = g.EndDate
+	return nil
+}
+
+func (m *mockGoalRepository) MarkComplete(id, userID string, completedAt time.Time) error {
+	if m.errMarkComplete != nil {
+		return m.errMarkComplete
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	g, ok := m.goals[id]
+	if !ok || g.UserID != userID {
+		return nil
+	}
+	if g.CompletedAt != nil {
+		return nil
+	}
+	cp := completedAt
+	g.CompletedAt = &cp
+	return nil
+}
+
+func (m *mockGoalRepository) Reopen(id, userID string) error {
+	if m.errReopen != nil {
+		return m.errReopen
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	g, ok := m.goals[id]
+	if !ok || g.UserID != userID {
+		return nil
+	}
+	g.CompletedAt = nil
+	return nil
+}
+
+func (m *mockGoalRepository) Delete(id, userID string) error {
+	if m.errDelete != nil {
+		return m.errDelete
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	g, ok := m.goals[id]
+	if !ok || g.UserID != userID {
+		return nil
+	}
+	delete(m.goals, id)
+	return nil
+}
+
 func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository, *echo.Echo) {
 	t.Helper()
 	e := echo.New()
@@ -720,6 +880,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	mockAdminUser := newMockAdminUserRepository()
 	mockFeedback := newMockFeedbackRepository()
 	mockWeight := newMockWeightRepository()
+	mockGoals := newMockGoalRepository()
 	mockPush := newMockPushSubscriptionRepository()
 	jwtService := utils.NewJWTService("test-secret")
 	mock.exercises = []models.Exercise{
@@ -736,6 +897,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	weightCtrl := controllers.NewWeightController(mockWeight, nil)
 	pushCtrl := controllers.NewPushController(mockPush)
 	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil, nil)
+	goalsCtrl := controllers.NewGoalsController(mockGoals)
 	validator := utils.NewValidator()
 	// The default test wiring uses a fake image processor and
 	// uploader so the upload route can be exercised without
@@ -744,7 +906,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	h := NewHandler(
 		authCtrl, authRecoveryCtrl, entryCtrl, adminCtrl, adminUserCtrl,
 		feedbackCtrl, timersCtrl, weightCtrl,
-		pushCtrl, adminNotificationsCtrl,
+		pushCtrl, adminNotificationsCtrl, goalsCtrl,
 		mockPush, "", false,
 		mockUser, jwtService, validator,
 		proc, upl, DefaultExerciseImageConfig,
@@ -755,6 +917,44 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	// middleware runs only through e.ServeHTTP.
 	h.RegisterRoutes(e)
 	return h, mock, mockUser, e
+}
+
+// setupHandlerGoalsFresh constructs a handler with a caller-supplied
+// goals mock so individual tests can seed / inspect state. The
+// other controllers use the same fakes as setupHandler.
+func setupHandlerGoalsFresh(t *testing.T, goalsMock *mockGoalRepository) (*Handler, *echo.Echo) {
+	t.Helper()
+	e := echo.New()
+	mockUser := newMockUserRepository()
+	mockAdminUser := newMockAdminUserRepository()
+	mockFeedback := newMockFeedbackRepository()
+	mockWeight := newMockWeightRepository()
+	mockRepo := newMockRepository()
+	mockPush := newMockPushSubscriptionRepository()
+	jwtService := utils.NewJWTService("test-secret")
+	authCtrl := controllers.NewAuthController(mockUser, jwtService, nil)
+	authRecoveryCtrl := controllers.NewAuthRecoveryController(mockUser, newMockAuthTokenRepo(), nil)
+	entryCtrl := controllers.NewExerciseEntryController(mockRepo)
+	adminCtrl := controllers.NewAdminController(mockRepo)
+	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
+	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
+	timersCtrl := controllers.NewTimersController()
+	weightCtrl := controllers.NewWeightController(mockWeight, nil)
+	pushCtrl := controllers.NewPushController(mockPush)
+	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil, nil)
+	goalsCtrl := controllers.NewGoalsController(goalsMock)
+	validator := utils.NewValidator()
+	proc, upl := newFakeImagePipeline()
+	h := NewHandler(
+		authCtrl, authRecoveryCtrl, entryCtrl, adminCtrl, adminUserCtrl,
+		feedbackCtrl, timersCtrl, weightCtrl,
+		pushCtrl, adminNotificationsCtrl, goalsCtrl,
+		mockPush, "", false,
+		mockUser, jwtService, validator,
+		proc, upl, DefaultExerciseImageConfig,
+	)
+	h.RegisterRoutes(e)
+	return h, e
 }
 
 func setAuthContext(c echo.Context, userID string, email, name string, isAdmin bool) {
@@ -2925,4 +3125,555 @@ func TestExportWeightZip_RequiresAuthContext(t *testing.T) {
 		}
 	}()
 	_ = h.ExportWeightZip(c)
+}
+// --- Goals route tests ---
+
+func TestGoalsPage(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodGet, "/goals", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.GoalsPage(c); err != nil {
+		t.Fatalf("GoalsPage failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "No goals yet") {
+		t.Error("expected empty-state on initial goals page")
+	}
+}
+
+func TestGoalsPage_Populated(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	target := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	mockGoals.goals["g1"] = &models.Goal{
+		ID:         "g1",
+		UserID:     "user-1",
+		Title:      "Run a 5k",
+		TargetDate: &target,
+	}
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodGet, "/goals", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.GoalsPage(c); err != nil {
+		t.Fatalf("GoalsPage failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Run a 5k") {
+		t.Error("expected goal title on populated goals page")
+	}
+	if !strings.Contains(body, `id="goal-g1"`) {
+		t.Error("expected card id on populated goals page")
+	}
+}
+
+func TestNewGoalForm(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodGet, "/goals/new", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.NewGoalForm(c); err != nil {
+		t.Fatalf("NewGoalForm failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+}
+
+func TestCreateGoal_Redirect(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	form := url.Values{}
+	form.Set("title", "Run a 5k")
+	form.Set("description", "Summer goal")
+	form.Set("start_date", "2026-01-01")
+	form.Set("target_date", "2026-07-01")
+
+	req := httptest.NewRequest(http.MethodPost, "/goals", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateGoal(c); err != nil {
+		t.Fatalf("CreateGoal failed: %v", err)
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/goals" {
+		t.Errorf("expected redirect to /goals, got %q", loc)
+	}
+}
+
+func TestCreateGoal_HTMX(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	form := url.Values{}
+	form.Set("title", "Run a 5k")
+
+	req := httptest.NewRequest(http.MethodPost, "/goals", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateGoal(c); err != nil {
+		t.Fatalf("CreateGoal failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	hxTrigger := rec.Header().Get("HX-Trigger")
+	if !strings.Contains(hxTrigger, "triggerRedirect") {
+		t.Errorf("expected HX-Trigger to include triggerRedirect, got %q", hxTrigger)
+	}
+	if !strings.Contains(hxTrigger, "goalCreated") {
+		t.Errorf("expected HX-Trigger to include goalCreated, got %q", hxTrigger)
+	}
+	if !strings.Contains(rec.Body.String(), "Goal saved!") {
+		t.Errorf("expected success toast, got body: %s", rec.Body.String())
+	}
+	if len(mockGoals.goals) != 1 {
+		t.Errorf("expected 1 goal in mock, got %d", len(mockGoals.goals))
+	}
+}
+
+func TestCreateGoal_InvalidDate(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	form := url.Values{}
+	form.Set("title", "Run a 5k")
+	form.Set("start_date", "not-a-date")
+
+	req := httptest.NewRequest(http.MethodPost, "/goals", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateGoal(c); err != nil {
+		t.Fatalf("CreateGoal failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Start date") {
+		t.Error("expected error to mention start date")
+	}
+}
+
+func TestCreateGoal_EmptyTitle(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	form := url.Values{}
+	form.Set("title", "")
+
+	req := httptest.NewRequest(http.MethodPost, "/goals", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.CreateGoal(c); err != nil {
+		t.Fatalf("CreateGoal failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Error") {
+		t.Error("expected error toast for empty title")
+	}
+}
+
+func TestEditGoalForm_NotFound(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodGet, "/goals/missing/edit", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("missing")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	err := h.EditGoalForm(c)
+	if err == nil {
+		t.Fatal("expected error for missing goal")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusNotFound {
+		t.Fatalf("expected not found error, got %v", err)
+	}
+}
+
+func TestEditGoalForm_Populated(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "Run a 5k"}
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodGet, "/goals/g1/edit", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("g1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.EditGoalForm(c); err != nil {
+		t.Fatalf("EditGoalForm failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Run a 5k") {
+		t.Error("expected prefilled title in edit form")
+	}
+}
+
+func TestUpdateGoal_HTMX(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "Original"}
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	form := url.Values{}
+	form.Set("title", "Updated")
+	form.Set("description", "New desc")
+
+	req := httptest.NewRequest(http.MethodPut, "/goals/g1", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("g1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.UpdateGoal(c); err != nil {
+		t.Fatalf("UpdateGoal failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	hxTrigger := rec.Header().Get("HX-Trigger")
+	if !strings.Contains(hxTrigger, "goalUpdated") {
+		t.Errorf("expected HX-Trigger to include goalUpdated, got %q", hxTrigger)
+	}
+	if mockGoals.goals["g1"].Title != "Updated" {
+		t.Errorf("expected title to be updated, got %q", mockGoals.goals["g1"].Title)
+	}
+}
+
+func TestUpdateGoal_NotFound(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	form := url.Values{}
+	form.Set("title", "x")
+
+	req := httptest.NewRequest(http.MethodPut, "/goals/missing", strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("missing")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.UpdateGoal(c); err != nil {
+		t.Fatalf("UpdateGoal failed: %v", err)
+	}
+	if !strings.Contains(rec.Body.String(), "Goal not found") {
+		t.Error("expected 'Goal not found' error")
+	}
+}
+
+func TestMarkGoalComplete_HTMX(t *testing.T) {
+	// The Mark Complete route returns the GoalsSections OOB
+	// response (both section wrappers with hx-swap-oob="true")
+	// so htmx replaces them in the DOM and the card visually
+	// moves from active to completed in place — no page reload.
+	mockGoals := newMockGoalRepository()
+	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "x"}
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodPost, "/goals/g1/complete", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("g1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.MarkGoalComplete(c); err != nil {
+		t.Fatalf("MarkGoalComplete failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	hxTrigger := rec.Header().Get("HX-Trigger")
+	if !strings.Contains(hxTrigger, "goalCompleted") {
+		t.Errorf("expected HX-Trigger to include goalCompleted, got %q", hxTrigger)
+	}
+	if !mockGoals.goals["g1"].IsComplete() {
+		t.Error("expected goal to be marked complete in mock")
+	}
+
+	// The response carries both section wrappers so htmx can
+	// OOB-swap them and the card "moves" from active to
+	// completed in one round trip.
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="active-goals-section"`) {
+		t.Error("expected active-goals-section wrapper in OOB response")
+	}
+	if !strings.Contains(body, `id="completed-goals-section"`) {
+		t.Error("expected completed-goals-section wrapper in OOB response")
+	}
+	// hx-swap-oob="true" must appear on both wrappers so
+	// htmx processes both.
+	if strings.Count(body, `hx-swap-oob="true"`) < 2 {
+		t.Error("expected hx-swap-oob=\"true\" on both section wrappers")
+	}
+	if !strings.Contains(body, `id="goal-g1"`) {
+		t.Error("expected goal card id in OOB response")
+	}
+}
+
+// TestMarkGoalComplete_HTMX_MovesCardToCompleted is the key
+// behaviour test: when the only active goal is marked complete,
+// the OOB response places the card inside the completed wrapper
+// (not the active wrapper). The active wrapper shows the
+// empty-state hint because the user has no active goals left.
+func TestMarkGoalComplete_HTMX_MovesCardToCompleted(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "Only active"}
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodPost, "/goals/g1/complete", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("g1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.MarkGoalComplete(c); err != nil {
+		t.Fatalf("MarkGoalComplete failed: %v", err)
+	}
+
+	body := rec.Body.String()
+	idxActive := strings.Index(body, `id="active-goals-section"`)
+	idxCompleted := strings.Index(body, `id="completed-goals-section"`)
+	idxCard := strings.Index(body, `id="goal-g1"`)
+
+	if idxActive < 0 || idxCompleted < 0 || idxCard < 0 {
+		t.Fatalf("missing expected ids: active=%d completed=%d card=%d", idxActive, idxCompleted, idxCard)
+	}
+	// The active wrapper renders first (it always does), the
+	// completed wrapper renders after. The card must live
+	// inside the completed wrapper — its byte position must be
+	// after the completed wrapper's opening id.
+	if !(idxCompleted < idxCard) {
+		t.Errorf("expected card to be inside the completed wrapper, got active=%d completed=%d card=%d",
+			idxActive, idxCompleted, idxCard)
+	}
+	// And the active wrapper should now show the empty-state
+	// hint (no active cards rendered, but the section itself is
+	// still in the DOM for future OOB swaps).
+	if !strings.Contains(body, "No active goals") {
+		t.Error("expected active wrapper to show the empty-state hint after the only active goal was completed")
+	}
+}
+
+func TestMarkGoalComplete_NotFound(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodPost, "/goals/missing/complete", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("missing")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	err := h.MarkGoalComplete(c)
+	if err == nil {
+		t.Fatal("expected error for missing goal")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusNotFound {
+		t.Fatalf("expected not found error, got %v", err)
+	}
+}
+
+func TestReopenGoal_HTMX(t *testing.T) {
+	// Reopen is the mirror of Mark Complete: the card "moves"
+	// from completed back to active via the same OOB-swap
+	// mechanism. The response carries both section wrappers.
+	completedAt := time.Now()
+	mockGoals := newMockGoalRepository()
+	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "x", CompletedAt: &completedAt}
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodPost, "/goals/g1/reopen", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("g1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ReopenGoal(c); err != nil {
+		t.Fatalf("ReopenGoal failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	hxTrigger := rec.Header().Get("HX-Trigger")
+	if !strings.Contains(hxTrigger, "goalReopened") {
+		t.Errorf("expected HX-Trigger to include goalReopened, got %q", hxTrigger)
+	}
+	if mockGoals.goals["g1"].IsComplete() {
+		t.Error("expected goal to be active after reopen")
+	}
+
+	// The response carries both section wrappers (active +
+	// completed) so htmx can OOB-swap them and the card "moves"
+	// from completed back to active in one round trip.
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="active-goals-section"`) {
+		t.Error("expected active-goals-section wrapper in OOB response")
+	}
+	if !strings.Contains(body, `id="completed-goals-section"`) {
+		t.Error("expected completed-goals-section wrapper in OOB response")
+	}
+	if strings.Count(body, `hx-swap-oob="true"`) < 2 {
+		t.Error("expected hx-swap-oob=\"true\" on both section wrappers")
+	}
+	if !strings.Contains(body, `id="goal-g1"`) {
+		t.Error("expected goal card id in OOB response")
+	}
+}
+
+// TestReopenGoal_HTMX_MovesCardToActive is the key behaviour
+// test: when the only completed goal is reopened, the OOB
+// response places the card inside the active wrapper (not the
+// completed wrapper), and the completed wrapper becomes hidden
+// because there are no completed goals left.
+func TestReopenGoal_HTMX_MovesCardToActive(t *testing.T) {
+	completedAt := time.Now()
+	mockGoals := newMockGoalRepository()
+	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "Only completed", CompletedAt: &completedAt}
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodPost, "/goals/g1/reopen", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("g1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.ReopenGoal(c); err != nil {
+		t.Fatalf("ReopenGoal failed: %v", err)
+	}
+
+	body := rec.Body.String()
+	idxActive := strings.Index(body, `id="active-goals-section"`)
+	idxCompleted := strings.Index(body, `id="completed-goals-section"`)
+	idxCard := strings.Index(body, `id="goal-g1"`)
+
+	if idxActive < 0 || idxCompleted < 0 || idxCard < 0 {
+		t.Fatalf("missing expected ids: active=%d completed=%d card=%d", idxActive, idxCompleted, idxCard)
+	}
+	// The card must live inside the active wrapper — its byte
+	// position must be after the active wrapper's opening id.
+	if !(idxActive < idxCard) {
+		t.Errorf("expected card to be inside the active wrapper, got active=%d completed=%d card=%d",
+			idxActive, idxCompleted, idxCard)
+	}
+	// And the completed wrapper should now be hidden because
+	// there are no completed goals left.
+	if !strings.Contains(body, `<div id="completed-goals-section" hx-swap-oob="true" class="hidden"`) {
+		t.Error("expected completed wrapper to be hidden when the only completed goal was reopened")
+	}
+}
+
+func TestDeleteGoal_HTMX(t *testing.T) {
+	// The edit form's delete button has no hx-target (it can't —
+	// the goal card isn't in the DOM on the edit page), so the
+	// route must respond with HX-Redirect to drive the browser
+	// back to /goals. No body / no toast — the redirect IS the
+	// feedback. This test pins that contract.
+	mockGoals := newMockGoalRepository()
+	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "x"}
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodDelete, "/goals/g1", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("g1")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	if err := h.DeleteGoal(c); err != nil {
+		t.Fatalf("DeleteGoal failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("HX-Redirect"); got != "/goals" {
+		t.Errorf("expected HX-Redirect=/goals, got %q", got)
+	}
+	hxTrigger := rec.Header().Get("HX-Trigger")
+	if !strings.Contains(hxTrigger, "goalDeleted") {
+		t.Errorf("expected HX-Trigger to include goalDeleted, got %q", hxTrigger)
+	}
+	if _, ok := mockGoals.goals["g1"]; ok {
+		t.Error("expected goal to be removed from mock")
+	}
+}
+
+func TestDeleteGoal_NotFound(t *testing.T) {
+	mockGoals := newMockGoalRepository()
+	h, e := setupHandlerGoalsFresh(t, mockGoals)
+
+	req := httptest.NewRequest(http.MethodDelete, "/goals/missing", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("missing")
+	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
+
+	err := h.DeleteGoal(c)
+	if err == nil {
+		t.Fatal("expected error for missing goal")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok || httpErr.Code != http.StatusNotFound {
+		t.Fatalf("expected not found error, got %v", err)
+	}
 }

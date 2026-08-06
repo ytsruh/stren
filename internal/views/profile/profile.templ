@@ -2,7 +2,9 @@ package profile
 
 import (
 	"fmt"
+	"strconv"
 
+	"stren/internal/models"
 	"stren/internal/views"
 	"stren/internal/views/components"
 )
@@ -18,7 +20,18 @@ import (
 // been set, in which case the form input is empty. weightUnit is the
 // user's preferred unit ("kg" / "lbs") and drives the <select>'s
 // initial selection.
-templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *float64, weightUnit string, pushConfigured bool, pushHasSubscription bool, vapidPublicKey string) {
+//
+// The reminder section surfaces the user's per-user weight-reminder
+// preferences: master switch, frequency (off / daily / weekly /
+// biweekly), day-of-week (weekly + biweekly only), time-of-day
+// (hour-only), and the two channel checkboxes. pushHasSubscription
+// is the same value that drives the @PushBanner so the push
+// checkbox reflects whether the user actually has a subscription on
+// this device; the orchestrator's skip rule still wins in the end
+// (no subscription = push is silently skipped), but the form
+// disables the checkbox so the user is not surprised by a check
+// they tick that does nothing.
+templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *float64, weightUnit string, pushConfigured bool, pushHasSubscription bool, vapidPublicKey string, reminder ReminderFormState) {
 	@views.Layout(views.PageData{Title: "Profile", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/profile"}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Profile"})
 		<form
@@ -74,6 +87,7 @@ templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *flo
 					</select>
 				</div>
 			</div>
+			@ReminderSection(reminder, pushHasSubscription)
 			<button type="submit" class="btn-primary">
 				<span class="btn-spinner hidden absolute animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent"></span>
 				Save
@@ -94,7 +108,7 @@ templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *flo
 						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
 					>
 						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
-						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block dark:hidden"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="block dark:hidden"><path d="M3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
 						<span class="hidden dark:inline">Light Mode</span>
 						<span class="inline dark:hidden">Dark Mode</span>
 					</button>
@@ -102,6 +116,216 @@ templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *flo
 			</div>
 		</div>
 	}
+}
+
+// ReminderFormState is the view-layer struct the profile form
+// renders. Decoupled from models.ReminderPreferences so the
+// templ can hold a few presentation-only helpers (e.g. the
+// "needs day-of-week" branch) without leaking the model's
+// validation rules into the view. The route translates this
+// into a ReminderPreferences at submit time.
+type ReminderFormState struct {
+	// Enabled is the master switch. The form uses this to
+	// decide whether to dim the rest of the section (off =
+	// greyed-out, the other fields are still sent but the
+	// server treats them as informational only).
+	Enabled bool
+	// Frequency is the cadence the user picked. One of
+	// "off" / "daily" / "weekly" / "biweekly".
+	Frequency models.ReminderFrequency
+	// DayOfWeek is 0–6 (Sunday=0) for weekly + biweekly;
+	// nil for off / daily. The form renders the picker only
+	// when frequency.NeedsDayOfWeek() is true.
+	DayOfWeek *int
+	// Time is "HH:00" UTC. The picker is <input type="time"
+	// step="3600">; the form's value attribute is the
+	// stored string verbatim so the server can validate
+	// the same shape it wrote.
+	Time string
+	// EmailEnabled is the email channel toggle.
+	EmailEnabled bool
+	// PushEnabled is the push channel toggle. The form
+	// disables the checkbox when the user has no
+	// subscription on this device; the server-side skip
+	// rule is the source of truth either way.
+	PushEnabled bool
+	// PushHasSubscription is true when the user has at
+	// least one push_subscriptions row. Drives the
+	// disabled state of the push checkbox (so the user
+	// cannot tick a checkbox that the orchestrator will
+	// silently skip). Same value the route reads from
+	// pushCtrl.HasSubscription.
+	PushHasSubscription bool
+}
+
+// ReminderSection renders the "Weight reminders" subsection of
+// the profile form. The master switch controls whether the
+// subsection is "active" (the rest of the fields are still
+// submitted, but visually de-emphasised). The day-of-week
+// picker is only shown for weekly + biweekly; a small inline
+// script (RemindersScript, at the bottom of this file) shows
+// or hides the picker on the fly as the user changes the
+// frequency <select>. The time-of-day picker is hour-only by
+// design (step="3600").
+//
+// The push checkbox is always interactive, even when the user
+// has no push_subscriptions row. Ticking it is harmless: the
+// per-user orchestrator's skip rule reads the row at fire
+// time and reports "skipped: no active push subscriptions"
+// rather than a failure. Disabling the checkbox on first
+// paint was confusing — users hit a grey control with no
+// obvious way to make it interactive. The save response
+// surfaces a one-time warning toast (see ProfileUpdateSuccess)
+// when the user ticks push but the orchestrator will not be
+// able to deliver, so the missed-channel state is visible
+// without being enforced up-front.
+templ ReminderSection(r ReminderFormState, pushHasSubscription bool) {
+	<fieldset class="grid gap-4 border-t pt-4">
+		<legend class="text-sm font-medium">Weight reminders</legend>
+		<p class="text-sm text-muted-foreground">Get a nudge to log your weight on a schedule that works for you. Pick a frequency, time, and how you want to be reminded.</p>
+		<div class="flex items-center gap-2">
+			<input
+				type="checkbox"
+				id="reminder_enabled"
+				name="reminder_enabled"
+				role="switch"
+				value="1"
+				if r.Enabled {
+					checked
+				}
+			/>
+			<label for="reminder_enabled">Send me weight reminders</label>
+		</div>
+		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+			<div class="grid gap-2">
+				<label for="reminder_frequency">Frequency</label>
+				<select class="input w-full" id="reminder_frequency" name="reminder_frequency">
+					for _, f := range models.AllReminderFrequencies {
+						<option value={ string(f) } selected?={ r.Frequency == f }>{ reminderFrequencyLabel(f) }</option>
+					}
+				</select>
+			</div>
+			<div
+				class="grid gap-2"
+				id="reminder-day-of-week-wrap"
+				if !r.Frequency.NeedsDayOfWeek() {
+					hidden
+				}
+			>
+				<label for="reminder_day_of_week">Day of week</label>
+				<select class="input w-full" id="reminder_day_of_week" name="reminder_day_of_week">
+					for i, label := range reminderDayLabels {
+						<option value={ itoaForReminder(i) } selected?={ r.DayOfWeek != nil && *r.DayOfWeek == i }>{ label }</option>
+					}
+				</select>
+			</div>
+			<div class="grid gap-2">
+				<label for="reminder_time">Time of day (UTC)</label>
+				<input
+					class="input"
+					type="time"
+					id="reminder_time"
+					name="reminder_time"
+					step="3600"
+					value={ r.Time }
+				/>
+			</div>
+		</div>
+		<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+			<div class="flex items-center gap-2">
+				<input
+					type="checkbox"
+					id="reminder_email_enabled"
+					name="reminder_email_enabled"
+					value="1"
+					if r.EmailEnabled {
+						checked
+					}
+				/>
+				<label for="reminder_email_enabled">Email notifications</label>
+			</div>
+			<div class="flex items-center gap-2">
+				<input
+					type="checkbox"
+					id="reminder_push_enabled"
+					name="reminder_push_enabled"
+					value="1"
+					if r.PushEnabled {
+						checked
+					}
+				/>
+				<label for="reminder_push_enabled">Push notifications</label>
+				if !pushHasSubscription {
+					<span class="text-xs text-muted-foreground">Push isn't enabled on this device yet — the reminder will be saved but no push will fire until you turn on "Notifications" below.</span>
+				}
+			</div>
+		</div>
+	</fieldset>
+	@RemindersScript()
+}
+
+// RemindersScript is the tiny client-side handler that
+// toggles the day-of-week picker's visibility based on the
+// frequency <select>. Server-rendered so the section works
+// without an external JS file. Kept inline (rather than
+// extracted to /public/js) because the form is the only
+// consumer and the logic is six lines.
+templ RemindersScript() {
+	<script>
+		(function() {
+			var freq = document.getElementById('reminder_frequency');
+			var wrap = document.getElementById('reminder-day-of-week-wrap');
+			if (!freq || !wrap) return;
+			function sync() {
+				var needs = freq.value === 'weekly' || freq.value === 'biweekly';
+				if (needs) {
+					wrap.removeAttribute('hidden');
+				} else {
+					wrap.setAttribute('hidden', '');
+				}
+			}
+			freq.addEventListener('change', sync);
+			sync();
+		})();
+	</script>
+}
+
+// reminderDayLabels is the fixed 0..6 → "Sunday".."Saturday"
+// map. 0 matches time.Sunday (and the user's ComputedAt
+// anchor). Kept as a package-level slice (rather than a map)
+// so the templ can iterate it in deterministic order.
+var reminderDayLabels = []string{
+	"Sunday", "Monday", "Tuesday", "Wednesday",
+	"Thursday", "Friday", "Saturday",
+}
+
+// reminderFrequencyLabel returns the user-facing label for a
+// frequency. Kept as a helper so the form picks the right
+// copy without leaking the model's storage strings ("off" /
+// "weekly" / etc.) into the view.
+func reminderFrequencyLabel(f models.ReminderFrequency) string {
+	switch f {
+	case models.ReminderOff:
+		return "Off"
+	case models.ReminderDaily:
+		return "Daily"
+	case models.ReminderWeekly:
+		return "Weekly"
+	case models.ReminderBiweekly:
+		return "Bi-weekly"
+	}
+	return string(f)
+}
+
+// itoaForReminder renders a 0..6 int as a decimal string for
+// the day-of-week <option> values. Lives next to the labels
+// it iterates; not exposed because no other template needs
+// an "0..6 int as string" helper. Uses strconv so the
+// implementation is one expression and stays correct for any
+// future day-index value (e.g. if reminders ever support a
+// second week of the month).
+func itoaForReminder(i int) string {
+	return strconv.Itoa(i)
 }
 
 // roleLabel returns a human-readable role label.
@@ -112,9 +336,24 @@ func roleLabel(isAdmin bool) string {
 	return "User"
 }
 
-// ProfileUpdateSuccess renders a success toast for HTMX responses.
-templ ProfileUpdateSuccess() {
+// ProfileUpdateSuccess renders a success toast for HTMX
+// responses. The optional warning message (when non-empty)
+// renders a second toast directly after the success one so
+// the user sees both — the save succeeded, but there is a
+// secondary heads-up (e.g. "push is enabled in your
+// preferences but you have no push subscription on this
+// device, so the next reminder will be skipped for push").
+//
+// The two toasts are rendered as siblings (each is its own
+// <div>) so the toaster's "beforeend" swap appends both in
+// one HTMX response, in the order success → warning, so
+// the user sees the success first and the warning below
+// it.
+templ ProfileUpdateSuccess(warning string) {
 	@views.Toast("success", "Profile updated", "")
+	if warning != "" {
+		@views.Toast("warning", "Heads up", warning)
+	}
 }
 
 // ProfileUpdateError renders an error toast for HTMX responses.

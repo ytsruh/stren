@@ -118,15 +118,17 @@ func (s *Service) SendWelcome(ctx context.Context, user *models.User) error {
 	})
 }
 
-// SendWeightReminder delivers the weekly "log your weight"
-// reminder email. The body is the templated message that
-// accompanies the push notification fired by the same
-// scheduled job; the email is the fallback for users who
-// have not enabled push notifications.
+// SendWeightReminder delivers the per-user "log your weight"
+// reminder email. The cadence is one of models.ReminderDaily /
+// Weekly / Biweekly and is threaded into the templ component so
+// a daily user gets a "Time to log your weight" subject and a
+// weekly user gets "Sunday weigh-in reminder" (the same copy
+// that the old all-user orchestrator used, but driven by
+// per-user preferences now).
 //
-// The caller (the reminders package) is expected to fire
-// this from a goroutine with a recover so a single SMTP
-// failure does not take the whole batch down.
+// The caller (the reminders package) is expected to fire this
+// from a goroutine with a recover so a single SMTP failure does
+// not take the whole batch down.
 func (s *Service) SendWeightReminder(ctx context.Context, user *models.User) error {
 	if user == nil {
 		return errors.New("email: SendWeightReminder: user is nil")
@@ -135,13 +137,33 @@ func (s *Service) SendWeightReminder(ctx context.Context, user *models.User) err
 		return errors.New("email: SendWeightReminder: user.Email is empty")
 	}
 
-	html, text := emailtmpl.RenderWeightReminder(user.Name, s.baseURL)
+	cadence := user.ReminderFrequency
+	html, text := emailtmpl.RenderWeightReminder(user.Name, s.baseURL, cadence)
+	subject, _ := weightReminderSubject(cadence)
 	return s.sender.Send(ctx, Message{
 		To:      user.Email,
-		Subject: "Sunday weigh-in reminder",
+		Subject: subject,
 		HTML:    html,
 		Text:    text,
 	})
+}
+
+// weightReminderSubject returns the email subject for the given
+// cadence. Pulled into a helper so the EmailSender can stamp the
+// right subject on the Message without re-running the templ
+// renderer's branching — the templ component already encodes the
+// subject into the email body, but the SMTP layer needs the bare
+// subject string in the Message envelope.
+func weightReminderSubject(cadence models.ReminderFrequency) (string, string) {
+	switch cadence {
+	case models.ReminderDaily:
+		return "Time to log your weight", "Today's weigh-in"
+	case models.ReminderWeekly:
+		return "Sunday weigh-in reminder", "It's Sunday — time to log this week's weight."
+	case models.ReminderBiweekly:
+		return "Time to log your weight", "Time to log this week's weight."
+	}
+	return "Time to log your weight", "Time to log your weight."
 }
 
 // SendPasswordReset mints a fresh password-reset token via the

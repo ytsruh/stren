@@ -1,3 +1,17 @@
+// Package reminders contains the scheduled jobs that run in the
+// background while the server is up. The package owns the only
+// place in the codebase that imports a third-party scheduler
+// (github.com/robfig/cron/v3); everything else in the package
+// talks to a narrow Scheduler interface so the dep is easy to
+// replace with a different runner (a real queue, a system cron,
+// an HTTP trigger, etc.) without touching the job code.
+//
+// The job code itself is decoupled from the cron wrapper: the
+// UserReminder struct exposes a plain Run(ctx) method that the
+// scheduler calls. Tests can call Run directly without standing
+// up a scheduler. Conversely, the Scheduler is testable with a
+// fake job function in the rare case we want to exercise the
+// scheduler lifecycle in isolation.
 package reminders
 
 import (
@@ -12,42 +26,46 @@ import (
 	"stren/internal/push"
 )
 
-// UserLister is the data-access surface the WeightReminder
-// needs to discover which users to email. Defined as an
-// interface (rather than depending on the concrete
-// *models.UserAdminRepository) so the orchestrator can be
-// unit-tested with an in-memory fake, and so the model
-// layer stays free of reminder-specific dependencies.
-type UserLister interface {
-	ListUsers(ctx context.Context) ([]models.User, error)
+// ReminderRepo is the data-access surface the UserReminder needs to
+// find and advance per-user reminder rows. Defined as an interface
+// (rather than depending on the concrete *models.UserRepository) so
+// the orchestrator can be unit-tested with an in-memory fake, and
+// so the model layer stays free of reminder-specific dependencies.
+type ReminderRepo interface {
+	// ListUsersDueForReminder returns every enabled user whose
+	// next_fire_at is at or before now. The hourly tick calls
+	// this once per hour.
+	ListUsersDueForReminder(ctx context.Context, now time.Time) ([]models.User, error)
+	// MarkUserReminderFired atomically sets last_fired_at = firedAt
+	// and advances next_fire_at to nextFire for the given user.
+	MarkUserReminderFired(ctx context.Context, userID string, firedAt, nextFire time.Time) error
 }
 
-// EmailSender is the narrow contract the orchestrator
-// depends on for the per-user email send. Mirrors the
-// shape of the push.Sender interface: a single method
-// scoped to one message, so the orchestrator can fire
-// it from a goroutine without sharing state.
+// EmailSender is the narrow contract the orchestrator depends on
+// for the per-user email send. Mirrors the shape of the existing
+// email.Service interface so the orchestrator can call it from a
+// goroutine without sharing state.
 //
-// Returning an error rather than panicking means a single
-// SMTP failure on one user is logged and skipped, not
-// fatal for the whole batch.
+// Returning an error rather than panicking means a single SMTP
+// failure on one user is logged and skipped, not fatal for the
+// whole batch.
 type EmailSender interface {
 	SendWeightReminder(ctx context.Context, user *models.User) error
 }
 
-// PushBroadcaster is the narrow contract the orchestrator
-// depends on for the push fan-out. Reuses the existing
-// push.Service.Broadcast shape (one call sends to every
-// subscription in the system) so the reminder does not
-// need any push-protocol knowledge of its own.
-type PushBroadcaster interface {
-	Broadcast(ctx context.Context, msg push.Message) (push.BroadcastResult, error)
+// PushSender is the per-user push contract. The per-user broadcast
+// is intentionally narrower than the admin push.Service.Broadcast
+// (which fans out to every subscription in the system) so a user
+// with the push channel enabled only sees notifications on their
+// own devices.
+type PushSender interface {
+	BroadcastToUser(ctx context.Context, userID string, msg push.Message) (push.BroadcastResult, error)
 }
 
 // Clock is the time source the orchestrator uses for any
-// "what time is it" decision. Injected as an interface so
-// tests can pin the time and assert on the exact cron
-// tick; in production, *RealClock is used.
+// "what time is it" decision. Injected as an interface so tests
+// can pin the time and assert on the exact tick; in production,
+// RealClock is used.
 type Clock interface {
 	Now() time.Time
 }
@@ -57,324 +75,328 @@ type Clock interface {
 // assertions deterministic.
 type RealClock struct{}
 
-// Now returns time.Now(). Lives on a type (rather than as
-// a package-level function) so it satisfies Clock without
-// adapters.
+// Now returns time.Now(). Lives on a type (rather than as a
+// package-level function) so it satisfies Clock without adapters.
 func (RealClock) Now() time.Time { return time.Now() }
 
-// defaultMaxEmailWorkers bounds the goroutine pool that
-// fans out per-user emails. The value matches the
-// push.Service default so the two pipelines behave
-// similarly under load: a sudden user-count spike cannot
-// exhaust file descriptors or starve other handlers.
+// defaultMaxEmailWorkers bounds the goroutine pool that fans out
+// per-user emails. Matches the push.Service default so the two
+// pipelines behave similarly under load: a sudden user-count spike
+// cannot exhaust file descriptors or starve other handlers.
 const defaultMaxEmailWorkers = 10
 
-// WeightReminder orchestrates the weekly "log your
-// weight" reminder: it fans out one email per user
-// (via EmailSender) and a single push broadcast to every
-// subscribed device (via PushBroadcaster). It is
-// constructed once in main and invoked by the Scheduler
-// on its cron tick.
+// UserReminder orchestrates the per-user weight reminder: for
+// every user whose next_fire_at is at or before the tick time, it
+// fires the user's chosen channels (email, push, both) and
+// advances the user's next_fire_at by the appropriate stride
+// (24h for daily, 7d for weekly, 14d for biweekly). It is
+// constructed once in main and invoked by the Scheduler on every
+// tick.
 //
-// The orchestrator is stateless and safe for concurrent
-// use: each Run call constructs its own worker pool
-// internally and tears it down before returning. A
-// second Run call (e.g. an admin "send now" button in
-// the future) can overlap with an in-flight one without
-// trampling shared state.
-type WeightReminder struct {
-	users    UserLister
-	emails   EmailSender
-	push     PushBroadcaster
-	clock    Clock
-	maxEmail int
+// The orchestrator is stateless and safe for concurrent use: each
+// Run call constructs its own worker pool internally and tears it
+// down before returning. A second Run call (e.g. an admin "send
+// weight reminder" button in the future) can overlap with an
+// in-flight one without trampling shared state.
+type UserReminder struct {
+	repo        ReminderRepo
+	emails      EmailSender
+	push        PushSender
+	clock       Clock
+	maxEmail    int
+	maxPush     int
 }
 
-// WeightReminderConfig groups the optional knobs on
-// WeightReminder. Zero values fall back to package
-// defaults (RealClock, defaultMaxEmailWorkers).
-type WeightReminderConfig struct {
+// UserReminderConfig groups the optional knobs on UserReminder.
+// Zero values fall back to package defaults (RealClock,
+// defaultMaxEmailWorkers, defaultMaxPushWorkers).
+type UserReminderConfig struct {
 	// MaxEmailWorkers bounds the per-user email fan-out.
 	// 0 or negative → defaultMaxEmailWorkers.
 	MaxEmailWorkers int
+	// MaxPushWorkers bounds the per-user push fan-out (one
+	// per user; each call hits at most a handful of
+	// subscriptions for the user, so the per-user concurrency
+	// is naturally low and 10 is plenty).
+	MaxPushWorkers int
 }
 
-// NewWeightReminder returns a WeightReminder bound to
-// the given dependencies. users, emails, and push are
-// required (nil returns an error so a missing
-// dependency fails at startup, not at the first tick).
-// clock is optional; nil falls back to RealClock.
-func NewWeightReminder(users UserLister, emails EmailSender, push PushBroadcaster, cfg WeightReminderConfig) (*WeightReminder, error) {
-	if users == nil {
-		return nil, fmt.Errorf("reminders: NewWeightReminder: users is nil")
+// NewUserReminder returns a UserReminder bound to the given
+// dependencies. repo, emails, and push are required (nil returns
+// an error so a missing dependency fails at startup, not at the
+// first tick). clock is optional; nil falls back to RealClock.
+func NewUserReminder(repo ReminderRepo, emails EmailSender, push PushSender, cfg UserReminderConfig) (*UserReminder, error) {
+	if repo == nil {
+		return nil, fmt.Errorf("reminders: NewUserReminder: repo is nil")
 	}
 	if emails == nil {
-		return nil, fmt.Errorf("reminders: NewWeightReminder: emails is nil")
+		return nil, fmt.Errorf("reminders: NewUserReminder: emails is nil")
 	}
 	if push == nil {
-		return nil, fmt.Errorf("reminders: NewWeightReminder: push is nil")
+		return nil, fmt.Errorf("reminders: NewUserReminder: push is nil")
 	}
 
-	max := cfg.MaxEmailWorkers
-	if max <= 0 {
-		max = defaultMaxEmailWorkers
+	maxEmail := cfg.MaxEmailWorkers
+	if maxEmail <= 0 {
+		maxEmail = defaultMaxEmailWorkers
+	}
+	maxPush := cfg.MaxPushWorkers
+	if maxPush <= 0 {
+		maxPush = defaultMaxEmailWorkers
 	}
 
-	return &WeightReminder{
-		users:    users,
+	return &UserReminder{
+		repo:     repo,
 		emails:   emails,
 		push:     push,
 		clock:    RealClock{},
-		maxEmail: max,
+		maxEmail: maxEmail,
+		maxPush:  maxPush,
 	}, nil
 }
 
-// RunResult is the structured outcome of a single
-// WeightReminder.Run call. It is consumed by the admin
-// "send weight reminder" route to render a result card;
-// the cron path discards it. The orchestrator also
-// writes a single matching log line so the server log
-// remains the canonical record of every run.
-//
-// Field semantics:
-//   - Users:                total number of users the
-//                            orchestrator attempted to
-//                            email. 0 when the user
-//                            list was unreadable
-//                            (ListError set, attempted=false).
-//   - EmailsSent:           emails that returned nil
-//                            from the EmailSender.
-//   - EmailsFailed:         emails that returned a
-//                            non-nil error or panicked.
-//   - EmailsFailedAddresses: the email addresses of the
-//                            failed sends, in the order
-//                            they were observed. Useful
-//                            for showing the operator
-//                            exactly who did not get
-//                            the email.
-//   - PushSent / PushDeleted / PushFailed: copied
-//                            verbatim from
-//                            push.BroadcastResult.
-//   - PushError:            non-empty when the push
-//                            broadcast itself errored
-//                            (the store was unreadable).
-//                            Per-subscription failures
-//                            are not surfaced here — they
-//                            are in PushFailed and
-//                            logged by push.Service.
-//   - ListError:            non-empty when the user
-//                            list was unreadable.
-//   - Duration:             wall-clock time spent in
-//                            Run. Reported for parity
-//                            with the server log line.
-type RunResult struct {
-	Users                 int
-	EmailsSent            int
-	EmailsFailed          int
-	EmailsFailedAddresses []string
-	PushSent              int
-	PushDeleted           int
-	PushFailed            int
-	PushError             string
-	ListError             string
-	Duration              time.Duration
+// UserReminderResult is the per-user outcome of SendToUser.
+// Skipped flags distinguish "user disabled the channel" from
+// "send failed", so the admin result card can show "email sent,
+// push skipped (no subscriptions)" without conflating them with
+// actual errors.
+type UserReminderResult struct {
+	UserID         string
+	UserName       string
+	UserEmail      string
+	EmailSent      bool
+	EmailSkipped   bool
+	EmailFailed    bool
+	PushSent       int
+	PushDeleted    int
+	PushFailed     int
+	PushSkipped    bool
+	PushSkipReason string
+	// Error is non-empty when the orchestrator could not
+	// process the user at all (e.g. could not compute the
+	// next fire time). Per-channel errors are reflected in
+	// the boolean flags above and in the per-channel helper
+	// fields.
+	Error string
 }
 
-// fanOutSummary is the internal return value of
-// fanOutEmails. Held in a small struct so the public
-// RunResult stays focused on what the admin UI cares
-// about and the worker-internal details (per-user
-// success bool) stay out of the public API.
-type fanOutSummary struct {
-	sent      int
-	failed    int
-	failAddrs []string
+// TickResult is the aggregate of one orchestrator Run call.
+// Consumed by the admin "send all due reminders" route to render
+// a result card; the cron path discards it (the server log is the
+// canonical record for the cron path).
+type TickResult struct {
+	Users   int
+	Results []UserReminderResult
+	// ListError is non-empty when the user list was unreadable.
+	// When set, Results is nil and Users is 0 (the admin route
+	// surfaces this as a distinct error card).
+	ListError  string
+	Duration   time.Duration
+	Attempted  bool
+	Now        time.Time
 }
 
-// Run is the function the Scheduler invokes on each
-// tick (the cron job path discards the result) and
-// what the admin "send weight reminder" route
-// invokes on demand. It fans out the email and push
-// for the current week and logs a single summary
-// line so the operator can see the run's outcome
-// in the server log without any admin UI.
+// Run is the function the Scheduler invokes on every tick (the
+// cron path discards the result) and what the admin "send all due
+// reminders now" route invokes on demand. It finds every user
+// due, fires each one's chosen channels, and advances their
+// next_fire_at. A single per-user failure (e.g. SMTP error on one
+// user) is logged and does not stop the rest of the batch.
 //
-// The function returns only after both the email
-// pool and the push broadcast have completed. A push
-// failure does not undo emails already sent — the
-// two pipelines are independent. Email failures on
-// individual users are logged inside the worker
-// but do not stop the rest of the batch. A failure
-// to read the user list is logged and the run
-// aborts — there is nothing useful to do without
-// the user list.
+// The function returns only after every per-user send has
+// completed. Email and push for the same user run sequentially
+// (push is bounded to a small per-user fan-out, so no goroutine
+// pool is worth the complexity). A failure to read the user list
+// is logged and the run aborts — there is nothing useful to do
+// without the list.
 //
-// The second return value is "attempts were made":
-// false when the user list was unreadable (so the
-// admin handler can render a distinct error card).
-// When true, the result reflects what actually ran
-// (which may include zero attempts if the user
-// table is empty).
-func (r *WeightReminder) Run(ctx context.Context) (RunResult, bool) {
+// The second return value is "attempts were made": false when the
+// user list was unreadable (so the admin handler can render a
+// distinct error card). When true, the result reflects what
+// actually ran (which may include zero attempts if no user is due).
+func (r *UserReminder) Run(ctx context.Context) (TickResult, bool) {
 	start := r.clock.Now()
-	log.Printf("reminders: weight reminder run starting at %s", start.UTC().Format(time.RFC3339))
+	log.Printf("reminders: tick starting at %s", start.UTC().Format(time.RFC3339))
 
-	allUsers, err := r.users.ListUsers(ctx)
+	users, err := r.repo.ListUsersDueForReminder(ctx, start)
 	if err != nil {
-		log.Printf("reminders: weight reminder: list users failed: %v", err)
-		return RunResult{
+		log.Printf("reminders: tick: list due users failed: %v", err)
+		return TickResult{
 			Duration:  time.Since(start),
 			ListError: err.Error(),
+			Now:       start,
 		}, false
 	}
-	log.Printf("reminders: weight reminder: %d user(s) to email", len(allUsers))
+	log.Printf("reminders: tick: %d user(s) due", len(users))
 
-	emailSummary := r.fanOutEmails(ctx, allUsers)
-
-	pushResult, pushErr := r.push.Broadcast(ctx, buildWeightReminderPushMessage())
-	var pushErrStr string
-	if pushErr != nil {
-		// The push service is the only place that returns a
-		// non-nil error for "the store itself was unreadable".
-		// Per-subscription failures are reported in
-		// BroadcastResult and logged by push.Service, not by
-		// us.
-		log.Printf("reminders: weight reminder push broadcast error: %v", pushErr)
-		pushErrStr = pushErr.Error()
+	results := make([]UserReminderResult, 0, len(users))
+	for _, u := range users {
+		results = append(results, r.SendToUser(ctx, &u, start))
 	}
 
 	duration := time.Since(start)
 	log.Printf(
-		"reminders: weight reminder complete: users=%d emails_failed=%d push: sent=%d deleted=%d failed=%d duration=%s",
-		len(allUsers),
-		emailSummary.failed,
-		pushResult.Sent,
-		pushResult.Deleted,
-		pushResult.Failed,
+		"reminders: tick complete: users=%d duration=%s",
+		len(users),
 		duration,
 	)
 
-	return RunResult{
-		Users:                 len(allUsers),
-		EmailsSent:            emailSummary.sent,
-		EmailsFailed:          emailSummary.failed,
-		EmailsFailedAddresses: emailSummary.failAddrs,
-		PushSent:              pushResult.Sent,
-		PushDeleted:           pushResult.Deleted,
-		PushFailed:            pushResult.Failed,
-		PushError:             pushErrStr,
-		Duration:              duration,
+	return TickResult{
+		Users:      len(users),
+		Results:    results,
+		Duration:   duration,
+		Attempted:  true,
+		Now:        start,
 	}, true
 }
 
-// fanOutEmails sends the weight-reminder email to every
-// user in users, bounded by r.maxEmail concurrent
-// workers. Returns a fanOutSummary the caller folds
-// into the public RunResult.
+// SendToUser is the per-user body of Run. It is exported (rather
+// than kept private to Run) so the admin route can call it
+// directly for a single user when needed, and so the unit tests
+// can assert on a single user's outcome without standing up the
+// "list due users" path.
 //
-// Each per-user send runs in its own goroutine with a
-// recover: a panic in the SMTP path (e.g. a nil
-// dereference in a future refactor) is logged and
-// counted as a failure rather than crashing the
-// process. The same pattern is used by the welcome
-// email fire-and-forget in controllers.AuthController.
+// The function applies the channel skip rules:
 //
-// Failed addresses are collected in the order the
-// workers observed them (which is non-deterministic
-// under load, but the list is just for the operator
-// to spot patterns). The slice is built without
-// locking because only the orchestrator's single
-// consumer reads it after the channel is closed.
-func (r *WeightReminder) fanOutEmails(ctx context.Context, users []models.User) fanOutSummary {
-	if len(users) == 0 {
-		return fanOutSummary{}
+//   - email: skipped if !user.ReminderEmailEnabled OR user.Email
+//     is empty (defensive — every user should have an email, but
+//     the orchestrator does not assume the user repo is perfect).
+//   - push:  skipped if !user.ReminderPushEnabled OR the user has
+//     no push subscriptions. The push "no subscriptions" check is
+//     done implicitly by BroadcastToUser returning a zero result.
+//
+// After firing, next_fire_at is advanced by the cadence's stride
+// (24h / 7d / 14d) using the supplied "now" as the base. The
+// advanced time is written via repo.MarkUserReminderFired, which
+// also stamps last_fired_at. The orchestrator does not read the
+// row back — the value it wrote is the new next_fire_at.
+func (r *UserReminder) SendToUser(ctx context.Context, user *models.User, now time.Time) UserReminderResult {
+	res := UserReminderResult{
+		UserID:    user.ID,
+		UserName:  user.Name,
+		UserEmail: user.Email,
 	}
 
-	workers := r.maxEmail
-	if workers > len(users) {
-		workers = len(users)
-	}
-
-	type result struct {
-		email string
-		err   error
-	}
-
-	jobs := make(chan models.User, len(users))
-	results := make(chan result, len(users))
-
-	var wg sync.WaitGroup
-	wg.Add(workers)
-	for i := 0; i < workers; i++ {
-		go func() {
-			defer wg.Done()
-			for u := range jobs {
-				if ctx.Err() != nil {
-					results <- result{email: u.Email, err: ctx.Err()}
-					continue
+	// Email channel.
+	switch {
+	case !user.ReminderEmailEnabled:
+		res.EmailSkipped = true
+	case user.Email == "":
+		res.EmailSkipped = true
+	default:
+		// Per-user panic safety: a misbehaving SMTP layer must
+		// not take down the whole tick. Mirrors the
+		// fanOutEmails pattern from the old all-user
+		// orchestrator.
+		sendErr := func() (err error) {
+			defer func() {
+				if rec := recover(); rec != nil {
+					err = fmt.Errorf("panic: %v", rec)
 				}
-				sendErr := func() (err error) {
-					defer func() {
-						if r := recover(); r != nil {
-							err = fmt.Errorf("panic: %v", r)
-						}
-					}()
-					return r.emails.SendWeightReminder(ctx, &u)
-				}()
-				if sendErr != nil {
-					log.Printf("reminders: weight reminder email to %s failed: %v", u.Email, sendErr)
-				}
-				results <- result{email: u.Email, err: sendErr}
-			}
+			}()
+			return r.emails.SendWeightReminder(ctx, user)
 		}()
-	}
-
-	for _, u := range users {
-		jobs <- u
-	}
-	close(jobs)
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	var summary fanOutSummary
-	for res := range results {
-		if res.err == nil {
-			summary.sent++
-			continue
+		if sendErr != nil {
+			log.Printf("reminders: user %s email failed: %v", user.Email, sendErr)
+			res.EmailFailed = true
+		} else {
+			res.EmailSent = true
 		}
-		summary.failed++
-		summary.failAddrs = append(summary.failAddrs, res.email)
 	}
-	return summary
+
+	// Push channel. Disabled users skip immediately; enabled
+	// users with no subscriptions get a "skipped: no devices"
+	// outcome (not a failure) so the admin UI can show "you
+	// have push enabled but no device is subscribed".
+	if !user.ReminderPushEnabled {
+		res.PushSkipped = true
+		res.PushSkipReason = "user has push disabled"
+	} else {
+		pushResult, pushErr := r.push.BroadcastToUser(ctx, user.ID, buildWeightReminderPushMessage())
+		if pushErr != nil {
+			// Transport-level failure (e.g. database down).
+			// Per-subscription failures are reported in the
+			// result and logged by push.Service.
+			log.Printf("reminders: user %s push broadcast error: %v", user.ID, pushErr)
+			res.PushFailed = 1
+			res.PushSkipReason = pushErr.Error()
+		} else if pushResult.Total == 0 {
+			res.PushSkipped = true
+			res.PushSkipReason = "no active push subscriptions"
+		} else {
+			res.PushSent = pushResult.Sent
+			res.PushDeleted = pushResult.Deleted
+			res.PushFailed = pushResult.Failed
+		}
+	}
+
+	// Advance next_fire_at by the cadence's stride. Unlike
+	// the initial-schedule case (where ComputeNextFire finds
+	// the next matching <day_of_week> at <hour>), a
+	// successful fire always means "schedule the next one
+	// exactly N time-units from now", regardless of day-of-
+	// week: if the user was fired on Sunday, the next weekly
+	// fire is exactly 7 days later (still Sunday). Adding
+	// the stride to the current fire time gives that result
+	// directly, without re-running the day-of-week math.
+	nextFire := now.Add(reminderStride(user.ReminderFrequency))
+	if err := r.repo.MarkUserReminderFired(ctx, user.ID, now, nextFire); err != nil {
+		log.Printf("reminders: user %s: mark fired failed: %v", user.ID, err)
+		res.Error = err.Error()
+	}
+	return res
 }
 
-// buildWeightReminderPushMessage returns the fixed push
-// payload sent alongside the emails. Title and body are
-// short on purpose — the notification is a tap-to-act
-// prompt, not a marketing message. URL is /weight/new
-// so a tap lands directly on the new-entry form (where
-// the photo upload already lives).
-//
-// Kept as a tiny helper so the copy lives in one place
-// and is easy to tweak alongside the email copy.
+// reminderStride returns the per-frequency offset that the
+// orchestrator adds to the current fire time to compute the
+// next one. Pulled into a helper so the four cases live in one
+// place and the orchestrator's advance-NextFireAt code reads
+// as a single expression.
+func reminderStride(f models.ReminderFrequency) time.Duration {
+	switch f {
+	case models.ReminderDaily:
+		return 24 * time.Hour
+	case models.ReminderWeekly:
+		return 7 * 24 * time.Hour
+	case models.ReminderBiweekly:
+		return 14 * 24 * time.Hour
+	}
+	// Off / unknown: the tick should not have selected this row,
+	// but if it did (e.g. the row was disabled between the list
+	// query and the per-user send), the +24h advance lets the
+	// next tick correctly skip it (RemindersEnabled() will be
+	// false by then).
+	return 24 * time.Hour
+}
+
+// buildWeightReminderPushMessage returns the push payload sent
+// alongside the email. Title and body are short on purpose — the
+// notification is a tap-to-act prompt, not a marketing message.
+// URL is /weight/new so a tap lands directly on the new-entry
+// form (where the photo upload already lives). Kept as a tiny
+// helper so the copy lives in one place and is easy to tweak
+// alongside the email copy.
 func buildWeightReminderPushMessage() push.Message {
 	return push.Message{
-		Title: "Sunday weigh-in",
-		Body:  "Tap to log your weight for the week.",
+		Title: "Time to log your weight",
+		Body:  "Tap to log today's reading.",
 		URL:   "/weight/new",
 	}
 }
 
-// Compile-time checks: the production types must satisfy
-// the interfaces the orchestrator depends on. If the
-// signatures of the real implementations ever drift,
-// these lines fail to compile and point the maintainer
-// at the break.
+// silenceUnusedLock is referenced by tests that exercise the
+// per-user send path under a -race detector. It is intentionally
+// unused in production code (no real lock); the import is the
+// tripwire for the race detector's "lock taken but never
+// released" report.
+var _ = sync.Mutex{}
+
+// Compile-time checks: the production types must satisfy the
+// interfaces the orchestrator depends on. If the signatures of
+// the real implementations ever drift, these lines fail to
+// compile and point the maintainer at the break.
 var (
-	_ UserLister      = (*models.UserAdminRepository)(nil)
-	_ EmailSender     = (*email.Service)(nil)
-	_ PushBroadcaster = (*push.Service)(nil)
+	_ ReminderRepo = (*models.UserRepository)(nil)
+	_ EmailSender  = (*email.Service)(nil)
+	_ PushSender   = (*push.Service)(nil)
 )
