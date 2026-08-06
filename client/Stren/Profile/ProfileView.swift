@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// The "Profile" tab. Shows the signed-in user's basic info
-/// and a sign-out button. v1 has no editable profile
-/// fields (those live on the web app) — when they are
-/// added they'll go in this tab.
+/// and a sign-out button. Tapping the name, weight unit, or
+/// target weight row pushes a per-field editor that PUTs the
+/// change to `/api/v1/me` and refreshes `authStore.currentUser`
+/// on success so the rest of the app sees the new value.
 struct ProfileView: View {
     @EnvironmentObject private var env: AppEnvironment
     @EnvironmentObject private var authStore: AuthStore
@@ -27,44 +28,9 @@ struct ProfileView: View {
         NavigationStack {
             List {
                 if let user = authStore.currentUser {
-                    Section {
-                        HStack(spacing: DSSpacing.md) {
-                            ZStack {
-                                Circle()
-                                    .fill(DSColors.accent.opacity(0.15))
-                                    .frame(width: 56, height: 56)
-                                Text(initials(for: user.name))
-                                    .font(.title2.weight(.semibold))
-                                    .foregroundStyle(DSColors.accent)
-                            }
-                            VStack(alignment: .leading, spacing: DSSpacing.xxs) {
-                                Text(user.name)
-                                    .font(.headline)
-                                Text(user.email)
-                                    .font(.subheadline)
-                                    .foregroundStyle(DSColors.textSecondary)
-                            }
-                        }
-                        .padding(.vertical, DSSpacing.xs)
-                    }
-
-                    Section("Preferences") {
-                        HStack {
-                            Text("Weight unit")
-                            Spacer()
-                            Text(user.weightUnit)
-                                .foregroundStyle(DSColors.textSecondary)
-                        }
-                        if let target = user.targetWeight {
-                            HStack {
-                                Text("Target weight")
-                                Spacer()
-                                Text(String(format: "%.1f %@", target, user.weightUnit))
-                                    .foregroundStyle(DSColors.textSecondary)
-                            }
-                        }
-                    }
-
+                    headerSection(user: user)
+                    accountSection(user: user)
+                    preferencesSection(user: user)
                     appearanceSection
                 }
 
@@ -97,6 +63,76 @@ struct ProfileView: View {
         }
     }
 
+    // MARK: - Sections
+
+    private func headerSection(user: UserDTO) -> some View {
+        Section {
+            HStack(spacing: DSSpacing.md) {
+                ZStack {
+                    Circle()
+                        .fill(DSColors.accent.opacity(0.15))
+                        .frame(width: 56, height: 56)
+                    Text(initials(for: user.name))
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(DSColors.accent)
+                }
+                VStack(alignment: .leading, spacing: DSSpacing.xxs) {
+                    Text(user.name)
+                        .font(.headline)
+                    Text(user.email)
+                        .font(.subheadline)
+                        .foregroundStyle(DSColors.textSecondary)
+                }
+            }
+            .padding(.vertical, DSSpacing.xs)
+        }
+    }
+
+    private func accountSection(user: UserDTO) -> some View {
+        Section("Account") {
+            NavigationLink {
+                NameEditView(user: user)
+            } label: {
+                HStack {
+                    Text("Name")
+                    Spacer()
+                    Text(user.name)
+                        .foregroundStyle(DSColors.textSecondary)
+                }
+            }
+        }
+    }
+
+    private func preferencesSection(user: UserDTO) -> some View {
+        Section("Preferences") {
+            NavigationLink {
+                WeightUnitEditView(user: user)
+            } label: {
+                HStack {
+                    Text("Weight unit")
+                    Spacer()
+                    Text(user.weightUnit)
+                        .foregroundStyle(DSColors.textSecondary)
+                }
+            }
+            NavigationLink {
+                TargetWeightEditView(user: user)
+            } label: {
+                HStack {
+                    Text("Target weight")
+                    Spacer()
+                    if let target = user.targetWeight {
+                        Text(String(format: "%.1f %@", target, user.weightUnit))
+                            .foregroundStyle(DSColors.textSecondary)
+                    } else {
+                        Text("Not set")
+                            .foregroundStyle(DSColors.textSecondary)
+                    }
+                }
+            }
+        }
+    }
+
     /// System / Light / Dark picker. Uses a 3-way segmented
     /// control so all three options are visible without a
     /// tap, matching the web's inline toggle.
@@ -115,6 +151,8 @@ struct ProfileView: View {
             Text("Match the device, or override with Light or Dark.")
         }
     }
+
+    // MARK: - Helpers
 
     private func initials(for name: String) -> String {
         let parts = name

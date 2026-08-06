@@ -89,6 +89,64 @@ func (h *Handler) APIMe(c echo.Context) error {
 	return c.JSON(http.StatusOK, UserFromModel(user))
 }
 
+// APIUpdateMe handles PUT /api/v1/me. Updates the same
+// user-editable fields the HTML profile form exposes (name,
+// target weight, weight unit) and returns the updated
+// UserDTO. Reminder preferences, push subscriptions, and
+// notification channels are intentionally NOT updated here
+// — the iOS app surfaces no UI for them yet, and the web
+// keeps the form-only ownership of those fields for now.
+//
+// The JWT is not regenerated. iOS reads the token directly
+// from the Keychain and the next /me round-trip on launch
+// will surface the new name; the server's cookie path is
+// web-only and the iOS client never sees it.
+func (h *Handler) APIUpdateMe(c echo.Context) error {
+	var in UpdateMeRequest
+	if err := c.Bind(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "invalid request body"})
+	}
+	if err := h.validator.ValidateStruct(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: friendlyValidationError(err)})
+	}
+	if in.WeightUnit == "" {
+		// The validator's `oneof` only fires on a non-empty
+		// value, so an omitted field sails through. Default
+		// to "kg" to match the SQL column default and the
+		// HTML form's empty-input behavior.
+		in.WeightUnit = "kg"
+	}
+
+	claims := GetClaims(c)
+	user := &models.User{
+		ID:           claims.UserID,
+		Name:         in.Name,
+		Email:        claims.Email,
+		IsAdmin:      claims.IsAdmin,
+		TargetWeight: in.TargetWeight,
+		WeightUnit:   in.WeightUnit,
+	}
+	if err := h.userRepo.UpdateUser(user); err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to update profile"})
+	}
+
+	// Re-read so the response reflects any server-side
+	// normalisation (e.g. WeightUnitDisplay falling back to
+	// "kg" for unknown values) and the post-update timestamp.
+	updated, err := h.userRepo.GetUserByID(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to load user"})
+	}
+	if updated == nil {
+		// Should not happen — the JWT referenced a user
+		// that existed when we just updated it. Treat as a
+		// 500 so the client retries rather than caching a
+		// stale view.
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "user not found after update"})
+	}
+	return c.JSON(http.StatusOK, UserFromModel(updated))
+}
+
 // --- Exercises ---
 
 // APIListExercises handles GET /api/v1/exercises. Returns

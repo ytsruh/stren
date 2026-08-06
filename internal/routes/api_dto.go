@@ -70,6 +70,24 @@ func UserFromModel(u *models.User) UserDTO {
 	}
 }
 
+// UpdateMeRequest is the JSON body for PUT /api/v1/me. Mirrors
+// the user-editable subset of the HTML profile form (name,
+// target weight, weight unit) so the iOS app can update the
+// same fields the web app exposes. Reminder preferences and
+// notification settings are deliberately omitted: they live
+// on the web app only for now, and the iOS client surfaces no
+// UI for them. Add fields here (and to UserDTO) when the iOS
+// app grows that surface.
+//
+// TargetWeight is a pointer so an omitted JSON field (or an
+// explicit null) clears the user's goal, matching the form's
+// empty-input semantics.
+type UpdateMeRequest struct {
+	Name         string   `json:"name"          validate:"required,min=2,max=100"`
+	TargetWeight *float64 `json:"target_weight" validate:"omitempty,gte=0,lte=1000"`
+	WeightUnit   string   `json:"weight_unit"   validate:"omitempty,oneof=kg lbs"`
+}
+
 // ExerciseDTO is the JSON shape for an exercise in any list or
 // lookup response.
 type ExerciseDTO struct {

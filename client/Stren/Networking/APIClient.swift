@@ -108,6 +108,22 @@ public final class APIClient: @unchecked Sendable {
         try await send("GET", "me")
     }
 
+    /// Updates the authenticated user's profile. Mirrors the
+    /// user-editable subset of the web app's `/profile` form
+    /// (name, target weight, weight unit). Returns the updated
+    /// user so the caller can refresh `AuthStore.currentUser`
+    /// without a follow-up `me()` round trip.
+    ///
+    /// Reminder preferences and push subscriptions are NOT
+    /// writable through this endpoint — the iOS app surfaces
+    /// no UI for them yet, so the server keeps the form-only
+    /// ownership of those fields. When those surfaces land
+    /// on iOS, add dedicated endpoints rather than expanding
+    /// this one.
+    public func updateProfile(_ request: UpdateMeRequest) async throws -> UserDTO {
+        try await send("PUT", "me", body: request)
+    }
+
     // MARK: - Exercises
 
     public func listExercises() async throws -> [ExerciseDTO] {

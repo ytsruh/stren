@@ -76,6 +76,41 @@ public struct UserDTO: Codable, Equatable, Identifiable {
     }
 }
 
+// MARK: Profile
+
+/// JSON body for `PUT /api/v1/me`. Mirrors the user-editable
+/// subset of the server's `UpdateMeRequest` (name, target
+/// weight, weight unit). Reminder preferences and notification
+/// settings are deliberately omitted — the iOS app surfaces no
+/// UI for them yet, so the iOS-only DTOs stay slim. When those
+/// surfaces land on iOS, add the fields here and to `UserDTO`.
+///
+/// `targetWeight` is an optional pointer so an explicit `nil`
+/// clears the goal (matching the HTML form's empty-input
+/// behavior). The iOS edit form binds the field to a `String`
+/// and converts to a `Double?` so the user can leave it blank.
+public struct UpdateMeRequest: Encodable, Equatable {
+    public let name: String
+    public let targetWeight: Double?
+    public let weightUnit: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case targetWeight = "target_weight"
+        case weightUnit = "weight_unit"
+    }
+
+    public init(
+        name: String,
+        targetWeight: Double?,
+        weightUnit: String
+    ) {
+        self.name = name
+        self.targetWeight = targetWeight
+        self.weightUnit = weightUnit
+    }
+}
+
 // MARK: Exercises
 
 public struct ExerciseDTO: Codable, Equatable, Identifiable, Hashable {

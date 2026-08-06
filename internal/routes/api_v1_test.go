@@ -222,6 +222,153 @@ func TestAPIMe_BadToken(t *testing.T) {
 	}
 }
 
+// --- /me PUT (update profile) ---
+
+func TestAPIUpdateMe_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "upd@example.com", "Old Name")
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", token, UpdateMeRequest{
+		Name:         "New Name",
+		TargetWeight: ptrFloat(85.5),
+		WeightUnit:   "lbs",
+	})
+	dto := decodeAPI[UserDTO](t, rec, http.StatusOK)
+	if dto.Name != "New Name" {
+		t.Fatalf("name = %q, want New Name", dto.Name)
+	}
+	if dto.TargetWeight == nil || *dto.TargetWeight != 85.5 {
+		t.Fatalf("target_weight = %v, want 85.5", dto.TargetWeight)
+	}
+	if dto.WeightUnit != "lbs" {
+		t.Fatalf("weight_unit = %q, want lbs", dto.WeightUnit)
+	}
+	// Email + admin flag must not be writable from this endpoint —
+	// they come from the JWT, not the request body.
+	if dto.Email != "upd@example.com" {
+		t.Fatalf("email = %q, want upd@example.com (unchanged)", dto.Email)
+	}
+	if dto.IsAdmin {
+		t.Fatal("is_admin should be false for a freshly-registered user")
+	}
+}
+
+func TestAPIUpdateMe_ClearTargetWeight(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "clr@example.com", "Clr")
+
+	// Seed an existing target weight by updating the user
+	// directly through the mock. The HTTP path then clears
+	// it by sending target_weight: null.
+	seeded := 80.0
+	for i := range mockUser.users {
+		if mockUser.users[i].Email == "clr@example.com" {
+			mockUser.users[i].TargetWeight = &seeded
+		}
+	}
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", token, map[string]any{
+		"name":          "Clr",
+		"target_weight": nil,
+		"weight_unit":   "kg",
+	})
+	dto := decodeAPI[UserDTO](t, rec, http.StatusOK)
+	if dto.TargetWeight != nil {
+		t.Fatalf("target_weight = %v, want nil after clear", *dto.TargetWeight)
+	}
+}
+
+func TestAPIUpdateMe_DefaultsWeightUnit(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "def@example.com", "Def")
+
+	// Omit weight_unit entirely — the handler should default
+	// it to "kg" rather than write an empty string.
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", token, map[string]any{
+		"name": "Def",
+	})
+	dto := decodeAPI[UserDTO](t, rec, http.StatusOK)
+	if dto.WeightUnit != "kg" {
+		t.Fatalf("weight_unit = %q, want kg (default)", dto.WeightUnit)
+	}
+}
+
+func TestAPIUpdateMe_Validation_NameTooShort(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "ns@example.com", "Ns")
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", token, UpdateMeRequest{
+		Name: "A",
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if apiErr.Error == "" {
+		t.Fatal("expected validation error")
+	}
+}
+
+func TestAPIUpdateMe_Validation_NameTooLong(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "nl@example.com", "Nl")
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", token, UpdateMeRequest{
+		Name: strings.Repeat("x", 101),
+	})
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+func TestAPIUpdateMe_Validation_BadUnit(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "bu@example.com", "Bu")
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", token, UpdateMeRequest{
+		Name:       "Bu",
+		WeightUnit: "stone",
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if apiErr.Error == "" {
+		t.Fatal("expected validation error for unknown unit")
+	}
+}
+
+func TestAPIUpdateMe_Validation_TargetTooHigh(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "th@example.com", "Th")
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", token, UpdateMeRequest{
+		Name:         "Th",
+		TargetWeight: ptrFloat(2000),
+	})
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+func TestAPIUpdateMe_Validation_TargetNegative(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "tn@example.com", "Tn")
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", token, UpdateMeRequest{
+		Name:         "Tn",
+		TargetWeight: ptrFloat(-1),
+	})
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+func TestAPIUpdateMe_Unauthorized(t *testing.T) {
+	_, _, _, e := setupHandler(t)
+
+	// No token — 401 with the same APIError shape /me uses.
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", "", UpdateMeRequest{
+		Name: "Whatever",
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ptrFloat is a tiny helper so the success-path test can
+// write `ptrFloat(85.5)` instead of a fresh `f := 85.5; &f`
+// dance on every literal.
+func ptrFloat(v float64) *float64 { return &v }
+
 // --- /exercises ---
 
 func TestAPIListExercises(t *testing.T) {

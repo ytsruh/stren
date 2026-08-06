@@ -233,6 +233,7 @@ func registerAPIRoutes(e *echo.Echo, h *Handler) {
 
 	// Current user
 	e.GET("/api/v1/me", h.APIMe)
+	e.PUT("/api/v1/me", h.APIUpdateMe)
 
 	// Exercises
 	e.GET("/api/v1/exercises", h.APIListExercises)

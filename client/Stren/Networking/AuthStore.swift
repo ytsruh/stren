@@ -78,6 +78,21 @@ public final class AuthStore: ObservableObject {
         currentUser = user
     }
 
+    /// Replace the cached user without touching the auth
+    /// token. Used by the profile-edit flow after a
+    /// successful `PUT /me`: the response carries the
+    /// updated `UserDTO`, and the JWT itself is unchanged
+    /// (the iOS client reads the token directly from the
+    /// Keychain and never relies on server-issued cookies).
+    /// The UserDefaults cache is refreshed so the next
+    /// launch's name render is correct.
+    public func updateCurrentUser(_ user: UserDTO) {
+        if let data = try? JSONEncoder().encode(user) {
+            UserDefaults.standard.set(data, forKey: userDefaultsKey)
+        }
+        currentUser = user
+    }
+
     /// Forget the current session. The token is removed from
     /// the Keychain and the cached user is cleared. The
     /// server has nothing to do (JWTs are stateless) so no
