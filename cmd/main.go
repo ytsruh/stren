@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -169,7 +170,11 @@ func main() {
 	e.HideBanner = true
 	e.HidePort = true
 
-	// Custom HTTP error handler - renders error pages instead of JSON
+	// Custom HTTP error handler. HTML routes get a templ-rendered
+	// error page so the user can read the message in the same
+	// design as the rest of the app; API routes (anything under
+	// /api/v1/) get a JSON body so native clients like the iOS
+	// app can parse the error without trying to render HTML.
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
 		code := http.StatusInternalServerError
 		message := "Something went wrong"
@@ -181,6 +186,13 @@ func main() {
 					message = msg
 				}
 			}
+		}
+
+		if strings.HasPrefix(c.Request().URL.Path, "/api/v1/") {
+			if !c.Response().Committed {
+				_ = c.JSON(code, routes.APIError{Error: message})
+			}
+			return
 		}
 
 		data := views.NewErrorData(code, message)

@@ -28,6 +28,15 @@ func (ec *ExerciseEntryController) ListExerciseEntriesLast7Days(userID string) (
 	return ec.repo.ListExerciseEntriesLast7Days(userID)
 }
 
+// GetExerciseEntriesByDateRange returns the user's exercise entries
+// within the inclusive [start, end] range, ordered by created_at
+// descending. Thin wrapper over the repository method so the JSON
+// API route handler can ask for a custom date window (e.g. "last
+// 30 days") without going around the controller layer.
+func (ec *ExerciseEntryController) GetExerciseEntriesByDateRange(start, end time.Time, userID string) ([]models.ExerciseEntry, error) {
+	return ec.repo.GetExerciseEntriesByDateRange(start, end, userID)
+}
+
 // GetExerciseEntry retrieves a single exercise entry by ID, scoped to the user.
 func (ec *ExerciseEntryController) GetExerciseEntry(id, userID string) (*models.ExerciseEntry, error) {
 	return ec.repo.GetExerciseEntry(id, userID)
