@@ -67,7 +67,7 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             DashboardView()
-                .tabItem { Label("Today", systemImage: "list.bullet.rectangle") }
+                .tabItem { Label("Dashboard", systemImage: "house") }
 
             ExerciseListView()
                 .tabItem { Label("Exercises", systemImage: "dumbbell") }

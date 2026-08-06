@@ -15,8 +15,10 @@ public enum Icons {
 
     // MARK: - Dashboard
 
-    /// Toolbar "add set" button.
+    /// Toolbar "add set" button (and the "Add Set" action card).
     public static let addSet = "plus"
+    /// "Timer" action card.
+    public static let timer = "timer"
     /// Empty-state for the dashboard's "no sets yet" view.
     public static let dumbbellLarge = "dumbbell"
     /// Empty-state for the per-exercise history view.

@@ -39,7 +39,6 @@ You can override per build in Xcode's scheme editor → Run → Arguments
 | `make build`   | Compile the app for the booted iOS simulator (no run) |
 | `make boot`    | Open the first available iPhone simulator (no-op if one is already running) |
 | `make run`     | Build, install, and launch on the booted simulator — **auto-boots one if nothing is running** |
-| `make test`    | Run the unit-test target on the simulator |
 | `make clean`   | Wipe build artifacts |
 
 `make run` is a one-keystroke dev loop. It first checks whether a
