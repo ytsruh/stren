@@ -1,0 +1,266 @@
+import Foundation
+
+/// HTTP client for the Stren server's `/api/v1` namespace.
+/// One method per endpoint, all `async throws`, all returning
+/// a strongly-typed DTO. No third-party networking
+/// dependency — just `URLSession`.
+///
+/// Auth is handled by an injected `tokenProvider` closure
+/// (typically `AuthStore.currentToken`). On 401 the
+/// `onUnauthorized` callback fires so the caller can clear
+/// the session and bounce the user to the login screen
+/// before the calling view's error handler runs.
+public final class APIClient: @unchecked Sendable {
+    private let baseURL: URL
+    private let session: URLSession
+    private let tokenProvider: @Sendable () -> String?
+    private let onUnauthorized: @Sendable () -> Void
+
+    /// Shared JSON encoder/decoder pair configured for the
+    /// server's wire format. Dates are RFC 3339 with
+    /// fractional seconds (matching Go's `time.Time` JSON
+    /// output) with a no-fractional-seconds fallback for
+    /// older server versions.
+    public static let jsonEncoder: JSONEncoder = {
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(APIClient.dateFormatter.string(from: date))
+        }
+        return enc
+    }()
+
+    public static let jsonDecoder: JSONDecoder = {
+        let dec = JSONDecoder()
+        dec.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let str = try container.decode(String.self)
+            // Try the two on-the-wire variants we expect from
+            // the server, in order of specificity.
+            for options in APIClient.dateFormatOptions {
+                APIClient.dateFormatter.formatOptions = options
+                if let date = APIClient.dateFormatter.date(from: str) {
+                    return date
+                }
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Could not parse date string: \(str)"
+            )
+        }
+        return dec
+    }()
+
+    private static let dateFormatOptions: [ISO8601DateFormatter.Options] = [
+        [.withInternetDateTime, .withFractionalSeconds],
+        [.withInternetDateTime],
+    ]
+
+    private static let dateFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        return f
+    }()
+
+    public init(
+        baseURL: URL,
+        session: URLSession = .shared,
+        tokenProvider: @escaping @Sendable () -> String?,
+        onUnauthorized: @escaping @Sendable () -> Void = {}
+    ) {
+        // Force a trailing slash so relative paths like
+        // "auth/login" resolve to ".../api/v1/auth/login",
+        // not ".../api/auth/login". Without the trailing
+        // slash, Swift's URL resolver treats the last
+        // segment of baseURL as a file and replaces it.
+        self.baseURL = baseURL.absoluteString.hasSuffix("/")
+            ? baseURL
+            : baseURL.appendingPathComponent("")
+        self.session = session
+        self.tokenProvider = tokenProvider
+        self.onUnauthorized = onUnauthorized
+    }
+
+    // MARK: - Auth
+
+    public func login(email: String, password: String) async throws -> AuthResponse {
+        try await send(
+            "POST",
+            "auth/login",
+            body: LoginRequest(email: email, password: password),
+            requiresAuth: false
+        )
+    }
+
+    public func register(name: String, email: String, password: String) async throws -> AuthResponse {
+        try await send(
+            "POST",
+            "auth/register",
+            body: RegisterRequest(name: name, email: email, password: password),
+            requiresAuth: false
+        )
+    }
+
+    public func logout() async throws {
+        try await sendVoid("POST", "auth/logout", requiresAuth: false)
+    }
+
+    public func me() async throws -> UserDTO {
+        try await send("GET", "me")
+    }
+
+    // MARK: - Exercises
+
+    public func listExercises() async throws -> [ExerciseDTO] {
+        try await send("GET", "exercises")
+    }
+
+    // MARK: - Exercise entries (sets)
+
+    public func listExerciseEntries(days: Int = 7) async throws -> [ExerciseEntryDTO] {
+        try await send("GET", "exercise-entries?days=\(days)")
+    }
+
+    public func getExerciseEntry(id: String) async throws -> ExerciseEntryDTO {
+        try await send("GET", "exercise-entries/\(id)")
+    }
+
+    public func createExerciseEntries(_ request: CreateExerciseEntriesRequest) async throws -> [ExerciseEntryDTO] {
+        try await send("POST", "exercise-entries", body: request)
+    }
+
+    public func updateExerciseEntry(id: String, request: UpdateExerciseEntryRequest) async throws -> ExerciseEntryDTO {
+        try await send("PUT", "exercise-entries/\(id)", body: request)
+    }
+
+    public func deleteExerciseEntry(id: String) async throws {
+        try await sendVoid("DELETE", "exercise-entries/\(id)")
+    }
+
+    // MARK: - Per-exercise history & chart
+
+    public func getExerciseHistory(id: String, page: Int = 1) async throws -> HistoryPageDTO {
+        try await send("GET", "exercises/\(id)/history?page=\(page)")
+    }
+
+    public func getExerciseChartData(id: String) async throws -> [ExerciseEntryDTO] {
+        try await send("GET", "exercises/\(id)/chart")
+    }
+
+    // MARK: - Request plumbing
+
+    /// Generic request method for endpoints that return a
+    /// JSON body. Throws `APIError` on transport, status,
+    /// and decoding failures. The 401 path fires
+    /// `onUnauthorized` so the caller doesn't have to.
+    private func send<T: Decodable>(
+        _ method: String,
+        _ path: String,
+        body: (any Encodable)? = nil,
+        requiresAuth: Bool = true
+    ) async throws -> T {
+        let request = try makeRequest(method: method, path: path, body: body, requiresAuth: requiresAuth)
+        let (data, response) = try await performRequest(request)
+        try checkStatus(response: response, data: data)
+        do {
+            return try Self.jsonDecoder.decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(error)
+        }
+    }
+
+    /// Variant of `send` for endpoints that return no body
+    /// (204 No Content). Same status-code handling, no
+    /// decoder step.
+    private func sendVoid(
+        _ method: String,
+        _ path: String,
+        body: (any Encodable)? = nil,
+        requiresAuth: Bool = true
+    ) async throws {
+        let request = try makeRequest(method: method, path: path, body: body, requiresAuth: requiresAuth)
+        let (data, response) = try await performRequest(request)
+        try checkStatus(response: response, data: data)
+    }
+
+    private func makeRequest(
+        method: String,
+        path: String,
+        body: (any Encodable)?,
+        requiresAuth: Bool
+    ) throws -> URLRequest {
+        // Strip a leading slash so the join doesn't produce
+        // a doubled "//" segment, e.g. "...v1//auth/login".
+        let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        let url: URL
+        if let composed = URL(string: normalizedPath, relativeTo: baseURL)?.absoluteURL {
+            url = composed
+        } else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if requiresAuth, let token = tokenProvider(), !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        if let body {
+            do {
+                request.httpBody = try Self.jsonEncoder.encode(AnyEncodable(body))
+            } catch {
+                throw APIError.decoding(error)
+            }
+        }
+        return request
+    }
+
+    private func performRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        do {
+            return try await session.data(for: request)
+        } catch let urlError as URLError {
+            throw APIError.transport(urlError)
+        } catch {
+            throw APIError.transport(URLError(.unknown))
+        }
+    }
+
+    private func checkStatus(response: URLResponse, data: Data) throws {
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.transport(URLError(.badServerResponse))
+        }
+        switch http.statusCode {
+        case 200..<300:
+            return
+        case 401:
+            onUnauthorized()
+            throw APIError.unauthorized
+        default:
+            let message: String
+            if let body = try? Self.jsonDecoder.decode(APIErrorBody.self, from: data) {
+                message = body.error
+            } else {
+                message = "HTTP \(http.statusCode)"
+            }
+            throw APIError.server(status: http.statusCode, message: message)
+        }
+    }
+}
+
+/// Type-erased `Encodable` so `send` can take an `any
+/// Encodable` body without requiring every caller to use a
+/// generic function. Cheaper than `JSONEncoder` doing the
+/// lookup at runtime via `Any`, and `Encodable` constraints
+/// on the static method already guarantee the wrapped value
+/// encodes successfully.
+private struct AnyEncodable: Encodable {
+    private let _encode: (Encoder) throws -> Void
+
+    init(_ wrapped: any Encodable) {
+        self._encode = wrapped.encode
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try _encode(encoder)
+    }
+}

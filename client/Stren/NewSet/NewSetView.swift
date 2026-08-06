@@ -1,0 +1,269 @@
+import SwiftUI
+
+/// The "log a set" sheet. Picker for the exercise, a list
+/// of set rows (reps/weight/rest), a notes field, and an
+/// optional timestamp. Tapping save POSTs the whole batch
+/// in one request so all sets share the same exercise,
+/// notes, and timestamp (matches the web form's semantics).
+struct NewSetView: View {
+    @EnvironmentObject private var env: AppEnvironment
+    @EnvironmentObject private var authStore: AuthStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var exercises: [ExerciseDTO] = []
+    @State private var selectedExerciseID: String?
+    @State private var sets: [SetDraft] = [SetDraft()]
+    @State private var notes: String = ""
+    @State private var timestamp: Date = Date()
+    @State private var includeTimestamp: Bool = false
+    @State private var isLoadingExercises: Bool = true
+    @State private var isSaving: Bool = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                exerciseSection
+                setsSection
+                notesSection
+                timestampSection
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(DSColors.destructive)
+                    }
+                }
+            }
+            .navigationTitle("New set")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Text("Save").bold()
+                        }
+                    }
+                    .disabled(isSaving || !canSave)
+                }
+            }
+        }
+        .task { await loadExercises() }
+    }
+
+    // MARK: - Sections
+
+    private var exerciseSection: some View {
+        Section("Exercise") {
+            if isLoadingExercises {
+                HStack { ProgressView(); Text("Loading…") }
+            } else if exercises.isEmpty {
+                Text("No exercises available. Ask an admin to add some.")
+                    .foregroundStyle(DSColors.textSecondary)
+            } else {
+                Picker("Exercise", selection: $selectedExerciseID) {
+                    Text("Select…").tag(String?.none)
+                    ForEach(exercises) { exercise in
+                        Text(exercise.name).tag(String?.some(exercise.id))
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+        }
+    }
+
+    private var setsSection: some View {
+        Section {
+            ForEach($sets) { $set in
+                SetRowEditor(set: $set, weightUnit: authStore.currentUser?.weightUnit ?? "kg")
+            }
+            .onDelete { indexSet in
+                sets.remove(atOffsets: indexSet)
+                if sets.isEmpty {
+                    sets.append(SetDraft())
+                }
+            }
+            Button {
+                sets.append(SetDraft())
+            } label: {
+                Label("Add set", systemImage: "plus.circle")
+            }
+        } header: {
+            Text("Sets")
+        } footer: {
+            Text("Swipe a row to remove it. Each set is saved separately but shares this exercise, notes, and timestamp.")
+        }
+    }
+
+    private var notesSection: some View {
+        Section("Notes") {
+            TextField("Optional", text: $notes, axis: .vertical)
+                .lineLimit(1...4)
+        }
+    }
+
+    private var timestampSection: some View {
+        Section("When") {
+            Toggle("Set a custom time", isOn: $includeTimestamp)
+            if includeTimestamp {
+                DatePicker(
+                    "Time",
+                    selection: $timestamp,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+            } else {
+                Text("Will be saved with the current time.")
+                    .font(.footnote)
+                    .foregroundStyle(DSColors.textSecondary)
+            }
+        }
+    }
+
+    // MARK: - Validation
+
+    private var canSave: Bool {
+        guard selectedExerciseID != nil else { return false }
+        return sets.contains { $0.isValid }
+    }
+
+    // MARK: - Data
+
+    private func loadExercises() async {
+        defer { isLoadingExercises = false }
+        do {
+            exercises = try await env.api.listExercises()
+            // Pre-select the first exercise for a faster
+            // happy path — the user just opens the sheet
+            // and tweaks the values.
+            if selectedExerciseID == nil {
+                selectedExerciseID = exercises.first?.id
+            }
+        } catch {
+            errorMessage = "Could not load the exercise list."
+        }
+    }
+
+    private func save() async {
+        errorMessage = nil
+        guard let exerciseID = selectedExerciseID else { return }
+        // Build the payload directly so we can use the
+        // non-nil values once (no force-unwraps) and so the
+        // filter + map is a single pass.
+        let validSets: [CreateSetInput] = sets.compactMap { draft in
+            guard let reps = draft.reps, reps > 0,
+                  let weight = draft.weightValue, weight >= 0 else {
+                return nil
+            }
+            return CreateSetInput(
+                reps: reps,
+                weight: weight,
+                restTime: draft.restSeconds ?? 0
+            )
+        }
+        guard !validSets.isEmpty else { return }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            _ = try await env.api.createExerciseEntries(
+                CreateExerciseEntriesRequest(
+                    exerciseID: exerciseID,
+                    notes: notes,
+                    createdAt: includeTimestamp ? timestamp : nil,
+                    sets: validSets
+                )
+            )
+            dismiss()
+        } catch let error as APIError {
+            errorMessage = error.errorDescription
+        } catch {
+            errorMessage = "Could not save your set."
+        }
+    }
+}
+
+/// One row in the new-set form: reps, weight, and rest time.
+/// Empty values are kept as `nil` so the form's
+/// "Tap + to add" rows don't trigger validation errors
+/// before the user types.
+struct SetDraft: Identifiable, Equatable {
+    let id = UUID()
+    var reps: Int?
+    var weightText: String = ""
+    var restSeconds: Int?
+
+    /// Numeric weight for the API. `nil` while the user
+    /// hasn't typed anything, otherwise the parsed value
+    /// (0 is valid for bodyweight exercises).
+    var weightValue: Double? {
+        get { weightText.isEmpty ? nil : Double(weightText) }
+    }
+
+    /// A row is "valid" when reps and weight are both set
+    /// (weight can be 0 for bodyweight exercises; the
+    /// server accepts it). Rest time is optional and
+    /// defaults to 0.
+    var isValid: Bool {
+        guard let reps, reps > 0 else { return false }
+        guard let w = weightValue, w >= 0 else { return false }
+        return true
+    }
+}
+
+/// Editor row for a single `SetDraft`. Uses three text
+/// fields in a `HStack` so the whole row fits on one
+/// screen even on the smallest iPhone.
+struct SetRowEditor: View {
+    @Binding var set: SetDraft
+    let weightUnit: String
+
+    var body: some View {
+        HStack(spacing: DSSpacing.xs) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Reps")
+                    .font(.caption)
+                    .foregroundStyle(DSColors.textSecondary)
+                TextField("0", value: Binding(
+                    get: { set.reps ?? 0 },
+                    set: { set.reps = $0 == 0 ? nil : $0 }
+                ), format: .number)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Weight (\(weightUnit))")
+                    .font(.caption)
+                    .foregroundStyle(DSColors.textSecondary)
+                TextField("0.0", text: $set.weightText)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.roundedBorder)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Rest (s)")
+                    .font(.caption)
+                    .foregroundStyle(DSColors.textSecondary)
+                TextField("0", value: Binding(
+                    get: { set.restSeconds ?? 0 },
+                    set: { set.restSeconds = $0 == 0 ? nil : $0 }
+                ), format: .number)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+            }
+        }
+    }
+}
+
+#Preview {
+    NewSetView()
+        .environmentObject(AppEnvironment.live(baseURL: URL(string: "http://localhost:8080/api/v1")!))
+        .environmentObject(AuthStore(api: APIClient(
+            baseURL: URL(string: "http://localhost:8080/api/v1")!,
+            tokenProvider: { nil }
+        )))
+}
