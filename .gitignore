@@ -11,7 +11,7 @@ internal/views/**/*_templ.go
 public/css/styles.css
 
 # Binaries
-stren
+/stren
 main
 *.exe
 *.dll

@@ -1,0 +1,103 @@
+name: Stren
+options:
+  bundleIdPrefix: com.ytsruh
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    SWIFT_STRICT_CONCURRENCY: "minimal"
+targets:
+  Stren:
+    type: application
+    platform: iOS
+    sources:
+      - path: Stren
+        # Only the 18pt static weights (Regular / Medium / SemiBold /
+        # Bold) ship in the app bundle. The full Inter download
+        # also includes 24pt + 28pt optical sizes, the variable
+        # fonts, the italic variants, and the heavier weights —
+        # all kept in `Fonts/Inter/` for reference but excluded
+        # from the bundle to keep the IPA small. The matching
+        # PostScript names (`Inter18pt-*`) are hard-coded in
+        # `Typography.swift` and the matching filenames in the
+        # `UIAppFonts` block below.
+        excludes:
+          - "DesignSystem/Fonts/Inter/static/**/Inter_24pt*"
+          - "DesignSystem/Fonts/Inter/static/**/Inter_28pt*"
+          - "DesignSystem/Fonts/Inter/Inter-*VariableFont*"
+          - "DesignSystem/Fonts/Inter/static/**/Inter_*Italic*"
+          - "DesignSystem/Fonts/Inter/static/**/Inter_18pt-Thin*"
+          - "DesignSystem/Fonts/Inter/static/**/Inter_18pt-ExtraLight*"
+          - "DesignSystem/Fonts/Inter/static/**/Inter_18pt-Light*"
+          - "DesignSystem/Fonts/Inter/static/**/Inter_18pt-ExtraBold*"
+          - "DesignSystem/Fonts/Inter/static/**/Inter_18pt-Black*"
+          - "DesignSystem/Fonts/Inter/OFL.txt"
+          - "DesignSystem/Fonts/Inter/README.txt"
+    info:
+      path: Stren/Info.plist
+      properties:
+        CFBundleDisplayName: Stren
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: ""
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
+        # Inter (web's brand sans). Static 18pt weights from
+        # client/Stren/DesignSystem/Fonts/Inter/static/ — see
+        # Typography.swift for the matching PostScript names.
+        UIAppFonts:
+          - Inter_18pt-Regular.ttf
+          - Inter_18pt-Medium.ttf
+          - Inter_18pt-SemiBold.ttf
+          - Inter_18pt-Bold.ttf
+        STREN_API_BASE_URL: $(STREN_API_SCHEME)://$(STREN_API_HOST)$(STREN_API_PATH)
+    # Per-build-configuration xcconfig files. XcodeGen
+    # attaches these to the target so every build pulls the
+    # matching STREN_API_BASE_URL out of Info.plist via the
+    # `$(STREN_API_BASE_URL)` reference above. Debug keeps
+    # the localhost dev server (simulator-only); Release
+    # points at the production HTTPS server for on-device
+    # installs.
+    configFiles:
+      Debug: Stren/Configs/Debug.xcconfig
+      Release: Stren/Configs/Release.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ytsruh.stren
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+schemes:
+  Stren:
+    build:
+      targets:
+        Stren: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

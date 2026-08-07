@@ -210,8 +210,44 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	// API routes for htmx
 	e.GET("/api/exercises", h.ListExercisesJSON)
 
+	// JSON API namespace for the iOS client and any other
+	// native client. The auth middleware (registered above
+	// via e.Use) already accepts the "Authorization: Bearer
+	// <token>" header and returns a JSON 401 for /api/v1
+	// paths, so no group-level middleware is needed here.
+	registerAPIRoutes(e, h)
+
 	// Static files (PWA assets, icons, etc.) - registered last as catch-all
 	e.Static("/", "public")
+}
+
+// registerAPIRoutes wires every /api/v1/* handler onto the
+// given Echo instance. Kept in its own function (and file,
+// in api_v1.go for the handler bodies) so the HTML route
+// table above stays focused on the web app's surface.
+func registerAPIRoutes(e *echo.Echo, h *Handler) {
+	// Auth (login & register are public — see isPublicRoute)
+	e.POST("/api/v1/auth/login", h.APILogin)
+	e.POST("/api/v1/auth/register", h.APIRegister)
+	e.POST("/api/v1/auth/logout", h.APILogout)
+
+	// Current user
+	e.GET("/api/v1/me", h.APIMe)
+	e.PUT("/api/v1/me", h.APIUpdateMe)
+
+	// Exercises
+	e.GET("/api/v1/exercises", h.APIListExercises)
+
+	// Exercise entries (sets)
+	e.GET("/api/v1/exercise-entries", h.APIListExerciseEntries)
+	e.POST("/api/v1/exercise-entries", h.APICreateExerciseEntries)
+	e.GET("/api/v1/exercise-entries/:id", h.APIGetExerciseEntry)
+	e.PUT("/api/v1/exercise-entries/:id", h.APIUpdateExerciseEntry)
+	e.DELETE("/api/v1/exercise-entries/:id", h.APIDeleteExerciseEntry)
+
+	// Per-exercise history & chart data
+	e.GET("/api/v1/exercises/:id/history", h.APIGetExerciseHistory)
+	e.GET("/api/v1/exercises/:id/chart", h.APIGetExerciseChartData)
 }
 
 // ServeManifest serves the web app manifest with the correct MIME type.

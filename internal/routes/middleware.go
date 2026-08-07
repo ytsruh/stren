@@ -4,6 +4,7 @@ package routes
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -18,9 +19,25 @@ const authContextKey = "auth_claims"
 // context so multiple handlers in the same request only hit the DB once.
 const userContextKey = "auth_user"
 
-// AuthMiddleware returns an Echo middleware function that verifies the auth cookie
-// and injects the user claims into the request context.
-// If the token is missing or invalid, the request is redirected to /login.
+// apiV1Prefix is the URL prefix for JSON API routes. The auth
+// middleware uses it to decide between an HTML redirect (for the
+// web app) and a JSON 401 (for API clients) when a request lacks
+// a valid token.
+const apiV1Prefix = "/api/v1/"
+
+// bearerPrefix is the scheme prefix for the Authorization header
+// value the API clients send. The standard HTTP form is
+// "Authorization: Bearer <token>".
+const bearerPrefix = "Bearer "
+
+// AuthMiddleware returns an Echo middleware function that verifies
+// the auth token and injects the user claims into the request
+// context. The token is read from the "Authorization: Bearer ..."
+// header (preferred, used by the iOS client and any other API
+// consumer) and falls back to the auth cookie (used by the web
+// app). If the token is missing or invalid the response is either
+// a redirect to /login (web app) or a JSON 401 (API clients), so
+// the iOS app can surface a clean error instead of chasing a 302.
 func AuthMiddleware(jwtService *utils.JWTService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -30,14 +47,14 @@ func AuthMiddleware(jwtService *utils.JWTService) echo.MiddlewareFunc {
 				return next(c)
 			}
 
-			cookie, err := c.Cookie(utils.CookieName)
-			if err != nil {
-				return redirectToLogin(c)
+			token, err := authTokenFromRequest(c)
+			if err != nil || token == "" {
+				return unauthorized(c)
 			}
 
-			claims, err := jwtService.VerifyToken(cookie.Value)
+			claims, err := jwtService.VerifyToken(token)
 			if err != nil {
-				return redirectToLogin(c)
+				return unauthorized(c)
 			}
 
 			c.Set(authContextKey, claims)
@@ -46,11 +63,49 @@ func AuthMiddleware(jwtService *utils.JWTService) echo.MiddlewareFunc {
 	}
 }
 
+// authTokenFromRequest returns the JWT for the request, preferring
+// the "Authorization: Bearer <token>" header set by API clients and
+// falling back to the auth cookie used by the web app. Returns an
+// empty string (no error) when no token is present, so callers can
+// treat the missing- and invalid-token cases the same way.
+func authTokenFromRequest(c echo.Context) (string, error) {
+	if h := c.Request().Header.Get("Authorization"); strings.HasPrefix(h, bearerPrefix) {
+		return strings.TrimSpace(h[len(bearerPrefix):]), nil
+	}
+	cookie, err := c.Cookie(utils.CookieName)
+	if err != nil {
+		return "", nil
+	}
+	return cookie.Value, nil
+}
+
+// unauthorized returns the right 401 shape for the request. API
+// clients get a JSON body so the iOS app can surface a clean
+// error; the web app gets a redirect to /login (or an htmx
+// redirect for in-page htmx calls) so the user lands on the
+// login form.
+func unauthorized(c echo.Context) error {
+	if isAPIPath(c.Request().URL.Path) {
+		return c.JSON(http.StatusUnauthorized, APIError{Error: "unauthorized"})
+	}
+	return redirectToLogin(c)
+}
+
+// isAPIPath reports whether the given request path targets the
+// JSON API namespace. The auth middleware uses this to decide
+// between a JSON 401 and a redirect-to-login response.
+func isAPIPath(path string) bool {
+	return strings.HasPrefix(path, apiV1Prefix)
+}
+
 // isPublicRoute returns true for routes that don't require authentication.
 // /forgot and /reset are public so a user who has been logged out (or
 // never had an account) can still request a reset link and follow it.
 // The /reset POST handler additionally checks the token before
 // mutating anything, so the public accessibility is not a security hole.
+// The /api/v1/auth/login and /api/v1/auth/register routes are public
+// for the same reason; the /api/v1/auth/logout endpoint is stateless
+// (the client just discards its token) so it's safe to expose too.
 func isPublicRoute(path string) bool {
 	public := []string{
 		"/login",
@@ -62,6 +117,9 @@ func isPublicRoute(path string) bool {
 		"/manifest.json",
 		"/sw.js",
 		"/favicon.ico",
+		"/api/v1/auth/login",
+		"/api/v1/auth/register",
+		"/api/v1/auth/logout",
 	}
 	for _, p := range public {
 		if len(path) >= len(p) && path[:len(p)] == p {
