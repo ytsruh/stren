@@ -80,7 +80,7 @@ templ Layout(data PageData) {
 		</head>
 		<body>
 			if data.IsAuthenticated {
-				<aside class="sidebar" data-side="left" aria-hidden="false">
+				<aside id="sidebar" class="sidebar" data-side="left" aria-hidden="false">
 					<nav aria-label="Sidebar navigation">
 						<header class="border-sidebar-border">
 							<div class="flex items-center px-2 gap-2">
@@ -272,7 +272,7 @@ templ Layout(data PageData) {
 							if data.IsAuthenticated {
 								<div class="flex items-center gap-1">
 									<li>
-										<button type="button" onclick="document.dispatchEvent(new CustomEvent('basecoat:sidebar'))" class="btn-ghost" aria-label="Toggle sidebar">
+										<button type="button" onclick="document.getElementById('sidebar')?.toggle()" class="btn-ghost" aria-label="Toggle sidebar">
 											@components.Icon(components.IconProps{Name: "menu", Size: 20})
 										</button>
 									</li>
