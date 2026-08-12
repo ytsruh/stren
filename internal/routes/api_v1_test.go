@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"stren/internal/controllers"
 	"stren/internal/models"
 )
 
@@ -671,4 +672,266 @@ func TestHTMLLogin_StillRedirectsOnMissingToken(t *testing.T) {
 	if loc := rec.Header().Get("Location"); loc != "/login" {
 		t.Fatalf("location = %q, want /login", loc)
 	}
+}
+
+// --- /goals ---
+
+// goalsResponse mirrors the JSON shape returned by GET /api/v1/goals.
+// The iOS client decodes this into a `[GoalDTO]`, but using a
+// named struct here keeps the test assertion symmetric with the
+// server contract.
+type goalsResponse struct {
+	Goals []GoalDTO `json:"goals"`
+}
+
+func TestAPIListGoals_Empty(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gle@example.com", "GE")
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/goals", token, nil)
+	resp := decodeAPI[goalsResponse](t, rec, http.StatusOK)
+	if len(resp.Goals) != 0 {
+		t.Fatalf("goals len = %d, want 0", len(resp.Goals))
+	}
+}
+
+func TestAPIListGoals_OrderingActiveThenCompleted(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "glo@example.com", "GO")
+	userID := "user-glo@example.com"
+
+	now := time.Now()
+	completed := now.Add(-24 * time.Hour)
+
+	// Seed the repo directly so we control the active/completed
+	// split and verify the ordering. Swap the controller's
+	// repository before any other goal test runs (test order is
+	// undefined so each test owns its own swap).
+	repo := mustSwapGoalsRepo(t, h, newMockGoalRepository())
+
+	// Insert in random order to prove the response reorders.
+	repo.goals["g-done"] = &models.Goal{ID: "g-done", UserID: userID, Title: "Done", CompletedAt: &completed, CreatedAt: now}
+	repo.goals["g-b"] = &models.Goal{ID: "g-b", UserID: userID, Title: "B", CreatedAt: now}
+	repo.goals["g-a"] = &models.Goal{ID: "g-a", UserID: userID, Title: "A", CreatedAt: now.Add(-time.Hour)}
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/goals", token, nil)
+	resp := decodeAPI[goalsResponse](t, rec, http.StatusOK)
+	if len(resp.Goals) != 3 {
+		t.Fatalf("goals len = %d, want 3", len(resp.Goals))
+	}
+	if resp.Goals[0].CompletedAt != nil {
+		t.Fatalf("first goal should be active, got completed_at=%v", resp.Goals[0].CompletedAt)
+	}
+	if resp.Goals[1].CompletedAt != nil {
+		t.Fatalf("second goal should be active, got completed_at=%v", resp.Goals[1].CompletedAt)
+	}
+	if resp.Goals[2].CompletedAt == nil {
+		t.Fatal("third goal should be completed")
+	}
+}
+
+func TestAPICreateGoal_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gc@example.com", "GC")
+
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	target := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/goals", token, CreateGoalRequest{
+		Title:       "Bench 100kg",
+		Description: "Working sets",
+		StartDate:   &start,
+		TargetDate:  &target,
+	})
+	g := decodeAPI[GoalDTO](t, rec, http.StatusCreated)
+	if g.ID == "" {
+		t.Fatal("expected generated id")
+	}
+	if g.Title != "Bench 100kg" {
+		t.Fatalf("title = %q, want Bench 100kg", g.Title)
+	}
+	if g.Description != "Working sets" {
+		t.Fatalf("description = %q, want Working sets", g.Description)
+	}
+	if g.TargetDate == nil || !g.TargetDate.Equal(target) {
+		t.Fatalf("target_date = %v, want %v", g.TargetDate, target)
+	}
+	if g.CompletedAt != nil {
+		t.Fatalf("completed_at = %v, want nil", g.CompletedAt)
+	}
+}
+
+func TestAPICreateGoal_MissingTitle(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gcmt@example.com", "GMT")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/goals", token, CreateGoalRequest{Title: ""})
+	e2 := decodeAPIError(t, rec, http.StatusBadRequest)
+	if e2.Error == "" {
+		t.Fatal("expected non-empty error message")
+	}
+}
+
+func TestAPICreateGoal_TitleTooLong(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gctl@example.com", "GCTL")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/goals", token, CreateGoalRequest{Title: strings.Repeat("x", 201)})
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+func TestAPIGetGoal_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, user := loginUser(t, h, mockUser, "gg@example.com", "GG")
+
+	// Create via the API so we exercise the real write path.
+	start := time.Now()
+	target := start.AddDate(0, 0, 14)
+	created := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals", token, CreateGoalRequest{
+		Title:      "Run a 5k",
+		TargetDate: &target,
+	}), http.StatusCreated)
+
+	got := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodGet, "/api/v1/goals/"+created.ID, token, nil), http.StatusOK)
+	if got.ID != created.ID {
+		t.Fatalf("id = %q, want %q", got.ID, created.ID)
+	}
+	if got.Title != "Run a 5k" {
+		t.Fatalf("title = %q, want Run a 5k", got.Title)
+	}
+	_ = user
+}
+
+func TestAPIGetGoal_NotFound(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "ggnf@example.com", "GGNF")
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/goals/missing-id", token, nil)
+	decodeAPIError(t, rec, http.StatusNotFound)
+}
+
+func TestAPIUpdateGoal_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gu@example.com", "GU")
+
+	created := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals", token, CreateGoalRequest{Title: "Original"}), http.StatusCreated)
+
+	updated := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPut, "/api/v1/goals/"+created.ID, token, UpdateGoalRequest{
+		Title:       "Edited",
+		Description: "now with notes",
+	}), http.StatusOK)
+	if updated.Title != "Edited" {
+		t.Fatalf("title = %q, want Edited", updated.Title)
+	}
+	if updated.Description != "now with notes" {
+		t.Fatalf("description = %q, want now with notes", updated.Description)
+	}
+}
+
+func TestAPIUpdateGoal_NotFound(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gunf@example.com", "GUNF")
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/goals/missing-id", token, UpdateGoalRequest{Title: "x"})
+	decodeAPIError(t, rec, http.StatusNotFound)
+}
+
+func TestAPIMarkGoalComplete_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gmc@example.com", "GMC")
+
+	created := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals", token, CreateGoalRequest{Title: "Do it"}), http.StatusCreated)
+	if created.CompletedAt != nil {
+		t.Fatal("fresh goal should not be complete")
+	}
+
+	done := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals/"+created.ID+"/complete", token, nil), http.StatusOK)
+	if done.CompletedAt == nil {
+		t.Fatal("expected completed_at to be set")
+	}
+}
+
+func TestAPIMarkGoalComplete_Idempotent(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gmci@example.com", "GMCI")
+
+	created := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals", token, CreateGoalRequest{Title: "Do it"}), http.StatusCreated)
+	first := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals/"+created.ID+"/complete", token, nil), http.StatusOK)
+	second := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals/"+created.ID+"/complete", token, nil), http.StatusOK)
+
+	if first.CompletedAt == nil || second.CompletedAt == nil {
+		t.Fatal("expected completed_at to remain set")
+	}
+	if !second.CompletedAt.Equal(*first.CompletedAt) {
+		t.Fatalf("completed_at drifted: first=%v second=%v (server should not overwrite on second call)", *first.CompletedAt, *second.CompletedAt)
+	}
+}
+
+func TestAPIMarkGoalComplete_NotFound(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gmcnf@example.com", "GMCNF")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/goals/missing-id/complete", token, nil)
+	decodeAPIError(t, rec, http.StatusNotFound)
+}
+
+func TestAPIReopenGoal_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gr@example.com", "GR")
+
+	created := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals", token, CreateGoalRequest{Title: "Do it"}), http.StatusCreated)
+	_ = decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals/"+created.ID+"/complete", token, nil), http.StatusOK)
+	reopened := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals/"+created.ID+"/reopen", token, nil), http.StatusOK)
+	if reopened.CompletedAt != nil {
+		t.Fatalf("expected completed_at nil after reopen, got %v", reopened.CompletedAt)
+	}
+}
+
+func TestAPIReopenGoal_NotFound(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "grnf@example.com", "GRNF")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/goals/missing-id/reopen", token, nil)
+	decodeAPIError(t, rec, http.StatusNotFound)
+}
+
+func TestAPIDeleteGoal_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gd@example.com", "GD")
+
+	created := decodeAPI[GoalDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/goals", token, CreateGoalRequest{Title: "Do it"}), http.StatusCreated)
+	rec := apiDo(t, e, http.MethodDelete, "/api/v1/goals/"+created.ID, token, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204, body = %s", rec.Code, rec.Body.String())
+	}
+
+	// Subsequent GET must 404.
+	decodeAPIError(t, apiDo(t, e, http.MethodGet, "/api/v1/goals/"+created.ID, token, nil), http.StatusNotFound)
+}
+
+func TestAPIDeleteGoal_NotFound(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "gdnf@example.com", "GDNF")
+
+	rec := apiDo(t, e, http.MethodDelete, "/api/v1/goals/missing-id", token, nil)
+	decodeAPIError(t, rec, http.StatusNotFound)
+}
+
+func TestAPIGoals_RequiresAuth(t *testing.T) {
+	_, _, _, e := setupHandler(t)
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/goals", "", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+// mustSwapGoalsRepo replaces h.goalsCtrl with a new controller
+// backed by the supplied mockGoalRepository. Used by ordering
+// tests that need to seed goals without a real DB. We mutate
+// the controller in place (the controller has no exported
+// setter) via the same package.
+func mustSwapGoalsRepo(t *testing.T, h *Handler, repo *mockGoalRepository) *mockGoalRepository {
+	t.Helper()
+	h.goalsCtrl = controllers.NewGoalsController(repo)
+	return repo
 }

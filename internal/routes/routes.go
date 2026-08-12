@@ -248,6 +248,17 @@ func registerAPIRoutes(e *echo.Echo, h *Handler) {
 	// Per-exercise history & chart data
 	e.GET("/api/v1/exercises/:id/history", h.APIGetExerciseHistory)
 	e.GET("/api/v1/exercises/:id/chart", h.APIGetExerciseChartData)
+
+	// Goals (JSON mirror of the HTML goals routes — used by
+	// the iOS client). All handlers are JWT-protected via the
+	// /api/v1 prefix group in middleware.go.
+	e.GET("/api/v1/goals", h.APIListGoals)
+	e.POST("/api/v1/goals", h.APICreateGoal)
+	e.GET("/api/v1/goals/:id", h.APIGetGoal)
+	e.PUT("/api/v1/goals/:id", h.APIUpdateGoal)
+	e.POST("/api/v1/goals/:id/complete", h.APIMarkGoalComplete)
+	e.POST("/api/v1/goals/:id/reopen", h.APIReopenGoal)
+	e.DELETE("/api/v1/goals/:id", h.APIDeleteGoal)
 }
 
 // ServeManifest serves the web app manifest with the correct MIME type.

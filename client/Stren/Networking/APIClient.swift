@@ -162,6 +162,49 @@ public final class APIClient: @unchecked Sendable {
         try await send("GET", "exercises/\(id)/chart")
     }
 
+    // MARK: - Goals
+
+    /// Lists every goal for the authenticated user. The server
+    /// returns active goals first (ordered by target date
+    /// ascending, nulls last) followed by completed goals
+    /// (most-recently-completed first). Mirrors the ordering
+    /// the web view renders so the iOS list can reuse the
+    /// same active/completed sections.
+    public func listGoals() async throws -> [GoalDTO] {
+        let response: GoalsResponse = try await send("GET", "goals")
+        return response.goals
+    }
+
+    public func getGoal(id: String) async throws -> GoalDTO {
+        try await send("GET", "goals/\(id)")
+    }
+
+    public func createGoal(_ request: CreateGoalRequest) async throws -> GoalDTO {
+        try await send("POST", "goals", body: request)
+    }
+
+    public func updateGoal(id: String, request: UpdateGoalRequest) async throws -> GoalDTO {
+        try await send("PUT", "goals/\(id)", body: request)
+    }
+
+    /// Marks a goal complete. The server sets `completed_at`
+    /// to `time.Now()` — the client does not send a timestamp.
+    /// Idempotent: completing an already-complete goal is a
+    /// no-op that still returns the current row.
+    public func markGoalComplete(id: String) async throws -> GoalDTO {
+        try await send("POST", "goals/\(id)/complete")
+    }
+
+    /// Reopens a completed goal (clears `completed_at`).
+    /// Idempotent on already-active goals.
+    public func reopenGoal(id: String) async throws -> GoalDTO {
+        try await send("POST", "goals/\(id)/reopen")
+    }
+
+    public func deleteGoal(id: String) async throws {
+        try await sendVoid("DELETE", "goals/\(id)")
+    }
+
     // MARK: - Request plumbing
 
     /// Generic request method for endpoints that return a

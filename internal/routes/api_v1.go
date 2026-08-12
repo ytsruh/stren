@@ -362,3 +362,146 @@ func (h *Handler) APIGetExerciseChartData(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, ExerciseEntriesFromModels(entries))
 }
+
+// --- Goals ---
+
+// APIListGoals handles GET /api/v1/goals. Returns every goal
+// for the authenticated user, active first then completed
+// (the same ordering the web view renders — the repository's
+// List method concatenates ListActiveGoals + ListCompletedGoals).
+func (h *Handler) APIListGoals(c echo.Context) error {
+	claims := GetClaims(c)
+	goals, err := h.goalsCtrl.ListGoals(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to load goals"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"goals": GoalsFromModels(goals)})
+}
+
+// APICreateGoal handles POST /api/v1/goals. Validates the
+// request body, then delegates to the controller (the same
+// path the HTML form uses).
+func (h *Handler) APICreateGoal(c echo.Context) error {
+	var in CreateGoalRequest
+	if err := c.Bind(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "invalid request body"})
+	}
+	if err := h.validator.ValidateStruct(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: friendlyValidationError(err)})
+	}
+
+	claims := GetClaims(c)
+	created, err := h.goalsCtrl.CreateGoal(claims.UserID, controllers.CreateGoalInput{
+		Title:       in.Title,
+		Description: in.Description,
+		StartDate:   in.StartDate,
+		TargetDate:  in.TargetDate,
+		EndDate:     in.EndDate,
+	})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to create goal"})
+	}
+	return c.JSON(http.StatusCreated, GoalFromModel(*created))
+}
+
+// APIGetGoal handles GET /api/v1/goals/:id. Returns 404 when
+// the goal is missing or owned by another user — the
+// controller's ErrGoalNotFound sentinel covers both cases.
+func (h *Handler) APIGetGoal(c echo.Context) error {
+	claims := GetClaims(c)
+	id := c.Param("id")
+
+	g, err := h.goalsCtrl.GetGoal(id, claims.UserID)
+	if err != nil {
+		if err == controllers.ErrGoalNotFound {
+			return c.JSON(http.StatusNotFound, APIError{Error: "goal not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to load goal"})
+	}
+	return c.JSON(http.StatusOK, GoalFromModel(*g))
+}
+
+// APIUpdateGoal handles PUT /api/v1/goals/:id. The body has the
+// same shape as create (minus the server-generated id). The
+// completed_at field is intentionally not editable here —
+// status changes go through the dedicated complete/reopen
+// routes so the server owns the timestamp.
+func (h *Handler) APIUpdateGoal(c echo.Context) error {
+	var in UpdateGoalRequest
+	if err := c.Bind(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "invalid request body"})
+	}
+	if err := h.validator.ValidateStruct(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: friendlyValidationError(err)})
+	}
+
+	claims := GetClaims(c)
+	id := c.Param("id")
+	updated, err := h.goalsCtrl.UpdateGoal(id, claims.UserID, controllers.UpdateGoalInput{
+		Title:       in.Title,
+		Description: in.Description,
+		StartDate:   in.StartDate,
+		TargetDate:  in.TargetDate,
+		EndDate:     in.EndDate,
+	})
+	if err != nil {
+		if err == controllers.ErrGoalNotFound {
+			return c.JSON(http.StatusNotFound, APIError{Error: "goal not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to update goal"})
+	}
+	return c.JSON(http.StatusOK, GoalFromModel(*updated))
+}
+
+// APIMarkGoalComplete handles POST /api/v1/goals/:id/complete.
+// The server sets completed_at to time.Now() — the client
+// does not send a timestamp. Idempotent: completing an already
+// complete goal is a no-op that still returns 200 with the
+// current row (matches the web's behavior).
+func (h *Handler) APIMarkGoalComplete(c echo.Context) error {
+	claims := GetClaims(c)
+	id := c.Param("id")
+
+	updated, err := h.goalsCtrl.MarkComplete(id, claims.UserID, time.Now())
+	if err != nil {
+		if err == controllers.ErrGoalNotFound {
+			return c.JSON(http.StatusNotFound, APIError{Error: "goal not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to mark goal complete"})
+	}
+	return c.JSON(http.StatusOK, GoalFromModel(*updated))
+}
+
+// APIReopenGoal handles POST /api/v1/goals/:id/reopen. Clears
+// completed_at; idempotent on an already-active goal. Mirrors
+// the web's reopen button which fires a toast and lets the
+// card "move" from the completed section back to active.
+func (h *Handler) APIReopenGoal(c echo.Context) error {
+	claims := GetClaims(c)
+	id := c.Param("id")
+
+	updated, err := h.goalsCtrl.Reopen(id, claims.UserID)
+	if err != nil {
+		if err == controllers.ErrGoalNotFound {
+			return c.JSON(http.StatusNotFound, APIError{Error: "goal not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to reopen goal"})
+	}
+	return c.JSON(http.StatusOK, GoalFromModel(*updated))
+}
+
+// APIDeleteGoal handles DELETE /api/v1/goals/:id. Hard delete,
+// scoped to the authenticated user. Returns 204 so the iOS
+// app can simply call it and refresh the list.
+func (h *Handler) APIDeleteGoal(c echo.Context) error {
+	claims := GetClaims(c)
+	id := c.Param("id")
+
+	if err := h.goalsCtrl.DeleteGoal(id, claims.UserID); err != nil {
+		if err == controllers.ErrGoalNotFound {
+			return c.JSON(http.StatusNotFound, APIError{Error: "goal not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to delete goal"})
+	}
+	return c.NoContent(http.StatusNoContent)
+}

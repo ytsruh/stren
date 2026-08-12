@@ -241,3 +241,74 @@ func HistoryPageFromModel(p *models.ExerciseHistoryPage) HistoryPageDTO {
 		HasNext: p.HasNext,
 	}
 }
+
+// --- Goals ---
+
+// GoalDTO is the JSON shape for a single goal in the
+// /api/v1/goals namespace. Mirrors models.Goal but exposes
+// only the fields the iOS client needs. StartDate, TargetDate,
+// EndDate and CompletedAt are pointers so a missing date is
+// rendered as JSON null (not zero-time, which would imply
+// "1970-01-01" and break the UI's conditional rendering).
+type GoalDTO struct {
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	StartDate   *time.Time `json:"start_date,omitempty"`
+	TargetDate  *time.Time `json:"target_date,omitempty"`
+	EndDate     *time.Time `json:"end_date,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+// CreateGoalRequest is the body for POST /api/v1/goals. The
+// validation limits match the HTML form (title 1-200,
+// description 0-2000) so the JSON and HTML surfaces reject
+// the same inputs.
+type CreateGoalRequest struct {
+	Title       string     `json:"title"       validate:"required,min=1,max=200"`
+	Description string     `json:"description" validate:"max=2000"`
+	StartDate   *time.Time `json:"start_date,omitempty"`
+	TargetDate  *time.Time `json:"target_date,omitempty"`
+	EndDate     *time.Time `json:"end_date,omitempty"`
+}
+
+// UpdateGoalRequest is the body for PUT /api/v1/goals/:id.
+// CompletedAt is intentionally NOT editable here — clients
+// must use POST /goals/:id/complete or /reopen so the server
+// owns the completion timestamp (matches the HTML surface).
+type UpdateGoalRequest struct {
+	Title       string     `json:"title"       validate:"required,min=1,max=200"`
+	Description string     `json:"description" validate:"max=2000"`
+	StartDate   *time.Time `json:"start_date,omitempty"`
+	TargetDate  *time.Time `json:"target_date,omitempty"`
+	EndDate     *time.Time `json:"end_date,omitempty"`
+}
+
+// GoalFromModel converts a models.Goal into its DTO. Pass by
+// value so callers don't have to dereference.
+func GoalFromModel(g models.Goal) GoalDTO {
+	return GoalDTO{
+		ID:          g.ID,
+		Title:       g.Title,
+		Description: g.Description,
+		StartDate:   g.StartDate,
+		TargetDate:  g.TargetDate,
+		EndDate:     g.EndDate,
+		CompletedAt: g.CompletedAt,
+		CreatedAt:   g.CreatedAt,
+		UpdatedAt:   g.UpdatedAt,
+	}
+}
+
+// GoalsFromModels converts a slice of goals into the DTO
+// slice. Returns a non-nil empty slice so the JSON encoder
+// writes `[]` rather than `null` when the user has no goals.
+func GoalsFromModels(gs []models.Goal) []GoalDTO {
+	out := make([]GoalDTO, 0, len(gs))
+	for _, g := range gs {
+		out = append(out, GoalFromModel(g))
+	}
+	return out
+}

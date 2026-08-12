@@ -11,6 +11,10 @@ public enum Icons {
 
     public static let today     = "list.bullet.rectangle"
     public static let exercises = "dumbbell"
+    /// "Goals" tab — matches the web's nav icon (Lucide's
+    /// `target`) so the tab is visually consistent with the
+    /// web's top-nav entry.
+    public static let goals     = "target"
     public static let profile   = "person.crop.circle"
 
     // MARK: - Dashboard

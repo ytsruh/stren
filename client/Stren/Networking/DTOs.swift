@@ -255,3 +255,145 @@ public struct HistoryPageDTO: Codable, Equatable {
         case hasNext = "has_next"
     }
 }
+
+// MARK: Goals
+
+/// JSON shape for a single goal returned by
+/// `/api/v1/goals/*`. Mirrors the server's `GoalDTO` in
+/// `internal/routes/api_dto.go`. All four date fields are
+/// optional `Date`s (decoded from the server's RFC 3339
+/// timestamps) so a missing date is `nil` rather than
+/// `1970-01-01`, which would break the UI's conditional
+/// rendering of the date chips.
+///
+/// `completedAt` is the source of truth for whether the
+/// goal is done — use `isCompleted` rather than checking
+/// `completedAt != nil` directly at call sites.
+public struct GoalDTO: Codable, Equatable, Identifiable, Hashable {
+    public let id: String
+    public let title: String
+    public let description: String
+    public let startDate: Date?
+    public let targetDate: Date?
+    public let endDate: Date?
+    public let completedAt: Date?
+    public let createdAt: Date
+    public let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case description
+        case startDate = "start_date"
+        case targetDate = "target_date"
+        case endDate = "end_date"
+        case completedAt = "completed_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    public init(
+        id: String,
+        title: String,
+        description: String,
+        startDate: Date?,
+        targetDate: Date?,
+        endDate: Date?,
+        completedAt: Date?,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.startDate = startDate
+        self.targetDate = targetDate
+        self.endDate = endDate
+        self.completedAt = completedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    /// Convenience flag — equivalent to `completedAt != nil`
+    /// but reads better at call sites.
+    public var isCompleted: Bool { completedAt != nil }
+}
+
+/// Response body for `GET /api/v1/goals`. Wrapping the slice
+/// in a named struct (rather than returning `[GoalDTO]`
+/// directly) lets the server add fields like pagination
+/// metadata without breaking the iOS contract.
+public struct GoalsResponse: Decodable, Equatable {
+    public let goals: [GoalDTO]
+}
+
+/// JSON body for `POST /api/v1/goals`. Mirrors the server's
+/// `CreateGoalRequest`. Title is required; description and
+/// all three dates are optional. The server enforces the
+/// same length limits as the HTML form (title 1–200,
+/// description ≤2000).
+public struct CreateGoalRequest: Encodable, Equatable {
+    public let title: String
+    public let description: String
+    public let startDate: Date?
+    public let targetDate: Date?
+    public let endDate: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case description
+        case startDate = "start_date"
+        case targetDate = "target_date"
+        case endDate = "end_date"
+    }
+
+    public init(
+        title: String,
+        description: String,
+        startDate: Date?,
+        targetDate: Date?,
+        endDate: Date?
+    ) {
+        self.title = title
+        self.description = description
+        self.startDate = startDate
+        self.targetDate = targetDate
+        self.endDate = endDate
+    }
+}
+
+/// JSON body for `PUT /api/v1/goals/:id`. Mirrors
+/// `CreateGoalRequest` — same fields, same validation.
+/// `completedAt` is intentionally NOT editable here; status
+/// changes go through `markGoalComplete(id:)` /
+/// `reopenGoal(id:)` so the server owns the completion
+/// timestamp.
+public struct UpdateGoalRequest: Encodable, Equatable {
+    public let title: String
+    public let description: String
+    public let startDate: Date?
+    public let targetDate: Date?
+    public let endDate: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case description
+        case startDate = "start_date"
+        case targetDate = "target_date"
+        case endDate = "end_date"
+    }
+
+    public init(
+        title: String,
+        description: String,
+        startDate: Date?,
+        targetDate: Date?,
+        endDate: Date?
+    ) {
+        self.title = title
+        self.description = description
+        self.startDate = startDate
+        self.targetDate = targetDate
+        self.endDate = endDate
+    }
+}
