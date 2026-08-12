@@ -1,282 +1,133 @@
 import SwiftUI
 
-/// Single goal row in `GoalsListView`. Mirrors the web's
-/// `GoalCard` (`internal/views/goals/list.templ`) so the
-/// card has the same anatomy: a status dot, the title, the
-/// date chips, and the action buttons. Long-press / swipe
-/// affordances match iOS conventions rather than the web's
-/// htmx behavior.
+/// Single-line goal row content. Pure presentational — no
+/// callbacks, no buttons. The row is wrapped in a `Button`
+/// by `GoalsListView` (tap → open the editor) and given
+/// `.swipeActions` for the complete / reopen gestures, so
+/// this view is just the data: status dot, title, inline
+/// date text, and an optional "Today" / "Nd" badge.
 ///
-/// `onMarkComplete` / `onReopen` / `onEdit` / `onDelete`
-/// are injected so the row stays a pure view — all network
-/// and state mutations live in `GoalStore`.
+/// Mirrors the web's `GoalCard` from
+/// `internal/views/goals/list.templ` — same anatomy, same
+/// single-line layout, just without the inline action
+/// buttons (which live behind a swipe on iOS per the
+/// platform convention used by Mail / Notes / Reminders).
 ///
-/// The row animates its own opacity + strikethrough when
-/// `goal.isCompleted` flips (see the `.animation` modifier
-/// at the bottom of `body`), so the parent doesn't have to
-/// drive anything — it just toggles the value.
+/// When `goal.isCompleted` flips, the row's strikethrough
+/// animates via the `.animation` modifier at the bottom of
+/// `body`. The parent doesn't have to drive it — it just
+/// toggles the value.
 struct GoalRow: View {
     let goal: GoalDTO
-    let onMarkComplete: () -> Void
-    let onReopen: () -> Void
-    let onEdit: () -> Void
-    let onDelete: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: DSSpacing.md) {
+        HStack(spacing: DSSpacing.sm) {
             statusDot
-            VStack(alignment: .leading, spacing: DSSpacing.xs) {
-                title
-                if !goal.description.isEmpty {
-                    Text(goal.description)
-                        .font(.subheadline)
-                        .foregroundStyle(DSColors.textSecondary)
-                        .lineLimit(3)
-                }
-                dateChips
-                actions
+            title
+            Spacer(minLength: DSSpacing.sm)
+            dateText
+            if let badge = daysUntilTargetBadge {
+                daysBadge(badge)
             }
-            Spacer(minLength: 0)
         }
-        .padding(DSSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
-                .fill(DSColors.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
-                .stroke(DSColors.separator, lineWidth: 0.5)
-        )
         .opacity(goal.isCompleted ? 0.65 : 1)
-        .animation(.easeInOut(duration: 0.25), value: goal.isCompleted)
+        .animation(.easeInOut(duration: 0.2), value: goal.isCompleted)
     }
 
     // MARK: - Subviews
 
     /// Filled accent dot for active goals; muted dot for
     /// completed. Mirrors the web's `bg-primary` /
-    /// `bg-muted-foreground/30` status dot.
+    /// `bg-muted-foreground` status dot.
     private var statusDot: some View {
         Circle()
-            .fill(goal.isCompleted ? DSColors.textSecondary.opacity(0.35) : DSColors.accent)
-            .frame(width: 10, height: 10)
-            .padding(.top, DSSpacing.xs)
+            .fill(goal.isCompleted ? DSColors.textSecondary.opacity(0.4) : DSColors.accent)
+            .frame(width: 8, height: 8)
     }
 
+    /// Title truncates with an ellipsis so a long goal name
+    /// never wraps the row. Strikethrough + dimmer foreground
+    /// when complete mirrors the web's `line-through` style.
     private var title: some View {
         Text(goal.title)
-            .font(.headline)
-            .foregroundStyle(DSColors.text)
+            .font(.body.weight(.medium))
+            .foregroundStyle(goal.isCompleted ? DSColors.textSecondary : DSColors.text)
             .strikethrough(goal.isCompleted, color: DSColors.textSecondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 
-    /// Renders the optional date chips ("Started", "Target",
-    /// "Ended", "Done") in the same order the web's
-    /// `GoalDateInline` helper does. Hidden on the smallest
-    /// screens to keep the row legible.
+    /// Inline date string — joins "Started X", "Target X",
+    /// "Ended X" (or "Done X" when complete) with middle dots
+    /// so it reads the same way the web's `GoalDateInline`
+    /// does. Hidden when the goal has no dates at all.
     @ViewBuilder
-    private var dateChips: some View {
-        let chips = GoalDateChips.from(goal: goal)
-        if !chips.isEmpty {
-            FlowLayout(spacing: DSSpacing.xs) {
-                ForEach(chips) { chip in
-                    GoalDateChipView(chip: chip)
-                }
-            }
+    private var dateText: some View {
+        if let text = inlineDateText {
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(DSColors.textSecondary)
+                .lineLimit(1)
         }
     }
 
-    private var actions: some View {
-        HStack(spacing: DSSpacing.xs) {
-            if goal.isCompleted {
-                Button(action: onReopen) {
-                    Label("Reopen", systemImage: "arrow.uturn.backward")
-                        .labelStyle(.titleAndIcon)
-                }
-                .buttonStyle(.dsSecondary)
-            } else {
-                Button(action: onMarkComplete) {
-                    Label("Mark Complete", systemImage: "checkmark")
-                        .labelStyle(.titleAndIcon)
-                }
-                .buttonStyle(.dsSecondary)
-            }
-            Button(action: onEdit) {
-                Label("Edit", systemImage: "pencil")
-                    .labelStyle(.titleAndIcon)
-            }
-            .buttonStyle(.dsSecondary)
-        }
-        .font(.footnote.weight(.semibold))
-        .padding(.top, DSSpacing.xxs)
-    }
-}
-
-// MARK: - Date chip model
-
-/// Lightweight model for a single date chip on the goal
-/// row. Kept inside `GoalRow.swift` because nothing else
-/// uses it — it's a presentational detail of this view.
-private struct GoalDateChip: Identifiable {
-    enum Kind {
-        case started, target(daysLeft: Int?), ended, done
-    }
-    let id = UUID()
-    let label: String
-    let kind: Kind
-
-    var background: Color {
-        switch kind {
-        case .target(let daysLeft):
-            // Highlight "today" / "N days" with the accent
-            // surface; otherwise a neutral chip.
-            return daysLeft != nil ? DSColors.accentSubtle : DSColors.surfaceElevated
-        default:
-            return DSColors.surfaceElevated
-        }
-    }
-
-    var foreground: Color {
-        switch kind {
-        case .target(let daysLeft):
-            return daysLeft != nil ? DSColors.onAccentSubtle : DSColors.textSecondary
-        default:
-            return DSColors.textSecondary
-        }
-    }
-}
-
-/// Computes the chips for a goal. Mirrors the web's
-/// `GoalDateInline` helper at
-/// `internal/views/goals/list.templ`. The "today" / "N days"
-/// target badge mirrors `models.Goal.DaysUntilTarget` (the
-/// server-side equivalent is in `internal/models/goal.go`).
-private struct GoalDateChips {
-    let chips: [GoalDateChip]
-
-    static func from(goal: GoalDTO) -> [GoalDateChip] {
-        var out: [GoalDateChip] = []
-        if let start = goal.startDate {
-            out.append(GoalDateChip(
-                label: "Started \(Self.long(start))",
-                kind: .started
-            ))
-        }
-        if let target = goal.targetDate {
-            let daysLeft = Self.daysUntilTarget(from: Date(), to: target)
-            let badge = daysLeft.map { d -> String in
-                if d == 0 { return "Today" }
-                return "\(d)d"
-            }
-            let label = badge.map { "Target \(Self.long(target)) · \($0)" }
-                ?? "Target \(Self.long(target))"
-            out.append(GoalDateChip(
-                label: label,
-                kind: .target(daysLeft: badge != nil ? daysLeft : nil)
-            ))
-        }
-        if let end = goal.endDate {
-            out.append(GoalDateChip(
-                label: "Ended \(Self.long(end))",
-                kind: .ended
-            ))
-        }
-        if let done = goal.completedAt {
-            out.append(GoalDateChip(
-                label: "Done \(Self.long(done))",
-                kind: .done
-            ))
-        }
-        return out
-    }
-
-    static func long(_ date: Date) -> String {
-        date.formatted(.dateTime.day().month(.abbreviated))
-    }
-
-    /// Mirrors `models.Goal.DaysUntilTarget` — truncated to
-    /// whole calendar days so a target later today reads as 0
-    /// (Today) rather than 1.
-    static func daysUntilTarget(from now: Date, to target: Date) -> Int? {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: now)
-        let end = calendar.startOfDay(for: target)
-        let days = calendar.dateComponents([.day], from: start, to: end).day ?? 0
-        return days >= 0 ? days : nil
-    }
-}
-
-/// Visual chip for the date row. Background / foreground
-/// come from `GoalDateChip` so the "Target · Today" chip
-/// can use the accent surface and everything else falls
-/// back to the neutral elevated surface.
-private struct GoalDateChipView: View {
-    let chip: GoalDateChip
-
-    var body: some View {
-        Text(chip.label)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(chip.foreground)
+    /// Small accent-coloured "Today" / "Nd" pill rendered
+    /// only when the target date is in the future. Mirrors
+    /// the web's `bg-primary text-primary-foreground` badge
+    /// in `list.templ:221-227`.
+    private func daysBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold).monospacedDigit())
+            .foregroundStyle(DSColors.onPrimary)
             .padding(.horizontal, DSSpacing.xs)
-            .padding(.vertical, DSSpacing.xxs)
+            .padding(.vertical, 2)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(chip.background)
+                Capsule().fill(DSColors.accent)
             )
     }
-}
 
-/// Minimal flow layout — wraps chips onto multiple lines
-/// when they overflow. SwiftUI's `Grid` doesn't wrap, so a
-/// simple HStack + width-bounded layout works for the two
-/// or three chips a goal ever has.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = DSSpacing.xs
+    // MARK: - Date helpers
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        let rows = layoutRows(in: maxWidth, subviews: subviews)
-        let height = rows.reduce(CGFloat(0)) { partial, row in
-            partial + row.height
-        } + spacing * CGFloat(max(0, rows.count - 1))
-        return CGSize(width: maxWidth.isFinite ? maxWidth : rows.map(\.width).max() ?? 0, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let rows = layoutRows(in: bounds.width, subviews: subviews)
-        var y = bounds.minY
-        for row in rows {
-            var x = bounds.minX
-            for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-                x += size.width + spacing
-            }
-            y += row.height + spacing
+    /// Builds the inline "Started 12 May · Target 01 Jul" text
+    /// for the row. Returns nil when the goal has no dates so
+    /// the parent can skip rendering the text view entirely.
+    /// Mirrors the order and short-date format the web uses
+    /// (`shortGoalDate` in `list.templ:362`).
+    private var inlineDateText: String? {
+        var parts: [String] = []
+        if let start = goal.startDate {
+            parts.append("Started \(Self.short(start))")
         }
-    }
-
-    private func layoutRows(in maxWidth: CGFloat, subviews: Subviews) -> [Row] {
-        var rows: [Row] = [Row()]
-        var currentWidth: CGFloat = 0
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            if currentWidth + size.width > maxWidth, !rows[rows.count - 1].indices.isEmpty {
-                rows.append(Row())
-                currentWidth = 0
-            }
-            rows[rows.count - 1].indices.append(index)
-            rows[rows.count - 1].width += size.width + spacing
-            rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
-            currentWidth += size.width + spacing
+        if let target = goal.targetDate {
+            parts.append("Target \(Self.short(target))")
         }
-        return rows
+        if let end = goal.endDate {
+            parts.append("Ended \(Self.short(end))")
+        }
+        if goal.isCompleted, let done = goal.completedAt {
+            parts.append("Done \(Self.short(done))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private struct Row {
-        var indices: [Int] = []
-        var width: CGFloat = 0
-        var height: CGFloat = 0
+    /// "Today" / "Nd" pill text. Mirrors
+    /// `models.Goal.DaysUntilTarget` — truncated to whole
+    /// calendar days so a target later today reads as 0
+    /// ("Today") rather than 1.
+    private var daysUntilTargetBadge: String? {
+        guard !goal.isCompleted, let target = goal.targetDate else { return nil }
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: Date())
+        let end = calendar.startOfDay(for: target)
+        let days = calendar.dateComponents([.day], from: start, to: end).day ?? 0
+        guard days >= 0 else { return nil }
+        return days == 0 ? "Today" : "\(days)d"
+    }
+
+    /// Short "DD MMM" format (e.g. "12 May") matching the
+    /// web's `shortGoalDate`.
+    private static func short(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated))
     }
 }
 
@@ -284,7 +135,7 @@ private struct FlowLayout: Layout {
     let active = GoalDTO(
         id: "g1",
         title: "Bench 100kg for 5 reps",
-        description: "Hit a new PB on bench.",
+        description: "",
         startDate: Date().addingTimeInterval(-7 * 24 * 3600),
         targetDate: Date().addingTimeInterval(14 * 24 * 3600),
         endDate: nil,
@@ -292,10 +143,21 @@ private struct FlowLayout: Layout {
         createdAt: Date(),
         updatedAt: Date()
     )
-    let completed = GoalDTO(
+    let today = GoalDTO(
         id: "g2",
         title: "Run a 5k",
-        description: "Non-stop.",
+        description: "",
+        startDate: Date().addingTimeInterval(-30 * 24 * 3600),
+        targetDate: Date(),
+        endDate: nil,
+        completedAt: nil,
+        createdAt: Date(),
+        updatedAt: Date()
+    )
+    let completed = GoalDTO(
+        id: "g3",
+        title: "Stretch every morning for two weeks",
+        description: "",
         startDate: Date().addingTimeInterval(-30 * 24 * 3600),
         targetDate: Date().addingTimeInterval(-1 * 24 * 3600),
         endDate: nil,
@@ -303,10 +165,13 @@ private struct FlowLayout: Layout {
         createdAt: Date(),
         updatedAt: Date()
     )
-    return VStack(spacing: DSSpacing.md) {
-        GoalRow(goal: active, onMarkComplete: {}, onReopen: {}, onEdit: {}, onDelete: {})
-        GoalRow(goal: completed, onMarkComplete: {}, onReopen: {}, onEdit: {}, onDelete: {})
+    return List {
+        Section("Active") {
+            GoalRow(goal: active)
+            GoalRow(goal: today)
+        }
+        Section("Completed") {
+            GoalRow(goal: completed)
+        }
     }
-    .padding()
-    .background(DSColors.background)
 }

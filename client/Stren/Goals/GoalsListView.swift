@@ -1,23 +1,29 @@
 import SwiftUI
 import UIKit
 
-/// The "Goals" tab. Mirrors the web's `/goals` page
-/// (`internal/views/goals/list.templ`): an "Active goals"
-/// section with the new/edit/complete controls, and a
-/// collapsible "Completed goals" section underneath.
+/// The "Goals" tab. Two sections in a plain `List` with the
+/// default iOS chrome (alternating row backgrounds — matches
+/// the Profile tab's "Name" / "Weight unit" rows):
+///   - **Active goals** — always expanded
+///   - **Completed goals** — wrapped in a `DisclosureGroup`,
+///     collapsed by default so finished goals don't dominate
+///     the screen
+///
+/// Mirrors the web's `/goals` page
+/// (`internal/views/goals/list.templ`) where completed lives
+/// inside a `<details>` accordion.
 ///
 /// All networking and state lives in `GoalStore`; this view
 /// is purely presentational. The store is injected by the
 /// parent (`MainTabView` constructs it once from
-/// `AppEnvironment.api` so the store can outlive view
-/// rebuilds and tests can supply a custom store).
+/// `AppEnvironment.api` so it can outlive view rebuilds).
 struct GoalsListView: View {
     @EnvironmentObject private var env: AppEnvironment
     @ObservedObject var store: GoalStore
 
     @State private var showingNewGoal: Bool = false
     @State private var editingGoal: GoalDTO?
-    @State private var deletingGoal: GoalDTO?
+    @State private var completedExpanded: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -32,25 +38,6 @@ struct GoalsListView: View {
                     GoalEditorView(mode: .edit(goal), store: store)
                         .environmentObject(env)
                 }
-                .confirmationDialog(
-                    "Delete this goal?",
-                    isPresented: Binding(
-                        get: { deletingGoal != nil },
-                        set: { if !$0 { deletingGoal = nil } }
-                    ),
-                    titleVisibility: .visible,
-                    presenting: deletingGoal
-                ) { goal in
-                    Button("Delete goal", role: .destructive) {
-                        Task { await store.delete(id: goal.id) }
-                        deletingGoal = nil
-                    }
-                    Button("Cancel", role: .cancel) {
-                        deletingGoal = nil
-                    }
-                } message: { _ in
-                    Text("This permanently removes the goal and cannot be undone.")
-                }
         }
         .task { await store.load() }
         .refreshable { await store.load() }
@@ -64,7 +51,7 @@ struct GoalsListView: View {
             Button {
                 showingNewGoal = true
             } label: {
-                Image(systemName: Icons.plusCircle)
+                Image(systemName: Icons.addSet)
             }
             .accessibilityLabel("Add goal")
         }
@@ -86,108 +73,135 @@ struct GoalsListView: View {
         }
     }
 
-    /// Active section + collapsible completed section. The
-    /// `Section` ordering matches the web: active first,
-    /// then completed in a `<details>`-style accordion.
+    /// Active section + collapsible completed section. Uses
+    /// the default `List` style so iOS provides the row
+    /// chrome — no custom backgrounds / separators / insets
+    /// to fight the system.
     private var loadedList: some View {
         List {
             activeSection
-            if !store.completedGoals.isEmpty {
-                completedSection
-            }
+            completedSection
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(DSColors.background.ignoresSafeArea())
+        .listStyle(.automatic)
     }
 
     @ViewBuilder
     private var activeSection: some View {
-        Section {
-            if store.activeGoals.isEmpty {
-                emptyActiveHint
-            } else {
+        if !store.activeGoals.isEmpty {
+            Section {
                 ForEach(store.activeGoals) { goal in
-                    GoalRow(
-                        goal: goal,
-                        onMarkComplete: { completeGoal(goal) },
-                        onReopen: { reopenGoal(goal) },
-                        onEdit: { editingGoal = goal },
-                        onDelete: { deletingGoal = goal }
-                    )
-                    .listRowInsets(EdgeInsets(top: DSSpacing.xs, leading: DSSpacing.md, bottom: DSSpacing.xs, trailing: DSSpacing.md))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+                    row(for: goal)
                 }
+            } header: {
+                sectionHeader("Active", count: store.activeGoals.count)
             }
-        } header: {
-            sectionHeader(
-                title: "Active",
-                count: store.activeGoals.count
-            )
         }
     }
 
+    /// Completed section uses `DisclosureGroup` so it starts
+    /// collapsed by default (matches the web's `<details>`
+    /// accordion in `list.templ:99-112`). The disclosure
+    /// header carries the same "Title · count" pattern as the
+    /// active header so they read consistently.
     @ViewBuilder
     private var completedSection: some View {
-        Section {
-            ForEach(store.completedGoals) { goal in
-                GoalRow(
-                    goal: goal,
-                    onMarkComplete: { completeGoal(goal) },
-                    onReopen: { reopenGoal(goal) },
-                    onEdit: { editingGoal = goal },
-                    onDelete: { deletingGoal = goal }
-                )
-                .listRowInsets(EdgeInsets(top: DSSpacing.xs, leading: DSSpacing.md, bottom: DSSpacing.xs, trailing: DSSpacing.md))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+        if !store.completedGoals.isEmpty {
+            DisclosureGroup(isExpanded: $completedExpanded) {
+                ForEach(store.completedGoals) { goal in
+                    row(for: goal)
+                }
+            } label: {
+                sectionHeader("Completed", count: store.completedGoals.count)
             }
-        } header: {
-            sectionHeader(
-                title: "Completed",
-                count: store.completedGoals.count
-            )
         }
     }
 
-    private func sectionHeader(title: String, count: Int) -> some View {
-        HStack {
+    /// Single row presentation shared by both sections. The
+    /// row is wrapped in a `Button` so tapping it opens the
+    /// editor, and gets `.swipeActions` for the gesture
+    /// shortcuts — leading swipe toggles complete/reopen
+    /// (full-swipe enabled, the iOS "fast triage" gesture
+    /// from Mail / Reminders), trailing swipe opens the
+    /// editor (no full swipe — destructive-ish edit, the
+    /// user should tap-and-confirm).
+    @ViewBuilder
+    private func row(for goal: GoalDTO) -> some View {
+        Button {
+            editingGoal = goal
+        } label: {
+            GoalRow(goal: goal)
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            if goal.isCompleted {
+                Button {
+                    reopenGoal(goal)
+                } label: {
+                    Label("Reopen", systemImage: "arrow.uturn.backward")
+                }
+                .tint(DSColors.accent)
+            } else {
+                Button {
+                    completeGoal(goal)
+                } label: {
+                    Label("Complete", systemImage: "checkmark")
+                }
+                .tint(DSColors.accent)
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                editingGoal = goal
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            // Neutral grey so Edit doesn't compete visually
+            // with the primary (Complete/Reopen) action on
+            // the leading edge. Matches the standard iOS
+            // pattern (Mail's "Move", Notes' "Move to...").
+            .tint(.gray)
+        }
+    }
+
+    /// "Title · count" header used by both sections. The
+    /// middle dot + small count text matches the web's
+    /// `GoalsSectionHeader` (`list.templ:136-143`).
+    private func sectionHeader(_ title: String, count: Int) -> some View {
+        HStack(spacing: DSSpacing.xs) {
             Text(title)
                 .font(.headline)
                 .foregroundStyle(DSColors.text)
-            Text("(\(count))")
+            Text("·")
+                .font(.subheadline)
+                .foregroundStyle(DSColors.textSecondary)
+            Text("\(count)")
                 .font(.subheadline)
                 .foregroundStyle(DSColors.textSecondary)
         }
         .textCase(nil)
     }
 
-    private var emptyActiveHint: some View {
-        Text("No active goals — tap + to add one.")
-            .font(.subheadline)
-            .foregroundStyle(DSColors.textSecondary)
-            .padding(.vertical, DSSpacing.xs)
-    }
-
     private var emptyState: some View {
         VStack(spacing: DSSpacing.md) {
-            Image(systemName: Icons.goals)
-                .font(.system(size: 48))
-                .foregroundStyle(DSColors.textSecondary)
+            ZStack {
+                RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                    .fill(DSColors.surfaceElevated)
+                Image(systemName: Icons.goals)
+                    .font(.system(size: 24))
+                    .foregroundStyle(DSColors.text)
+            }
+            .frame(width: 48, height: 48)
+
             Text("No goals yet")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(DSColors.text)
-            Text("Set a goal to keep your training on track.")
+            Text("Track what you're working towards. Goals can have optional start, target, and end dates.")
                 .font(.body)
                 .foregroundStyle(DSColors.textSecondary)
                 .multilineTextAlignment(.center)
-            Button {
-                showingNewGoal = true
-            } label: {
-                Label("Add your first goal", systemImage: Icons.plusCircle)
-            }
-            .buttonStyle(.dsPrimary)
+            Text("Tap + to add your first goal.")
+                .font(.footnote)
+                .foregroundStyle(DSColors.textSecondary)
         }
         .padding(DSSpacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -215,8 +229,8 @@ struct GoalsListView: View {
     /// Marks a goal complete. The optimistic update happens
     /// inside `GoalStore.markComplete(id:)`; we additionally
     /// fire the success haptic here (alongside the row's own
-    /// opacity/strikethrough animation) so the user gets
-    /// tactile confirmation that the goal is done.
+    /// strikethrough animation) so the user gets tactile
+    /// confirmation that the goal is done.
     private func completeGoal(_ goal: GoalDTO) {
         guard !goal.isCompleted else { return }
         let generator = UINotificationFeedbackGenerator()

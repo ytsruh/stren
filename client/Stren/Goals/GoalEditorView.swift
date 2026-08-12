@@ -3,10 +3,15 @@ import SwiftUI
 /// Create / edit sheet for a goal. Mirrors the web's
 /// `/goals/new` and `/goals/:id/edit` forms
 /// (`internal/views/goals/form.templ`): title, optional
-/// description, and three optional date pickers (start,
-/// target, end). Save POSTs (create) or PUTs (edit) the
-/// corresponding `/api/v1/goals/*` endpoint via the shared
-/// `GoalStore` injected by the parent.
+/// description, and three optional date fields. Save POSTs
+/// (create) or PUTs (edit) via the shared `GoalStore`.
+///
+/// Date inputs use `.datePickerStyle(.compact)` — a single
+/// inline row that expands on tap. This keeps the form
+/// compact (matches the web's `<input type="date">`) instead
+/// of swallowing the screen with three full calendars. Each
+/// date has its own "Clear" affordance so the user can send
+/// `nil` without losing the field.
 struct GoalEditorView: View {
     enum Mode {
         case create
@@ -17,26 +22,16 @@ struct GoalEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     let mode: Mode
-    /// Shared with `GoalsListView` so the list view picks
-    /// up the new / edited row in place (optimistic
-    /// insertion + server confirmation).
+    /// Shared with `GoalsListView` so the list picks up the
+    /// new / edited row in place (optimistic insertion +
+    /// server confirmation).
     @ObservedObject var store: GoalStore
 
     @State private var title: String = ""
     @State private var description: String = ""
-
-    /// Each date has its own "enabled" flag so the user can
-    /// independently toggle a date without losing the others.
-    /// The picker is hidden when the flag is off, and the
-    /// underlying `Date` is sent as `nil` so the server
-    /// clears that column.
-    @State private var hasStartDate: Bool = false
-    @State private var hasTargetDate: Bool = false
-    @State private var hasEndDate: Bool = false
-
-    @State private var startDate: Date = .now
-    @State private var targetDate: Date = .now
-    @State private var endDate: Date = .now
+    @State private var startDate: Date? = nil
+    @State private var targetDate: Date? = nil
+    @State private var endDate: Date? = nil
 
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
@@ -44,11 +39,6 @@ struct GoalEditorView: View {
     private var isEditing: Bool {
         if case .edit = mode { return true }
         return false
-    }
-
-    private var editingGoalID: String? {
-        if case .edit(let goal) = mode { return goal.id }
-        return nil
     }
 
     private var trimmedTitle: String {
@@ -66,24 +56,10 @@ struct GoalEditorView: View {
             Form {
                 titleSection
                 descriptionSection
-                dateSection(
-                    label: "Start date",
-                    isOn: $hasStartDate,
-                    date: $startDate,
-                    footer: "Optional. When you plan to start working on this goal."
-                )
-                dateSection(
-                    label: "Target date",
-                    isOn: $hasTargetDate,
-                    date: $targetDate,
-                    footer: "Optional. When you aim to complete this goal. Used for the \"Today / N days\" chip."
-                )
-                dateSection(
-                    label: "End date",
-                    isOn: $hasEndDate,
-                    date: $endDate,
-                    footer: "Optional. The last day you want to give yourself to finish."
-                )
+                datesSection
+                if isEditing {
+                    deleteSection
+                }
                 if let errorMessage {
                     Section {
                         Text(errorMessage)
@@ -92,7 +68,7 @@ struct GoalEditorView: View {
                     }
                 }
             }
-            .navigationTitle(isEditing ? "Edit goal" : "New goal")
+            .navigationTitle(isEditing ? "Edit Goal" : "New Goal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -111,6 +87,18 @@ struct GoalEditorView: View {
                     }
                     .disabled(!canSave)
                 }
+            }
+            .confirmationDialog(
+                "Delete this goal?",
+                isPresented: $showingDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete goal", role: .destructive) {
+                    Task { await deleteAndDismiss() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently removes the goal and cannot be undone.")
             }
             .onAppear { seedIfNeeded() }
         }
@@ -141,40 +129,95 @@ struct GoalEditorView: View {
         }
     }
 
-    /// Reusable date-section builder. The toggle is bound
-    /// separately so the user can clear a date without
-    /// touching the picker.
-    @ViewBuilder
-    private func dateSection(
-        label: String,
-        isOn: Binding<Bool>,
-        date: Binding<Date>,
-        footer: String
-    ) -> some View {
+    /// All three date fields in one section. Each field is
+    /// always visible — the user toggles "set" by tapping
+    /// the picker (which expands it) or the "Clear" button
+    /// (which removes the date). Empty fields send `nil` so
+    /// the server clears that column.
+    private var datesSection: some View {
         Section {
-            Toggle(isOn: isOn) {
-                Text(label)
-            }
-            if isOn.wrappedValue {
-                DatePicker(
-                    label,
-                    selection: date,
-                    displayedComponents: .date
-                )
-                .labelsHidden()
-                .datePickerStyle(.graphical)
-            }
+            dateRow(
+                label: "Start",
+                binding: $startDate
+            )
+            dateRow(
+                label: "Target",
+                binding: $targetDate
+            )
+            dateRow(
+                label: "End",
+                binding: $endDate
+            )
+        } header: {
+            Text("Dates")
         } footer: {
-            Text(footer)
+            Text("All three are optional. Tap a date to set it; tap the × to clear it.")
         }
     }
 
-    // MARK: - Save
+    /// Single compact date row. `binding` is `Binding<Date?>`
+    /// so the empty/clear state is part of the model. Renders
+    /// a compact picker when set, a "Set" placeholder when
+    /// nil.
+    @ViewBuilder
+    private func dateRow(label: String, binding: Binding<Date?>) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(DSColors.text)
+            Spacer()
+            if let date = binding.wrappedValue {
+                DatePicker(
+                    label,
+                    selection: Binding(
+                        get: { date },
+                        set: { binding.wrappedValue = $0 }
+                    ),
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                Button {
+                    binding.wrappedValue = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(DSColors.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear \(label.lowercased()) date")
+            } else {
+                Button {
+                    binding.wrappedValue = Calendar.current.startOfDay(for: .now)
+                } label: {
+                    Text("Set")
+                        .font(.subheadline)
+                        .foregroundStyle(DSColors.accent)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
 
-    /// Posts (create) or PUTs (edit) via the same
-    /// `GoalStore` API the list view uses. The store's own
-    /// mutation methods run on the main actor, so we don't
-    /// need any explicit `MainActor.run` block here.
+    /// Delete button lives on the edit form only (matches
+    /// the web's edit page header — `form.templ:42-55`). The
+    /// list view intentionally has no delete affordance.
+    private var deleteSection: some View {
+        Section {
+            Button(role: .destructive) {
+                showingDeleteConfirm = true
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("Delete goal")
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    @State private var showingDeleteConfirm: Bool = false
+
+    // MARK: - Save / Delete
+
     private func save() async {
         errorMessage = nil
         let trimmed = trimmedTitle
@@ -188,17 +231,15 @@ struct GoalEditorView: View {
         let request = CreateGoalRequest(
             title: trimmed,
             description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-            startDate: hasStartDate ? startDate : nil,
-            targetDate: hasTargetDate ? targetDate : nil,
-            endDate: hasEndDate ? endDate : nil
+            startDate: startDate,
+            targetDate: targetDate,
+            endDate: endDate
         )
         do {
             switch mode {
             case .create:
                 let created = await store.create(request)
                 if created == nil {
-                    // The store already populated
-                    // errorMessage; surface it.
                     errorMessage = store.errorMessage ?? "Could not save the goal."
                     return
                 }
@@ -224,6 +265,18 @@ struct GoalEditorView: View {
         }
     }
 
+    private func deleteAndDismiss() async {
+        guard case .edit(let goal) = mode else { return }
+        isSaving = true
+        defer { isSaving = false }
+        await store.delete(id: goal.id)
+        if store.errorMessage != nil {
+            errorMessage = store.errorMessage
+            return
+        }
+        dismiss()
+    }
+
     // MARK: - Seeding
 
     /// Populates the form from the existing goal on first
@@ -235,18 +288,9 @@ struct GoalEditorView: View {
         guard title.isEmpty else { return }
         title = goal.title
         description = goal.description
-        if let start = goal.startDate {
-            hasStartDate = true
-            startDate = start
-        }
-        if let target = goal.targetDate {
-            hasTargetDate = true
-            targetDate = target
-        }
-        if let end = goal.endDate {
-            hasEndDate = true
-            endDate = end
-        }
+        startDate = goal.startDate
+        targetDate = goal.targetDate
+        endDate = goal.endDate
     }
 }
 
