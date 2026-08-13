@@ -83,7 +83,7 @@ dev:
 .PHONY: templ
 templ:
 	@echo "Generating Templ templates..."
-	@which templ > /dev/null || (echo "Installing templ..." && go install github.com/a-h/templ/cmd/templ@latest)
+	@which templ > /dev/null || (echo "Installing templ..." && go install github.com/a-h/templ/cmd/templ@v0.3.1020)
 	templ generate
 	@echo "✓ Templates generated"
 
