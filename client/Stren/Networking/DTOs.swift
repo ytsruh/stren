@@ -113,12 +113,21 @@ public struct UpdateMeRequest: Encodable, Equatable {
 
 // MARK: Exercises
 
+/// Mirrors the server's `ExerciseDTO` in
+/// `internal/routes/api_dto.go`. The server returns an
+/// `image_url` field that is the fully-qualified public URL
+/// (resolved via `utils.PublicURLFor(img_url)`) and is what
+/// the iOS side should use for `AsyncImage`. `imgURL` is
+/// kept around for backwards-compatibility (older server
+/// builds will not populate `imageURL`, in which case the
+/// views should fall back to the placeholder icon).
 public struct ExerciseDTO: Codable, Equatable, Identifiable, Hashable {
     public let id: String
     public let name: String
     public let description: String
     public let videoURL: String
     public let imgURL: String
+    public let imageURL: String
     public let type: String
 
     enum CodingKeys: String, CodingKey {
@@ -127,7 +136,59 @@ public struct ExerciseDTO: Codable, Equatable, Identifiable, Hashable {
         case description
         case videoURL = "video_url"
         case imgURL = "img_url"
+        case imageURL = "image_url"
         case type
+    }
+
+    public init(
+        id: String,
+        name: String,
+        description: String,
+        videoURL: String,
+        imgURL: String,
+        imageURL: String,
+        type: String
+    ) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.videoURL = videoURL
+        self.imgURL = imgURL
+        self.imageURL = imageURL
+        self.type = type
+    }
+
+    /// `true` when the exercise has a renderable image. The
+    /// server returns empty strings for missing media, so
+    /// reading emptiness on either field is equivalent;
+    /// `imageURL` is the field the views actually use.
+    public var hasImage: Bool { !imageURL.isEmpty }
+
+    /// `true` when the exercise has a video link to open.
+    public var hasVideo: Bool { !videoURL.isEmpty }
+
+    /// Pretty display name for the `type` string. Matches the
+    /// web's `capitalize` badge styling (`strength` →
+    /// `Strength`, `cardio` → `Cardio`, `other` → `Other`).
+    /// Unknown values fall back to a capitalized version of
+    /// the raw string so we never show a lowercase badge.
+    public var typeDisplayName: String {
+        switch type.lowercased() {
+        case "strength": return "Strength"
+        case "cardio":   return "Cardio"
+        case "other":    return "Other"
+        default:         return type.capitalized
+        }
+    }
+}
+
+private extension String {
+    /// Locale-aware first-letter-uppercase. Avoids pulling in
+    /// `Foundation.NSString.capitalizedString` differences and
+    /// matches the web's `capitalize` CSS for ASCII.
+    var capitalized: String {
+        guard let first = first else { return self }
+        return first.uppercased() + dropFirst()
     }
 }
 

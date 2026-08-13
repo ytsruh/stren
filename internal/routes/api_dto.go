@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"stren/internal/models"
+	"stren/internal/utils"
 )
 
 // APIError is the body returned for every non-2xx response from
@@ -90,12 +91,23 @@ type UpdateMeRequest struct {
 
 // ExerciseDTO is the JSON shape for an exercise in any list or
 // lookup response.
+//
+// `ImgURL` is the raw storage key (e.g. "exercises/<id>.webp"),
+// suitable for fetching the object via the storage client. Clients
+// that want to render the image directly should use `ImageURL`,
+// which is the fully-qualified public URL resolved via
+// `utils.PublicURLFor("exercises/<id>.webp")` — i.e. the same
+// value the web app's `internal/views/exercise/history.templ`
+// feeds into its `<img src=…>`. Keeping both fields lets older
+// clients keep reading `img_url` while newer clients (the iOS
+// app) get a ready-to-render URL with no extra config.
 type ExerciseDTO struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	VideoURL    string `json:"video_url"`
 	ImgURL      string `json:"img_url"`
+	ImageURL    string `json:"image_url"`
 	Type        string `json:"type"`
 }
 
@@ -107,6 +119,7 @@ func ExerciseFromModel(e models.Exercise) ExerciseDTO {
 		Description: e.Description,
 		VideoURL:    e.VideoURL,
 		ImgURL:      e.ImgURL,
+		ImageURL:    utils.PublicURLFor(e.ImgURL),
 		Type:        string(e.Type),
 	}
 }

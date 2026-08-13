@@ -5,10 +5,23 @@ import SwiftUI
 /// optional timestamp. Tapping save POSTs the whole batch
 /// in one request so all sets share the same exercise,
 /// notes, and timestamp (matches the web form's semantics).
+///
+/// `initialExerciseID`, when supplied, pre-selects an
+/// exercise in the picker once the catalogue has loaded.
+/// Used by the per-exercise history view's `+` button —
+/// mirrors the web's
+/// `/exercises/:id/new` route, which renders the same form
+/// with `preselectedExerciseID` set so the user lands
+/// ready to log a set for the exercise they came from.
 struct NewSetView: View {
     @EnvironmentObject private var env: AppEnvironment
     @EnvironmentObject private var authStore: AuthStore
     @Environment(\.dismiss) private var dismiss
+
+    /// Preselected exercise id. `nil` falls back to the
+    /// existing "auto-pick the first exercise" behaviour so
+    /// the dashboard's `+` button is unchanged.
+    private let initialExerciseID: String?
 
     @State private var exercises: [ExerciseDTO] = []
     @State private var selectedExerciseID: String?
@@ -19,6 +32,10 @@ struct NewSetView: View {
     @State private var isLoadingExercises: Bool = true
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
+
+    init(initialExerciseID: String? = nil) {
+        self.initialExerciseID = initialExerciseID
+    }
 
     var body: some View {
         NavigationStack {
@@ -139,11 +156,19 @@ struct NewSetView: View {
         defer { isLoadingExercises = false }
         do {
             exercises = try await env.api.listExercises()
-            // Pre-select the first exercise for a faster
-            // happy path — the user just opens the sheet
-            // and tweaks the values.
+            // Honour the caller's preselection — when the
+            // user lands here from the per-exercise history
+            // view's `+` button we want this exercise
+            // already chosen. Falls back to the first
+            // exercise on the dashboard for a faster happy
+            // path there.
             if selectedExerciseID == nil {
-                selectedExerciseID = exercises.first?.id
+                if let initialExerciseID,
+                   exercises.contains(where: { $0.id == initialExerciseID }) {
+                    selectedExerciseID = initialExerciseID
+                } else {
+                    selectedExerciseID = exercises.first?.id
+                }
             }
         } catch {
             errorMessage = "Could not load the exercise list."

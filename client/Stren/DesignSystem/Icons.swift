@@ -33,6 +33,28 @@ public enum Icons {
     /// "Add another row" affordance in the new-set form.
     public static let plusCircle = "plus.circle"
 
+    // MARK: - Exercise details
+
+    /// "Watch Video" affordance on the exercise history
+    /// view. Matches the web's Lucide `play` icon used in
+    /// `internal/views/exercise/history.templ:71`.
+    public static let play = "play.fill"
+
+    // MARK: - Stat cards
+
+    /// "Personal Best" stat card on the exercise history
+    /// view. The filled symbol pairs well with the accent
+    /// colour treatment for the highlighted PR card.
+    public static let trophy = "trophy.fill"
+    /// "Last Activity" stat card on the exercise history
+    /// view.
+    public static let calendar = "calendar"
+    /// Smaller variant of the dumbbell for the "Last Set"
+    /// stat card. Reuses the same underlying SF Symbol
+    /// string as `exercises` but is declared separately so
+    /// the two can diverge if the symbol set changes.
+    public static let dumbbellSmall = "dumbbell.fill"
+
     // MARK: - Status
 
     /// Generic error / load-failure state.

@@ -3,14 +3,20 @@ import SwiftUI
 
 /// The per-exercise history screen. Pushed onto the
 /// `ExerciseListView` navigation stack when the user taps
-/// an exercise. Shows a Swift Charts line chart of the
-/// user's progress (heaviest set per day) at the top, then
-/// a paginated table of every set in reverse chronological
-/// order, and lifetime stats (max weight, last set) above
-/// the table.
+/// an exercise. The page is anchored by a hero image (or
+/// placeholder), followed by a "Watch Video" button when
+/// one exists, a "Details" disclosure that carries the
+/// description and type chip, a Swift Charts progress
+/// chart (area-filled, gradient line, PR reference line,
+/// and visible x-axis), a 2-column grid of stat cards
+/// (Personal Best highlighted), and a paginated history
+/// list. The nav-bar `+` button opens `NewSetView`
+/// pre-set to this exercise so the user can log a new set
+/// without leaving the context.
 struct ExerciseHistoryView: View {
     @EnvironmentObject private var env: AppEnvironment
     @EnvironmentObject private var authStore: AuthStore
+    @Environment(\.openURL) private var openURL
 
     let exercise: ExerciseDTO
 
@@ -20,12 +26,38 @@ struct ExerciseHistoryView: View {
     @State private var errorMessage: String?
     @State private var currentPage: Int = 1
     @State private var selectedDate: Date?
+    @State private var isPresentingNewSet: Bool = false
+    @State private var isDetailsExpanded: Bool = false
 
     var body: some View {
         content
             .navigationTitle(exercise.name)
             .navigationBarTitleDisplayMode(.inline)
-            .task(id: currentPage) { await load() }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isPresentingNewSet = true
+                    } label: {
+                        Image(systemName: Icons.addSet)
+                            .font(.body.weight(.semibold))
+                    }
+                    .accessibilityLabel("Add set")
+                }
+            }
+            .sheet(isPresented: $isPresentingNewSet) {
+                NewSetView(initialExerciseID: exercise.id)
+                    .environmentObject(env)
+                    .environmentObject(authStore)
+                    .onDisappear {
+                        // Paging-style refresh: the user just
+                        // logged a set, so reload the first
+                        // page and the chart so the new row
+                        // appears at the top.
+                        currentPage = 1
+                        Task { await load(refresh: true) }
+                    }
+            }
+            .task(id: currentPage) { await load(refresh: false) }
     }
 
     @ViewBuilder
@@ -35,23 +67,43 @@ struct ExerciseHistoryView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let errorMessage, page == nil {
             VStack(spacing: DSSpacing.md) {
-                Image(systemName: "exclamationmark.triangle")
+                Image(systemName: Icons.warning)
                     .font(.largeTitle)
                     .foregroundStyle(DSColors.destructive)
                 Text(errorMessage)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(DSColors.textSecondary)
-                Button("Try again") { Task { await load() } }
+                Button("Try again") { Task { await load(refresh: false) } }
                     .buttonStyle(.dsSecondary)
             }
             .padding()
         } else if let page, page.entries.isEmpty {
-            emptyState
+            VStack(spacing: 0) {
+                heroImage
+                actionsSection
+                Spacer()
+                emptyState
+            }
+            .padding(.horizontal, DSSpacing.md)
         } else {
             List {
-                chartSection
+                // Hero image lives in its own transparent
+                // section so it sits flush against the
+                // screen edges instead of being wrapped in
+                // a List section card. The standard section
+                // padding is removed via `.listRowInsets`
+                // so the image uses the full width.
+                Section {
+                    heroImage
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+
+                actionsSection
                 statsSection
-                Section("Sets") {
+                chartSection
+                Section("History") {
                     ForEach(page?.entries ?? []) { entry in
                         HistorySetRow(entry: entry, weightUnit: weightUnit)
                     }
@@ -59,44 +111,206 @@ struct ExerciseHistoryView: View {
                 paginationSection
             }
             .listStyle(.insetGrouped)
+            // Compact section spacing keeps the inter-section
+            // gaps tight everywhere — the user asked for the
+            // Progress→History gap to be the reference, and
+            // `.compact` matches that visual rhythm.
+            .listSectionSpacing(.compact)
+            // Pull the top of the scroll content up so the
+            // hero image sits closer to the navigation bar.
+            .contentMargins(.top, 0, for: .scrollContent)
         }
+    }
+
+    /// "Watch Video" button and the "Details" `DisclosureGroup`
+    /// (which holds the description and the type chip). The
+    /// image is rendered separately so this section is just
+    /// the page's primary actions and metadata.
+    @ViewBuilder
+    private var actionsSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: DSSpacing.sm) {
+                if exercise.hasVideo {
+                    Button {
+                        if let url = URL(string: exercise.videoURL) {
+                            openURL(url)
+                        }
+                    } label: {
+                        Label("Watch Video", systemImage: Icons.play)
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .buttonStyle(.dsSecondary)
+                    .frame(maxWidth: .infinity)
+                }
+                DisclosureGroup(isExpanded: $isDetailsExpanded) {
+                    VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                        if !exercise.description.isEmpty {
+                            Text(exercise.description)
+                                .font(.subheadline)
+                                .foregroundStyle(DSColors.textSecondary)
+                        } else {
+                            Text("No description available")
+                                .font(.subheadline)
+                                .foregroundStyle(DSColors.textSecondary)
+                        }
+                        ExerciseTypeChip(type: exercise.type)
+                    }
+                    .padding(.top, DSSpacing.xs)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } label: {
+                    Text(isDetailsExpanded ? "Hide details" : "Details")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(DSColors.text)
+                        .textCase(nil)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var heroImage: some View {
+        if exercise.hasImage, let url = URL(string: exercise.imageURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure, .empty:
+                    imagePlaceholder
+                @unknown default:
+                    imagePlaceholder
+                }
+            }
+            .frame(height: 160)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous))
+        } else {
+            imagePlaceholder
+                .frame(height: 160)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// Muted tile with the dumbbell icon shown when the
+    /// exercise has no image (or its image hasn't loaded
+    /// yet). Matches the web's
+    /// `<div class="… bg-muted …"><Dumbbell /></div>` block
+    /// in `internal/views/exercise/history.templ:65-67`.
+    private var imagePlaceholder: some View {
+        RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+            .fill(DSColors.surfaceElevated)
+            .overlay(
+                Image(systemName: Icons.exercises)
+                    .font(.system(size: 48))
+                    .foregroundStyle(DSColors.textSecondary)
+            )
     }
 
     @ViewBuilder
     private var chartSection: some View {
         if !chartPoints.isEmpty {
             Section("Progress") {
-                Chart(chartPoints) { point in
-                    LineMark(
-                        x: .value("Date", point.date),
-                        y: .value("Max weight", point.weight)
-                    )
-                    .interpolationMethod(.monotone)
-                    PointMark(
-                        x: .value("Date", point.date),
-                        y: .value("Max weight", point.weight)
-                    )
-                    // Highlight marks drawn in chart
-                    // coordinate space (RuleMark / PointMark
-                    // must live inside `Chart { ... }` — the
-                    // .chartOverlay content is a plain View and
-                    // can only host the floating card).
-                    if let selectedDate,
-                       let nearest = nearestPoint(to: selectedDate),
-                       point.id == nearest.id {
-                        RuleMark(x: .value("Selected", nearest.date))
-                            .foregroundStyle(DSColors.textSecondary.opacity(0.35))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                            .zIndex(-1)
+                Chart {
+                    ForEach(chartPoints) { point in
+                        // Area fill rendered first so the line
+                        // and points sit on top. The fill is
+                        // explicitly bounded below by the
+                        // lowest data point (via `yStart:`)
+                        // so the gradient doesn't bleed past
+                        // the data and cover the y-axis tick
+                        // labels at the bottom of the chart.
+                        AreaMark(
+                            x: .value("Date", point.date),
+                            yStart: .value("Baseline", chartYBaseline),
+                            yEnd: .value("Max weight", point.weight)
+                        )
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [
+                                    DSColors.accent.opacity(0.25),
+                                    DSColors.accent.opacity(0.0),
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+
+                        LineMark(
+                            x: .value("Date", point.date),
+                            y: .value("Max weight", point.weight)
+                        )
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [
+                                    DSColors.accent,
+                                    DSColors.accent.opacity(0.7),
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .lineStyle(StrokeStyle(lineWidth: 2.5))
+
                         PointMark(
-                            x: .value("Date", nearest.date),
-                            y: .value("Max weight", nearest.weight)
+                            x: .value("Date", point.date),
+                            y: .value("Max weight", point.weight)
                         )
                         .foregroundStyle(DSColors.accent)
-                        .symbolSize(120)
+                        .symbolSize(isMostRecentPoint(point) ? 160 : 50)
+
+                        // Highlight marks drawn in chart
+                        // coordinate space (RuleMark / PointMark
+                        // must live inside `Chart { ... }` — the
+                        // .chartOverlay content is a plain View
+                        // and can only host the floating card).
+                        if let selectedDate,
+                           let nearest = nearestPoint(to: selectedDate),
+                           point.id == nearest.id {
+                            RuleMark(x: .value("Selected", nearest.date))
+                                .foregroundStyle(DSColors.textSecondary.opacity(0.35))
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                                .zIndex(-1)
+                            PointMark(
+                                x: .value("Date", nearest.date),
+                                y: .value("Max weight", nearest.weight)
+                            )
+                            .foregroundStyle(DSColors.accent)
+                            .symbolSize(160)
+                        }
+                    }
+
+                    // PR reference line lives alongside the
+                    // series marks so it shares the same y
+                    // axis. Drawn after the series so it
+                    // overlays the line — the dashed stroke
+                    // keeps it visually distinct from the
+                    // data line.
+                    if let pr = personalBest {
+                        RuleMark(y: .value("PR", pr))
+                            .foregroundStyle(DSColors.accent.opacity(0.55))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            .zIndex(-1)
+                            .annotation(position: .top, alignment: .leading) {
+                                Text("PR")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(DSColors.accent)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(DSColors.surface)
+                                    )
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .stroke(DSColors.accent.opacity(0.55), lineWidth: 0.5)
+                                    )
+                            }
                     }
                 }
-                .frame(height: 200)
+                .frame(height: 220)
                 .chartYScale(domain: chartYDomain)
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
@@ -105,6 +319,17 @@ struct ExerciseHistoryView: View {
                         AxisValueLabel {
                             if let weight = value.as(Double.self) {
                                 Text("\(Int(weight.rounded())) \(weightUnit)")
+                                    .font(.caption2)
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(date, format: .dateTime.day().month(.abbreviated))
                                     .font(.caption2)
                             }
                         }
@@ -176,6 +401,37 @@ struct ExerciseHistoryView: View {
         }
     }
 
+    /// The user's lifetime PR for this exercise, in the
+    /// user's preferred weight unit. Prefers the
+    /// `HistoryStatsDTO.maxWeight` value (always present
+    /// when there are entries) and falls back to the
+    /// heaviest chart point otherwise.
+    private var personalBest: Double? {
+        if let stats = page?.stats, stats.maxWeight > 0 {
+            return stats.maxWeight
+        }
+        return chartPoints.map(\.weight).max()
+    }
+
+    /// Lower bound for the area fill. Anchoring the fill
+    /// to the lowest data point (rather than the y-axis
+    /// baseline, which includes padding) keeps the
+    /// gradient from bleeding into the y-axis tick-label
+    /// row at the bottom of the chart.
+    private var chartYBaseline: Double {
+        chartPoints.map(\.weight).min() ?? 0
+    }
+
+    /// `true` when the point is the most recent (latest
+    /// date) on the chart. Used by the chart to render the
+    /// most recent point as a larger accent dot so the eye
+    /// lands on "today's status" without inspecting the
+    /// line.
+    private func isMostRecentPoint(_ point: ChartPoint) -> Bool {
+        guard let latest = chartPoints.map(\.date).max() else { return false }
+        return point.date == latest
+    }
+
     /// Small floating card showing the date and weight for the
     /// highlighted chart point. Positioned by the caller via
     /// `.position(x:y:)` so the card sits above the dot.
@@ -206,30 +462,45 @@ struct ExerciseHistoryView: View {
     @ViewBuilder
     private var statsSection: some View {
         if let stats = page?.stats {
-            Section("Stats") {
-                HStack {
-                    Text("Max weight")
-                    Spacer()
-                    Text(String(format: "%.1f %@", stats.maxWeight, weightUnit))
-                        .font(.body.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(DSColors.text)
-                }
-                if let lastSet = stats.lastSet {
-                    HStack {
-                        Text("Last set")
-                        Spacer()
-                        Text("\(lastSet.reps) × \(String(format: "%.1f", lastSet.weight)) \(weightUnit)")
-                            .font(.body.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(DSColors.text)
-                    }
-                    HStack {
-                        Text("Last")
-                        Spacer()
-                        Text(lastSet.createdAt, format: .dateTime.day().month().year())
-                            .foregroundStyle(DSColors.textSecondary)
+            // Outer Section card is intentionally removed
+            // (`.listRowBackground(Color.clear)` + no
+            // row separator) so the individual stat cards
+            // sit on the page background rather than
+            // appearing as "cards inside a card". No
+            // section header — the stat cards' labels are
+            // self-describing, so a "Stats" title would be
+            // redundant.
+            Section {
+                StatsGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: DSSpacing.sm),
+                        GridItem(.flexible(), spacing: DSSpacing.sm),
+                    ],
+                    spacing: DSSpacing.sm
+                ) {
+                    StatCard(
+                        label: "Personal Best",
+                        value: String(format: "%.1f %@", stats.maxWeight, weightUnit),
+                        icon: Icons.trophy
+                    )
+                    .gridCellColumns(2)
+
+                    if let lastSet = stats.lastSet {
+                        StatCard(
+                            label: "Last Set",
+                            value: "\(lastSet.reps) × \(String(format: "%.1f", lastSet.weight)) \(weightUnit)",
+                            icon: Icons.dumbbellSmall
+                        )
+                        StatCard(
+                            label: "Last Activity",
+                            value: lastSet.createdAt.formatted(.dateTime.day().month().year()),
+                            icon: Icons.calendar
+                        )
                     }
                 }
             }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
@@ -244,10 +515,15 @@ struct ExerciseHistoryView: View {
             .foregroundStyle(DSColors.textSecondary)
             .disabled(!(page?.hasPrev ?? false))
 
-            Text("\(currentPage)")
-                .font(.footnote.weight(.semibold).monospacedDigit())
-                .foregroundStyle(DSColors.textSecondary)
-                .frame(minWidth: 20)
+            if isLoading {
+                ProgressView()
+                    .scaleEffect(0.8)
+            } else {
+                Text("Page \(currentPage)")
+                    .font(.footnote.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(DSColors.textSecondary)
+                    .frame(minWidth: 60)
+            }
 
             Button { currentPage += 1 } label: {
                 Image(systemName: "chevron.right")
@@ -258,11 +534,12 @@ struct ExerciseHistoryView: View {
             .disabled(!(page?.hasNext ?? false))
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, DSSpacing.xs)
     }
 
     private var emptyState: some View {
         VStack(spacing: DSSpacing.md) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
+            Image(systemName: Icons.chartEmpty)
                 .font(.system(size: 48))
                 .foregroundStyle(DSColors.textSecondary)
             Text("No sets yet")
@@ -271,6 +548,15 @@ struct ExerciseHistoryView: View {
                 .font(.body)
                 .foregroundStyle(DSColors.textSecondary)
                 .multilineTextAlignment(.center)
+            Button {
+                isPresentingNewSet = true
+            } label: {
+                Label("Log First Set", systemImage: Icons.addSet)
+                    .font(.headline)
+            }
+            .buttonStyle(.dsPrimary)
+            .padding(.horizontal, DSSpacing.lg)
+            .padding(.top, DSSpacing.sm)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -282,19 +568,23 @@ struct ExerciseHistoryView: View {
 
     // MARK: - Data
 
-    private func load() async {
+    /// `refresh` triggers a full reload of the chart and the
+    /// first page — used when the user just saved a new set
+    /// from the embedded `NewSetView` sheet so the new row
+    /// appears at the top immediately.
+    private func load(refresh: Bool) async {
         let isFirstLoad = page == nil
-        if isFirstLoad { isLoading = true }
+        if isFirstLoad || refresh { isLoading = true }
         defer { isLoading = false }
         do {
             let result = try await env.api.getExerciseHistory(id: exercise.id, page: currentPage)
             page = result
             // The chart is a lifetime view of all sets, so it
-            // only needs to be fetched once — not on every page
-            // change. Caching the points makes pagination feel
-            // instant.
-            if isFirstLoad {
-                Task { await loadChart() }
+            // only needs to be fetched once — not on every
+            // page change. After a save we want it refreshed
+            // though, so `refresh` triggers a re-fetch.
+            if isFirstLoad || refresh {
+                await loadChart()
             }
         } catch let error as APIError {
             if case .unauthorized = error { return }
@@ -364,10 +654,87 @@ private struct HistorySetRow: View {
     }
 }
 
+/// A reusable 2-column, fixed-size grid that wraps the
+/// exercise-history's stat cards. Behaviourally identical
+/// to SwiftUI's `LazyVGrid` but with a fully-qualified
+/// horizontal gap so the per-card spacing matches the
+/// design-system's `DSSpacing` rather than the iOS default
+/// of 8pt. Uses `LazyVGrid` internally so the page stays
+/// smooth even if more cards are added later.
+private struct StatsGrid<Content: View>: View {
+    let columns: [GridItem]
+    let spacing: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: spacing) {
+            content()
+        }
+    }
+}
+
+/// One stat card in the "Stats" section. Layout: an icon
+/// disk on the leading edge, a label above and a value
+/// below it. Mirrors the web's `StatCard` component (label
+/// on top, value beneath) while adding the icon disk to
+/// give each stat a distinct visual identity. The card
+/// uses the same rounded surface + separator stroke style
+/// as the dashboard's donut card so the page reads as a
+/// consistent system. Icons are always rendered in the
+/// brand accent so the card row has a consistent colour
+/// rhythm; text uses the default `DSColors.text` so the
+/// value reads cleanly on the surface background.
+private struct StatCard: View {
+    let label: String
+    let value: String
+    let icon: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DSSpacing.xs) {
+            HStack(spacing: DSSpacing.xs) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(DSColors.accent)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(DSColors.accent.opacity(0.12))
+                    )
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(DSColors.text)
+                    .textCase(nil)
+            }
+            Text(value)
+                .font(.title3.weight(.bold).monospacedDigit())
+                .foregroundStyle(DSColors.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, DSSpacing.sm)
+        .padding(.vertical, DSSpacing.xs)
+        .background(
+            RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                .fill(DSColors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                .stroke(DSColors.separator, lineWidth: 0.5)
+        )
+    }
+}
+
 #Preview {
     NavigationStack {
         ExerciseHistoryView(exercise: ExerciseDTO(
-            id: "ex-1", name: "Squat", description: "", videoURL: "", imgURL: "", type: "strength"
+            id: "ex-1",
+            name: "Squat",
+            description: "Compound lower-body exercise.",
+            videoURL: "",
+            imgURL: "",
+            imageURL: "",
+            type: "strength"
         ))
         .environmentObject(AppEnvironment.live(baseURL: URL(string: "http://localhost:8080/api/v1")!))
         .environmentObject(AuthStore(api: APIClient(
