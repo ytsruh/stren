@@ -1,4 +1,5 @@
 internal/views/**/*_templ.go
+internal/email/templates/**/*_templ.go
 *.env
 /data/*
 *.db

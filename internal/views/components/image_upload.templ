@@ -10,6 +10,14 @@ import "fmt"
 // the preview and hidden inputs on edit forms. MaxSizeMB is the
 // client-side pre-check; the server enforces the same cap.
 //
+// FileFieldName is the multipart field name the server expects when
+// reading the uploaded file (default "file"). htmx serialises the
+// triggering form via new FormData(form) on a `change` upload;
+// FormData only includes form controls with a `name` attribute, so
+// omitting this on the file input drops the file from the request
+// before it reaches the server. The route handler reads the file
+// with c.FormFile(FileFieldName), so the two must agree.
+//
 // RemoveFieldName is the form field name used to signal "delete the
 // current image on save" (default "clear_image"). The widget renders
 // a hidden input with that name plus a "Remove img" button; clicking
@@ -25,6 +33,7 @@ type ImageUploadProps struct {
 	CurrentOriginalKey string
 	MaxSizeMB          int
 	UploadEndpoint     string
+	FileFieldName      string
 	RemoveFieldName    string
 	RemoveLabel        string
 	// AspectWidth / AspectHeight define the visual frame the
@@ -66,6 +75,10 @@ templ ImageUpload(props ImageUploadProps) {
 		endpoint := props.UploadEndpoint
 		if endpoint == "" {
 			endpoint = "/admin/exercises/image-upload"
+		}
+		fileField := props.FileFieldName
+		if fileField == "" {
+			fileField = "file"
 		}
 		removeField := props.RemoveFieldName
 		if removeField == "" {
@@ -140,6 +153,7 @@ templ ImageUpload(props ImageUploadProps) {
 			class="input pt-2"
 			type="file"
 			id={ inputID }
+			name={ fileField }
 			accept="image/jpeg,image/png"
 			hx-post={ templ.SafeURL(endpoint) }
 			hx-encoding="multipart/form-data"

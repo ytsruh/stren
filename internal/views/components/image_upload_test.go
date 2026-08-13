@@ -208,6 +208,71 @@ func TestImageUpload_FileInputHasHtmxUploadAttributes(t *testing.T) {
 	}
 }
 
+func TestImageUpload_FileInputHasNameAttribute(t *testing.T) {
+	// Regression guard: htmx serialises the triggering form via
+	// `new FormData(form)` on the upload POST, and FormData only
+	// includes form controls with a `name` attribute. A file input
+	// without `name` is dropped from the multipart payload before
+	// it reaches the server, so the route's `c.FormFile("file")`
+	// returns http.ErrMissingFile and the upload silently fails.
+	// The default FileFieldName must match the field name the
+	// route reads.
+	t.Run("default name is file", func(t *testing.T) {
+		html := renderToString(t, ImageUpload(ImageUploadProps{
+			Name:           "exercise",
+			Label:          "Image",
+			UploadEndpoint: "/admin/exercises/image-upload",
+		}))
+		if !strings.Contains(html, `type="file"`) {
+			t.Fatal("expected a file input in the rendered HTML")
+		}
+		// Locate the file input and assert the name attribute is
+		// present on the same tag. We deliberately don't just
+		// substring-match `name="file"` because the hidden
+		// `img_key` / `img_key_original` inputs use the same
+		// pattern, so we anchor on `type="file"` to scope the
+		// assertion to the right element.
+		fileStart := strings.Index(html, `type="file"`)
+		if fileStart < 0 {
+			t.Fatal("could not locate file input in rendered HTML")
+		}
+		// Search forward for the next `>` that closes the input's
+		// opening tag.
+		tagEnd := strings.Index(html[fileStart:], ">")
+		if tagEnd < 0 {
+			t.Fatal("could not locate end of file input opening tag")
+		}
+		tagOpen := html[fileStart : fileStart+tagEnd]
+		if !strings.Contains(tagOpen, `name="file"`) {
+			t.Errorf("file input is missing name=\"file\"; opening tag: %q", tagOpen)
+		}
+	})
+
+	t.Run("custom FileFieldName is threaded through", func(t *testing.T) {
+		html := renderToString(t, ImageUpload(ImageUploadProps{
+			Name:           "exercise",
+			Label:          "Image",
+			UploadEndpoint: "/admin/exercises/image-upload",
+			FileFieldName:  "photo",
+		}))
+		fileStart := strings.Index(html, `type="file"`)
+		if fileStart < 0 {
+			t.Fatal("could not locate file input in rendered HTML")
+		}
+		tagEnd := strings.Index(html[fileStart:], ">")
+		if tagEnd < 0 {
+			t.Fatal("could not locate end of file input opening tag")
+		}
+		tagOpen := html[fileStart : fileStart+tagEnd]
+		if !strings.Contains(tagOpen, `name="photo"`) {
+			t.Errorf("file input did not pick up FileFieldName=photo; opening tag: %q", tagOpen)
+		}
+		if strings.Contains(tagOpen, `name="file"`) {
+			t.Errorf("file input still has default name=\"file\" despite FileFieldName override; opening tag: %q", tagOpen)
+		}
+	})
+}
+
 func TestImageUpload_ImageUploadedEventListener(t *testing.T) {
 	// The widget's JS listens for the `image-uploaded` custom
 	// event (fired by the server via the HX-Trigger response

@@ -3677,3 +3677,298 @@ func TestDeleteGoal_NotFound(t *testing.T) {
 		t.Fatalf("expected not found error, got %v", err)
 	}
 }
+
+// --- Admin create / update exercise route tests ---
+//
+// These cover the form → route → controller → repo path for the
+// image-upload keys (`img_key`, `img_key_original`, `clear_image`).
+// The bug being guarded against: the file input inside the upload
+// widget shipped without a `name` attribute, so htmx dropped the
+// file from the multipart body, the upload failed silently, and
+// the admin's "save" form posted empty `img_key` values that
+// overwrote the exercise's image with empty strings in the DB.
+// With the fix in place the keys flow correctly; these tests
+// assert the full path on both the create and update routes.
+
+// adminCreateForm builds the url.Values payload the admin exercise
+// create route expects.
+func adminCreateForm(name, typeStr string, imgKey, imgKeyOriginal string) url.Values {
+	form := url.Values{}
+	form.Set("name", name)
+	form.Set("type", typeStr)
+	form.Set("description", "A description")
+	form.Set("video_url", "")
+	form.Set("img_key", imgKey)
+	form.Set("img_key_original", imgKeyOriginal)
+	return form
+}
+
+// adminPostForm returns a request + context pair that simulates the
+// admin exercise form being submitted as an HTMX form-urlencoded
+// POST. The handler is invoked directly so the AdminMiddleware is
+// bypassed (setAuthContext provides the admin claims).
+func adminPostForm(t *testing.T, h *Handler, e *echo.Echo, path string, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	// Path-parameter parsing for /admin/exercises/:id: we extract
+	// the id from the path and pass it through c.SetParamNames /
+	// c.SetParamValues. The id segment may contain spaces or other
+	// URL-unsafe chars in the test names, but Echo's path parser
+	// expects them to be url.PathUnescape'd first.
+	var exerciseID string
+	if strings.HasPrefix(path, "/admin/exercises/") {
+		raw := strings.TrimPrefix(path, "/admin/exercises/")
+		if i := strings.Index(raw, "/"); i >= 0 {
+			raw = raw[:i]
+		}
+		if decoded, derr := url.PathUnescape(raw); derr == nil {
+			exerciseID = decoded
+		} else {
+			exerciseID = raw
+		}
+		// The request line must be a syntactically valid URL; if
+		// the id contains a space we substitute a placeholder and
+		// drive the handler off the synthetic context below.
+		reqPath := path
+		if strings.ContainsAny(exerciseID, " \t\n") {
+			reqPath = "/admin/exercises/__id__"
+		}
+		req := httptest.NewRequest(http.MethodPost, reqPath, strings.NewReader(form.Encode()))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+		req.Header.Set("HX-Request", "true")
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues(exerciseID)
+		setAuthContext(c, "admin-1", "admin@example.com", "Admin", true)
+		if err := h.AdminUpdateExercise(c); err != nil {
+			t.Fatalf("admin update handler returned error: %v", err)
+		}
+		return rec
+	}
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "admin-1", "admin@example.com", "Admin", true)
+	if err := h.AdminCreateExercise(c); err != nil {
+		t.Fatalf("admin create handler returned error: %v", err)
+	}
+	return rec
+}
+
+// findExerciseByName looks up an exercise in the mock repository
+// by its (case-sensitive) name. Returns nil if not found.
+func findExerciseByName(m *mockRepository, name string) *models.Exercise {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.exercises {
+		if m.exercises[i].Name == name {
+			cp := m.exercises[i]
+			return &cp
+		}
+	}
+	return nil
+}
+
+func TestAdminCreateExercise_PersistsImageKeys(t *testing.T) {
+	// Regression: when an admin uploads a new image and then
+	// saves the create form, the storage keys returned by the
+	// upload route must end up on the persisted exercise. A
+	// regression that dropped the file from the multipart body
+	// (e.g. file input without a `name` attribute) would leave
+	// these fields empty on the saved record.
+	h, mock, _, e := setupHandler(t)
+
+	form := adminCreateForm("Deadlift", "strength", "exercises/abc.jpg", "exercises/abc_original.jpg")
+	rec := adminPostForm(t, h, e, "/admin/exercises", form)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Exercise created!") {
+		t.Errorf("expected success toast in body, got: %s", body)
+	}
+	if trigger := rec.Header().Get("HX-Trigger"); !strings.Contains(trigger, "triggerRedirect") {
+		t.Errorf("expected HX-Trigger to redirect, got %q", trigger)
+	}
+
+	// The mock repository must have stored the keys the form
+	// submitted. Look it up by name to assert against the
+	// persisted record.
+	got := findExerciseByName(mock, "Deadlift")
+	if got == nil {
+		t.Fatal("expected the new exercise to be persisted")
+	}
+	if got.ImgURL != "exercises/abc.jpg" {
+		t.Errorf("ImgURL = %q, want %q", got.ImgURL, "exercises/abc.jpg")
+	}
+	if got.ImgURLOriginal != "exercises/abc_original.jpg" {
+		t.Errorf("ImgURLOriginal = %q, want %q", got.ImgURLOriginal, "exercises/abc_original.jpg")
+	}
+}
+
+func TestAdminCreateExercise_EmptyImageKeysAreAllowed(t *testing.T) {
+	// Creating an exercise without uploading an image must
+	// succeed and leave the image keys empty. This guards
+	// against a regression where empty form fields were treated
+	// as a hard error.
+	h, mock, _, e := setupHandler(t)
+
+	form := adminCreateForm("Bodyweight Squat", "strength", "", "")
+	rec := adminPostForm(t, h, e, "/admin/exercises", form)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	got := findExerciseByName(mock, "Bodyweight Squat")
+	if got == nil {
+		t.Fatal("expected the new exercise to be persisted")
+	}
+	if got.ImgURL != "" || got.ImgURLOriginal != "" {
+		t.Errorf("expected empty image keys, got ImgURL=%q ImgURLOriginal=%q", got.ImgURL, got.ImgURLOriginal)
+	}
+}
+
+func TestAdminCreateExercise_RequiresName(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	form := adminCreateForm("", "strength", "exercises/abc.jpg", "exercises/abc_original.jpg")
+	rec := adminPostForm(t, h, e, "/admin/exercises", form)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Exercise name is required") {
+		t.Errorf("expected name-required error toast, got: %s", rec.Body.String())
+	}
+}
+
+func TestAdminUpdateExercise_ReplacesImageOnNewKey(t *testing.T) {
+	// The replace flow: exercise has an old image, the admin
+	// uploads a new one and saves. The persisted keys must be
+	// the new ones (the route only swaps the keys when the
+	// upload widget populated a non-empty img_key).
+	h, mock, _, e := setupHandler(t)
+
+	seedForm := adminCreateForm("Back Squat", "strength", "exercises/old.jpg", "exercises/old_original.jpg")
+	adminPostForm(t, h, e, "/admin/exercises", seedForm)
+	before := findExerciseByName(mock, "Back Squat")
+	if before == nil {
+		t.Fatal("expected seed exercise to be persisted")
+	}
+	if before.ImgURL != "exercises/old.jpg" {
+		t.Fatalf("seed ImgURL = %q, want %q", before.ImgURL, "exercises/old.jpg")
+	}
+
+	update := adminCreateForm("Back Squat", "strength", "exercises/new.jpg", "exercises/new_original.jpg")
+	rec := adminPostForm(t, h, e, "/admin/exercises/"+before.ID, update)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Exercise updated!") {
+		t.Errorf("expected success toast, got: %s", rec.Body.String())
+	}
+
+	after := findExerciseByName(mock, "Back Squat")
+	if after == nil {
+		t.Fatal("expected updated exercise to be persisted")
+	}
+	if after.ImgURL != "exercises/new.jpg" {
+		t.Errorf("ImgURL after update = %q, want %q", after.ImgURL, "exercises/new.jpg")
+	}
+	if after.ImgURLOriginal != "exercises/new_original.jpg" {
+		t.Errorf("ImgURLOriginal after update = %q, want %q", after.ImgURLOriginal, "exercises/new_original.jpg")
+	}
+}
+
+func TestAdminUpdateExercise_ClearsImageOnClearImageFlag(t *testing.T) {
+	// When the admin clicks "Remove img" the widget flips a
+	// hidden `clear_image` input to "true". On save, the route
+	// must wipe both keys regardless of the hidden `img_key`
+	// inputs (which are populated from the upload widget).
+	h, mock, _, e := setupHandler(t)
+
+	seedForm := adminCreateForm("Incline Press", "strength", "exercises/ip.jpg", "exercises/ip_original.jpg")
+	adminPostForm(t, h, e, "/admin/exercises", seedForm)
+	before := findExerciseByName(mock, "Incline Press")
+	if before == nil {
+		t.Fatal("expected seed exercise to be persisted")
+	}
+
+	update := adminCreateForm("Incline Press", "strength", "", "")
+	update.Set("clear_image", "true")
+	rec := adminPostForm(t, h, e, "/admin/exercises/"+before.ID, update)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+
+	after := findExerciseByName(mock, "Incline Press")
+	if after == nil {
+		t.Fatal("expected updated exercise to be persisted")
+	}
+	if after.ImgURL != "" {
+		t.Errorf("expected ImgURL cleared, got %q", after.ImgURL)
+	}
+	if after.ImgURLOriginal != "" {
+		t.Errorf("expected ImgURLOriginal cleared, got %q", after.ImgURLOriginal)
+	}
+}
+
+func TestAdminUpdateExercise_KeepsImageWhenNoNewKey(t *testing.T) {
+	// No upload, no clear flag — saving an unrelated field on
+	// an exercise that already has an image must preserve the
+	// existing keys. Without this, the upload-widget bug
+	// (empty `img_key` reaches the route) would silently wipe
+	// the exercise's image on every save.
+	h, mock, _, e := setupHandler(t)
+
+	seedForm := adminCreateForm("Romanian Deadlift", "strength", "exercises/rdl.jpg", "exercises/rdl_original.jpg")
+	adminPostForm(t, h, e, "/admin/exercises", seedForm)
+	before := findExerciseByName(mock, "Romanian Deadlift")
+	if before == nil {
+		t.Fatal("expected seed exercise to be persisted")
+	}
+
+	update := adminCreateForm("Romanian Deadlift", "strength", "", "")
+	rec := adminPostForm(t, h, e, "/admin/exercises/"+before.ID, update)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+
+	after := findExerciseByName(mock, "Romanian Deadlift")
+	if after == nil {
+		t.Fatal("expected updated exercise to be persisted")
+	}
+	if after.ImgURL != "exercises/rdl.jpg" {
+		t.Errorf("ImgURL after empty-key update = %q, want preserved %q", after.ImgURL, "exercises/rdl.jpg")
+	}
+	if after.ImgURLOriginal != "exercises/rdl_original.jpg" {
+		t.Errorf("ImgURLOriginal after empty-key update = %q, want preserved %q", after.ImgURLOriginal, "exercises/rdl_original.jpg")
+	}
+}
+
+func TestAdminUpdateExercise_RequiresName(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+
+	seedForm := adminCreateForm("Lat Pulldown", "strength", "exercises/lp.jpg", "exercises/lp_original.jpg")
+	adminPostForm(t, h, e, "/admin/exercises", seedForm)
+	before := findExerciseByName(mock, "Lat Pulldown")
+	if before == nil {
+		t.Fatal("expected seed exercise to be persisted")
+	}
+
+	update := adminCreateForm("", "strength", "", "")
+	rec := adminPostForm(t, h, e, "/admin/exercises/"+before.ID, update)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Exercise name is required") {
+		t.Errorf("expected name-required error toast, got: %s", rec.Body.String())
+	}
+}
