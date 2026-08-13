@@ -28,6 +28,9 @@ struct ExerciseHistoryView: View {
     @State private var selectedDate: Date?
     @State private var isPresentingNewSet: Bool = false
     @State private var isDetailsExpanded: Bool = false
+    @State private var entryPendingDelete: ExerciseEntryDTO?
+    @State private var editingEntry: ExerciseEntryDTO?
+    @State private var showingDeleteConfirm: Bool = false
 
     var body: some View {
         content
@@ -56,6 +59,25 @@ struct ExerciseHistoryView: View {
                         currentPage = 1
                         Task { await load(refresh: true) }
                     }
+            }
+            .sheet(item: $editingEntry) { entry in
+                EditSetView(exerciseEntry: entry) { updated in
+                    updateEntry(updated)
+                }
+                .environmentObject(env)
+                .environmentObject(authStore)
+            }
+            .alert(
+                "Delete this set?",
+                isPresented: $showingDeleteConfirm,
+                presenting: entryPendingDelete
+            ) { entry in
+                Button("Delete", role: .destructive) {
+                    Task { await deleteEntry(entry) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("This will permanently remove the set from your history.")
             }
             .task(id: currentPage) { await load(refresh: false) }
     }
@@ -106,6 +128,34 @@ struct ExerciseHistoryView: View {
                 Section("History") {
                     ForEach(page?.entries ?? []) { entry in
                         HistorySetRow(entry: entry, weightUnit: weightUnit)
+                            // Leading edge → Edit. Neutral
+                            // grey tint (not the brand
+                            // accent) so the two swipe
+                            // directions read as
+                            // left=neutral-edit,
+                            // right=destructive-delete.
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button {
+                                    editingEntry = entry
+                                } label: {
+                                    Label("Edit", systemImage: Icons.edit)
+                                        .labelStyle(.iconOnly)
+                                }
+                                .tint(Color(.systemGray2))
+                            }
+                            // Trailing edge → Delete. Full
+                            // swipe goes through the
+                            // confirmation dialog below —
+                            // never deletes directly.
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    entryPendingDelete = entry
+                                    showingDeleteConfirm = true
+                                } label: {
+                                    Label("Delete", systemImage: Icons.trash)
+                                        .labelStyle(.iconOnly)
+                                }
+                            }
                     }
                 }
                 paginationSection
@@ -601,6 +651,68 @@ struct ExerciseHistoryView: View {
         } catch {
             // Non-fatal: history is still useful without the chart.
             chartPoints = []
+        }
+    }
+
+    // MARK: - Row actions
+
+    /// Removes a set after the user confirms via the
+    /// swipe-to-delete confirmation dialog. Optimistic —
+    /// the row disappears from the local page immediately
+    /// and the API call rolls it back (via a full reload)
+    /// if it fails. The chart is refreshed too because
+    /// the PR or the last-set point may have changed.
+    private func deleteEntry(_ entry: ExerciseEntryDTO) async {
+        guard let current = page else { return }
+        let filteredEntries = current.entries.filter { $0.id != entry.id }
+        page = HistoryPageDTO(
+            entries: filteredEntries,
+            stats: current.stats,
+            page: current.page,
+            hasPrev: current.hasPrev,
+            hasNext: current.hasNext
+        )
+        do {
+            try await env.api.deleteExerciseEntry(id: entry.id)
+        } catch let error as APIError {
+            if case .unauthorized = error { return }
+            errorMessage = error.errorDescription
+            // Rollback by reloading the current page so the
+            // row reappears with the rest of the server's
+            // truth.
+            await load(refresh: true)
+            return
+        } catch {
+            errorMessage = "Could not delete the set."
+            await load(refresh: true)
+            return
+        }
+        // Refresh the lifetime chart (PR / last-set may have
+        // changed) and reload the current page so the stats
+        // block in the header stays in sync.
+        await loadChart()
+        await load(refresh: true)
+    }
+
+    /// Splices a server-confirmed edited entry back into
+    /// the visible page and refreshes the chart so the
+    /// trend, PR reference line, and stat cards reflect
+    /// the new values.
+    private func updateEntry(_ updated: ExerciseEntryDTO) {
+        guard let current = page else { return }
+        let updatedEntries = current.entries.map { entry in
+            entry.id == updated.id ? updated : entry
+        }
+        page = HistoryPageDTO(
+            entries: updatedEntries,
+            stats: current.stats,
+            page: current.page,
+            hasPrev: current.hasPrev,
+            hasNext: current.hasNext
+        )
+        Task {
+            await loadChart()
+            await load(refresh: true)
         }
     }
 

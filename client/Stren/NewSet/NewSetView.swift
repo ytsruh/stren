@@ -92,6 +92,12 @@ struct NewSetView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                // Menu pickers default to the accent tint
+                // (brand orange in this app). Override to
+                // the default text colour so the selected
+                // exercise name reads as neutral body text
+                // instead of a coloured chip.
+                .tint(DSColors.text)
             }
         }
     }
@@ -259,7 +265,7 @@ struct SetRowEditor: View {
                     set: { set.reps = $0 == 0 ? nil : $0 }
                 ), format: .number)
                     .keyboardType(.numberPad)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.ds)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Weight (\(weightUnit))")
@@ -267,7 +273,7 @@ struct SetRowEditor: View {
                     .foregroundStyle(DSColors.textSecondary)
                 TextField("0.0", text: $set.weightText)
                     .keyboardType(.decimalPad)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.ds)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Rest (s)")
@@ -278,7 +284,7 @@ struct SetRowEditor: View {
                     set: { set.restSeconds = $0 == 0 ? nil : $0 }
                 ), format: .number)
                     .keyboardType(.numberPad)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.ds)
             }
         }
     }

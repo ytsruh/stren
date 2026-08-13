@@ -40,6 +40,16 @@ public enum Icons {
     /// `internal/views/exercise/history.templ:71`.
     public static let play = "play.fill"
 
+    /// Swipe-action "Edit" button on the history rows.
+    /// Matches the web's Lucide `edit` icon used in
+    /// `internal/views/exercise/history.templ:189`.
+    public static let edit = "pencil"
+
+    /// Swipe-action "Delete" button on the history rows.
+    /// Matches the same icon used in the dashboard's
+    /// swipe-to-delete (client/Stren/Dashboard/SetList.swift:57).
+    public static let trash = "trash"
+
     // MARK: - Stat cards
 
     /// "Personal Best" stat card on the exercise history
