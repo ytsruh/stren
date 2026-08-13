@@ -27,6 +27,13 @@ struct ProfileView: View {
     /// against the web app's `themeMode` `localStorage` key.
     @AppStorage("themeMode") private var themeModeRaw: String = ThemeMode.system.rawValue
 
+    /// Master opt-in for beta features. Stored in `UserDefaults`
+    /// under `"betaFeaturesEnabled"`; read reactively by
+    /// `BetaFeature` so flipping this toggle reveals or hides
+    /// any gated content in the same run loop. iOS-only — no
+    /// server-side or web-app counterpart today.
+    @AppStorage("betaFeaturesEnabled") private var betaFeaturesEnabled: Bool = false
+
     private var themeMode: Binding<ThemeMode> {
         Binding(
             get: { ThemeMode(rawValue: themeModeRaw) ?? .system },
@@ -42,6 +49,7 @@ struct ProfileView: View {
                     accountSection(user: user)
                     preferencesSection(user: user)
                     appearanceSection
+                    betaSection
                 }
 
                 Section {
@@ -191,6 +199,22 @@ struct ProfileView: View {
             Text("Appearance")
         } footer: {
             Text("Match the device, or override with Light or Dark.")
+        }
+    }
+
+    /// Master switch for beta features. Bound directly to
+    /// `@AppStorage("betaFeaturesEnabled")` so the change
+    /// writes through to `UserDefaults` immediately and the
+    /// `BetaFeature` wrapper reflects it without any glue
+    /// code. No "Save" toolbar — the `Toggle` is the source
+    /// of truth, matching how the appearance picker just works.
+    private var betaSection: some View {
+        Section {
+            Toggle("Beta features", isOn: $betaFeaturesEnabled)
+        } header: {
+            Text("Beta")
+        } footer: {
+            Text("Try features before they're released. They may change or be removed without notice.")
         }
     }
 
