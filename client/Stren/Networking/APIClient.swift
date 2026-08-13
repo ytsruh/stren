@@ -205,6 +205,20 @@ public final class APIClient: @unchecked Sendable {
         try await sendVoid("DELETE", "goals/\(id)")
     }
 
+    // MARK: - Feedback
+
+    /// Submits user feedback to the server. Mirrors the web
+    /// app's `/feedback` POST handler — both surface the same
+    /// validation rules (`title` 5–100, `message` 10–1000,
+    /// both trimmed) enforced by `FeedbackController.Submit`.
+    /// The server stores the row scoped to the authenticated
+    /// user; returns 204 No Content on success so the iOS
+    /// view can dismiss and surface a "Thanks for your
+    /// feedback" alert.
+    public func submitFeedback(_ request: SubmitFeedbackRequest) async throws {
+        try await sendVoid("POST", "feedback", body: request)
+    }
+
     // MARK: - Request plumbing
 
     /// Generic request method for endpoints that return a

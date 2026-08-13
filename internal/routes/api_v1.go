@@ -6,6 +6,7 @@
 package routes
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -502,6 +503,37 @@ func (h *Handler) APIDeleteGoal(c echo.Context) error {
 			return c.JSON(http.StatusNotFound, APIError{Error: "goal not found"})
 		}
 		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to delete goal"})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Feedback ---
+
+// APISubmitFeedback handles POST /api/v1/feedback. Accepts the
+// same {title, message} body the web app's /feedback form
+// collects and delegates to FeedbackController.Submit, which
+// applies the trim + length rules and persists the row scoped
+// to the authenticated user. Returns 204 No Content on success
+// so the iOS client can simply call it and dismiss its form;
+// validation failures return the controller's human-readable
+// message as the APIError body so the iOS view can surface it
+// inline.
+func (h *Handler) APISubmitFeedback(c echo.Context) error {
+	var in SubmitFeedbackRequest
+	if err := c.Bind(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "invalid request body"})
+	}
+
+	claims := GetClaims(c)
+	if err := h.feedbackCtrl.Submit(in.Title, in.Message, claims.UserID); err != nil {
+		switch {
+		case errors.Is(err, controllers.ErrTitleTooShort),
+			errors.Is(err, controllers.ErrTitleTooLong),
+			errors.Is(err, controllers.ErrMessageTooShort),
+			errors.Is(err, controllers.ErrMessageTooLong):
+			return c.JSON(http.StatusBadRequest, APIError{Error: err.Error()})
+		}
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to submit feedback"})
 	}
 	return c.NoContent(http.StatusNoContent)
 }

@@ -11,6 +11,16 @@ struct ProfileView: View {
 
     @State private var showingSignOutConfirm: Bool = false
 
+    /// Two-step state machine behind the toolbar feedback button:
+    /// `showingFeedbackSheet` presents the form, then `onSuccess`
+    /// on `FeedbackView` flips the sheet back down and raises
+    /// `showingFeedbackThanks` so a native alert confirms the
+    /// submission. Keeping the two pieces of state separate lets
+    /// the alert survive after the sheet's dismissal animation
+    /// finishes.
+    @State private var showingFeedbackSheet: Bool = false
+    @State private var showingFeedbackThanks: Bool = false
+
     /// Bound directly to `@AppStorage` so the change is picked
     /// up by `RootView`'s `applyThemeMode()` modifier
     /// immediately. Persists across app restarts; mirrored
@@ -48,6 +58,38 @@ struct ProfileView: View {
                 }
             }
             .navigationTitle("Profile")
+            .toolbar {
+                /// Envelope icon at the top-right opens the
+                /// feedback sheet. The web app surfaces the
+                /// same form behind a sidebar link; here the
+                /// toolbar button is the discoverable affordance
+                /// without cluttering the Profile sections.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingFeedbackSheet = true
+                    } label: {
+                        Image(systemName: "envelope")
+                    }
+                    .accessibilityLabel("Send feedback")
+                }
+            }
+            .sheet(isPresented: $showingFeedbackSheet) {
+                NavigationStack {
+                    FeedbackView(onSuccess: {
+                        showingFeedbackSheet = false
+                        showingFeedbackThanks = true
+                    })
+                }
+                .presentationDetents([.large])
+            }
+            .alert(
+                "Thanks for your feedback",
+                isPresented: $showingFeedbackThanks
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("We'll read every submission.")
+            }
             .confirmationDialog(
                 "Sign out of Stren?",
                 isPresented: $showingSignOutConfirm,

@@ -259,6 +259,12 @@ func registerAPIRoutes(e *echo.Echo, h *Handler) {
 	e.POST("/api/v1/goals/:id/complete", h.APIMarkGoalComplete)
 	e.POST("/api/v1/goals/:id/reopen", h.APIReopenGoal)
 	e.DELETE("/api/v1/goals/:id", h.APIDeleteGoal)
+
+	// Feedback (JSON mirror of the HTML /feedback POST
+	// handler — used by the iOS client). The same
+	// FeedbackController.Submit validates the body, so the
+	// iOS and web surfaces enforce the same length rules.
+	e.POST("/api/v1/feedback", h.APISubmitFeedback)
 }
 
 // ServeManifest serves the web app manifest with the correct MIME type.

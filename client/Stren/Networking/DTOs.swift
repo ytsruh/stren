@@ -397,3 +397,23 @@ public struct UpdateGoalRequest: Encodable, Equatable {
         self.endDate = endDate
     }
 }
+
+// MARK: Feedback
+
+/// JSON body for `POST /api/v1/feedback`. Mirrors the
+/// web app's `/feedback` form: a short `title` (5–100 chars)
+/// and a longer `message` (10–1000 chars). Both are trimmed
+/// and validated by `FeedbackController.Submit` on the
+/// server; the iOS form mirrors those rules locally so the
+/// Save button is disabled until the body is valid. The
+/// `user_id` is taken from the JWT — this DTO deliberately
+/// has no field for it.
+public struct SubmitFeedbackRequest: Encodable, Equatable {
+    public let title: String
+    public let message: String
+
+    public init(title: String, message: String) {
+        self.title = title
+        self.message = message
+    }
+}

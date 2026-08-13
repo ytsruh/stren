@@ -312,3 +312,18 @@ func GoalsFromModels(gs []models.Goal) []GoalDTO {
 	}
 	return out
 }
+
+// --- Feedback ---
+
+// SubmitFeedbackRequest is the body for POST /api/v1/feedback.
+// Mirrors the two fields the web app's /feedback form collects
+// (`title`, `message`); validation is delegated to
+// FeedbackController.Submit so the JSON and HTML surfaces
+// enforce the exact same length rules (title 5–100,
+// message 10–1000, both trimmed). The user_id is taken from
+// the JWT — clients cannot submit feedback on someone else's
+// behalf.
+type SubmitFeedbackRequest struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}

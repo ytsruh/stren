@@ -3,6 +3,7 @@ package routes
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -934,4 +935,162 @@ func mustSwapGoalsRepo(t *testing.T, h *Handler, repo *mockGoalRepository) *mock
 	t.Helper()
 	h.goalsCtrl = controllers.NewGoalsController(repo)
 	return repo
+}
+
+// --- /feedback ---
+
+// mustSwapFeedbackRepo replaces h.feedbackCtrl with a new
+// controller backed by the supplied mockFeedbackRepository.
+// Used by the feedback tests that need to seed/inspect
+// persisted rows. Mutates the controller in place via the
+// same package, mirroring mustSwapGoalsRepo.
+func mustSwapFeedbackRepo(t *testing.T, h *Handler, repo *mockFeedbackRepository) *mockFeedbackRepository {
+	t.Helper()
+	h.feedbackCtrl = controllers.NewFeedbackController(repo)
+	return repo
+}
+
+func TestAPISubmitFeedback_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "fb@example.com", "Feedbacker")
+	repo := mustSwapFeedbackRepo(t, h, newMockFeedbackRepository())
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/feedback", token, SubmitFeedbackRequest{
+		Title:   "Loving the new dashboard",
+		Message: "Just wanted to say thanks for the recent changes.",
+	})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204, body = %s", rec.Code, rec.Body.String())
+	}
+	if len(repo.feedback) != 1 {
+		t.Fatalf("feedback len = %d, want 1", len(repo.feedback))
+	}
+	got := repo.feedback[0]
+	// user_id must come from the JWT, not from the request
+	// body — clients cannot submit feedback on someone else's
+	// behalf.
+	if got.UserID != "user-fb@example.com" {
+		t.Fatalf("user_id = %q, want user-fb@example.com", got.UserID)
+	}
+	if got.Title != "Loving the new dashboard" {
+		t.Fatalf("title = %q, want %q", got.Title, "Loving the new dashboard")
+	}
+	if got.Message != "Just wanted to say thanks for the recent changes." {
+		t.Fatalf("message = %q, want %q", got.Message, "Just wanted to say thanks for the recent changes.")
+	}
+}
+
+func TestAPISubmitFeedback_TrimsWhitespace(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "fbt@example.com", "FbT")
+	repo := mustSwapFeedbackRepo(t, h, newMockFeedbackRepository())
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/feedback", token, SubmitFeedbackRequest{
+		Title:   "  Trimmed Title  ",
+		Message: "   Trimmed message here.   ",
+	})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204, body = %s", rec.Code, rec.Body.String())
+	}
+	if repo.feedback[0].Title != "Trimmed Title" {
+		t.Fatalf("title = %q, want trimmed %q", repo.feedback[0].Title, "Trimmed Title")
+	}
+	if repo.feedback[0].Message != "Trimmed message here." {
+		t.Fatalf("message = %q, want trimmed %q", repo.feedback[0].Message, "Trimmed message here.")
+	}
+}
+
+func TestAPISubmitFeedback_TitleTooShort(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "fbts@example.com", "FbTS")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/feedback", token, SubmitFeedbackRequest{
+		Title:   "Hi",
+		Message: "This is a long enough message body.",
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if apiErr.Error == "" {
+		t.Fatal("expected non-empty error message")
+	}
+}
+
+func TestAPISubmitFeedback_TitleTooLong(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "fbtl@example.com", "FbTL")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/feedback", token, SubmitFeedbackRequest{
+		Title:   strings.Repeat("x", 101),
+		Message: "This is a long enough message body.",
+	})
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+func TestAPISubmitFeedback_MessageTooShort(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "fbms@example.com", "FbMS")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/feedback", token, SubmitFeedbackRequest{
+		Title:   "Valid Title Here",
+		Message: "Short",
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if apiErr.Error == "" {
+		t.Fatal("expected non-empty error message")
+	}
+}
+
+func TestAPISubmitFeedback_MessageTooLong(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "fbml@example.com", "FbML")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/feedback", token, SubmitFeedbackRequest{
+		Title:   "Valid Title Here",
+		Message: strings.Repeat("x", 1001),
+	})
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+func TestAPISubmitFeedback_InvalidBody(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "fbib@example.com", "FbIB")
+
+	// Send raw garbage so the JSON decoder in c.Bind rejects it.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/feedback", strings.NewReader("not-json"))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if apiErr.Error == "" {
+		t.Fatal("expected non-empty error message")
+	}
+}
+
+func TestAPISubmitFeedback_RepoError(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "fbre@example.com", "FbRE")
+	repo := mustSwapFeedbackRepo(t, h, newMockFeedbackRepository())
+	repo.errCreate = errors.New("database error")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/feedback", token, SubmitFeedbackRequest{
+		Title:   "Valid Title Here",
+		Message: "Valid message body — long enough.",
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusInternalServerError)
+	if apiErr.Error == "" {
+		t.Fatal("expected non-empty error message")
+	}
+}
+
+func TestAPISubmitFeedback_RequiresAuth(t *testing.T) {
+	_, _, _, e := setupHandler(t)
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/feedback", "", SubmitFeedbackRequest{
+		Title:   "Anonymous Title",
+		Message: "Anonymous message body that is long enough.",
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401, body = %s", rec.Code, rec.Body.String())
+	}
 }
