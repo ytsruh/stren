@@ -219,6 +219,69 @@ public final class APIClient: @unchecked Sendable {
         try await sendVoid("POST", "feedback", body: request)
     }
 
+    // MARK: - Weight
+
+    /// Lists every weight entry for the authenticated user,
+    /// newest first. The server returns the entries wrapped
+    /// in a `WeightEntriesResponse` envelope so the iOS
+    /// view treats the response as opaque and only reads
+    /// `.entries`.
+    public func listWeightEntries() async throws -> [WeightEntryDTO] {
+        let response: WeightEntriesResponse = try await send("GET", "weight")
+        return response.entries
+    }
+
+    /// Creates a new weight entry. `createdAt` is optional
+    /// on the server — when the client sends `nil` the
+    /// server stamps the entry with the current time. The
+    /// returns the server-confirmed row so the iOS view can
+    /// splice it into its local cache without a follow-up
+    /// GET.
+    public func createWeightEntry(_ request: CreateWeightEntryRequest) async throws -> WeightEntryDTO {
+        try await send("POST", "weight", body: request)
+    }
+
+    /// Fetches a single weight entry by ID. Returns `nil`
+    /// when the entry is missing or owned by another user
+    /// (the server returns 404 for both cases). The iOS
+    /// view treats the two outcomes uniformly so the user
+    /// just sees "entry not found".
+    public func getWeightEntry(id: String) async throws -> WeightEntryDTO {
+        try await send("GET", "weight/\(id)")
+    }
+
+    /// Updates an existing weight entry. The photo-handling
+    /// precedence mirrors the HTML form: `removePhoto = true`
+    /// clears the photo, a non-empty `photoKey` replaces the
+    /// existing key, and otherwise the existing key is
+    /// preserved. `createdAt` is optional — when omitted the
+    /// server keeps the existing timestamp so the "edit a
+    /// recent entry" flow doesn't accidentally reset it.
+    public func updateWeightEntry(id: String, request: UpdateWeightEntryRequest) async throws -> WeightEntryDTO {
+        try await send("PUT", "weight/\(id)", body: request)
+    }
+
+    /// Deletes a weight entry. The server returns 204 No
+    /// Content on success and is idempotent for missing
+    /// entries (matches the web's behaviour) so the iOS
+    /// view can safely issue a delete without a prior
+    /// existence check.
+    public func deleteWeightEntry(id: String) async throws {
+        try await sendVoid("DELETE", "weight/\(id)")
+    }
+
+    /// Asks the server for a presigned R2 PUT URL so the
+    /// client can upload a photo file directly to R2 without
+    /// proxying the bytes through the Go server. The
+    /// returned `key` is what the iOS view submits back to
+    /// the create or update form as `photoKey`.
+    public func requestWeightPhotoUploadURL(filename: String, contentType: String) async throws -> WeightPhotoUploadResponse {
+        try await send("POST", "weight/photo-upload", body: WeightPhotoUploadRequest(
+            filename: filename,
+            contentType: contentType
+        ))
+    }
+
     // MARK: - Request plumbing
 
     /// Generic request method for endpoints that return a

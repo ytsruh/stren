@@ -1,0 +1,245 @@
+import SwiftUI
+
+/// The "Weight" tab. Mirrors the web's `/weight` page
+/// (`internal/views/weight/list.templ`):
+///
+///   - Chart at the top (only with ≥ 2 entries) showing
+///     the user's body-weight trend, plus a horizontal
+///     "target" line when one is set
+///   - Progress card under the chart with the current
+///     weight, target, percent, and remaining gap
+///   - Date-grouped list of entries, newest first
+///
+/// Each row is tappable to open the editor. The list
+/// shows the same iOS-native card chrome used elsewhere
+/// in the app (Goals, Exercises history) so the page
+/// reads as one consistent system.
+struct WeightListView: View {
+    @EnvironmentObject private var env: AppEnvironment
+    @EnvironmentObject private var authStore: AuthStore
+
+    @ObservedObject var store: WeightStore
+
+    @State private var showingNewWeight: Bool = false
+    @State private var editingEntry: WeightEntryDTO?
+
+    /// Sorted chart points (oldest-first) so the chart
+    /// draws left-to-right. Cached because the sort runs
+    /// on every body evaluation otherwise.
+    private var chartPoints: [WeightChart.ChartPoint] {
+        store.entries
+            .sorted { $0.createdAt < $1.createdAt }
+            .map { WeightChart.ChartPoint(date: $0.createdAt, weight: $0.weight) }
+    }
+
+    /// The user's preferred unit. Falls back to "kg"
+    /// when the user isn't signed in (the tab is hidden
+    /// in that state, but the fallback keeps body
+    /// evaluation safe).
+    private var weightUnit: String {
+        authStore.currentUser?.weightUnit ?? "kg"
+    }
+
+    /// The user's target weight, if any. Drives the
+    /// progress card and the chart's target line.
+    private var targetWeight: Double? {
+        authStore.currentUser?.targetWeight
+    }
+
+    /// The most recent weight value, for the progress
+    /// card. Returns nil when the user has no entries so
+    /// the parent can hide the card.
+    private var currentWeight: Double? {
+        store.latestEntry?.weight
+    }
+
+    /// Progress percent clamped to `[0, 100]`. Mirrors
+    /// the web's `weightProgress` helper at
+    /// `internal/views/weight/list.templ:315`.
+    private var progressPercent: Double {
+        guard let target = targetWeight, target > 0, let current = currentWeight else {
+            return 0
+        }
+        let pct = current / target * 100
+        return min(max(pct, 0), 100)
+    }
+
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationTitle("Weight")
+                .toolbar { toolbarContent }
+                .sheet(isPresented: $showingNewWeight, onDismiss: {
+                    Task { await store.load() }
+                }) {
+                    WeightEditorView(mode: .create, store: store)
+                        .environmentObject(env)
+                        .environmentObject(authStore)
+                }
+                .sheet(item: $editingEntry, onDismiss: {
+                    Task { await store.load() }
+                }) { entry in
+                    WeightEditorView(mode: .edit(entry), store: store)
+                        .environmentObject(env)
+                        .environmentObject(authStore)
+                }
+        }
+        .task { await store.load() }
+        .refreshable { await store.load() }
+    }
+
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showingNewWeight = true
+            } label: {
+                Image(systemName: Icons.addSet)
+                    .font(.body.weight(.semibold))
+            }
+            .accessibilityLabel("Log weight")
+        }
+    }
+
+    // MARK: - Content states
+
+    @ViewBuilder
+    private var content: some View {
+        if store.isLoading && store.entries.isEmpty {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let error = store.errorMessage, store.entries.isEmpty {
+            errorState(error)
+        } else if store.entries.isEmpty {
+            emptyState
+        } else {
+            loadedList
+        }
+    }
+
+    /// The main scroll view: chart + progress card (when
+    /// applicable) + entries.
+    private var loadedList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DSSpacing.md) {
+                chartSection
+                entriesSection
+            }
+            .padding(DSSpacing.md)
+        }
+        .background(DSColors.background.ignoresSafeArea())
+    }
+
+    @ViewBuilder
+    private var chartSection: some View {
+        if chartPoints.count >= 2 {
+            VStack(spacing: DSSpacing.md) {
+                // Card chrome around the chart so the
+                // stacked layout reads as two equal-weight
+                // sections (chart + progress) rather than a
+                // bare plot sitting on the page background.
+                WeightChart(
+                    points: chartPoints,
+                    weightUnit: weightUnit,
+                    targetWeight: targetWeight
+                )
+                .padding(DSSpacing.md)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                        .fill(DSColors.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                        .stroke(DSColors.separator, lineWidth: 0.5)
+                )
+                if let target = targetWeight, let current = currentWeight {
+                    WeightProgressCard(
+                        current: current,
+                        target: target,
+                        percent: progressPercent,
+                        weightUnit: weightUnit
+                    )
+                }
+            }
+        }
+    }
+
+    /// Date-grouped list of entries. No section header
+    /// — the list card's content is self-describing, so
+    /// a "Entries" title would be redundant (matches the
+    /// other card-driven tabs).
+    private var entriesSection: some View {
+        VStack(spacing: 0) {
+            ForEach(store.entries) { entry in
+                WeightRow(
+                    entry: entry,
+                    weightUnit: weightUnit,
+                    onTap: { editingEntry = entry }
+                )
+                if entry.id != store.entries.last?.id {
+                    Divider()
+                }
+            }
+        }
+        .padding(.horizontal, DSSpacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                .fill(DSColors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                .stroke(DSColors.separator, lineWidth: 0.5)
+        )
+    }
+
+    /// Empty state. Encourages the user to log their first
+    /// weight. Mirrors the web's `WeightEmptyState`
+    /// template.
+    private var emptyState: some View {
+        VStack(spacing: DSSpacing.md) {
+            ZStack {
+                Circle()
+                    .fill(DSColors.surfaceElevated)
+                    .frame(width: 72, height: 72)
+                Image(systemName: "figure.stand")
+                    .font(.system(size: 32))
+                    .foregroundStyle(DSColors.textSecondary)
+            }
+            Text("No weight entries yet")
+                .font(.headline)
+                .foregroundStyle(DSColors.text)
+            Text("Start tracking your body weight by logging your first entry.")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(DSColors.textSecondary)
+            Button {
+                showingNewWeight = true
+            } label: {
+                Label("Log your first weight", systemImage: Icons.addSet)
+            }
+            .buttonStyle(.dsPrimary)
+        }
+        .padding(DSSpacing.lg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DSColors.background.ignoresSafeArea())
+    }
+
+    private func errorState(_ message: String) -> some View {
+        VStack(spacing: DSSpacing.md) {
+            Image(systemName: Icons.warning)
+                .font(.largeTitle)
+                .foregroundStyle(DSColors.destructive)
+            Text(message)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(DSColors.textSecondary)
+            Button("Try again") { Task { await store.load() } }
+                .buttonStyle(.dsSecondary)
+        }
+        .padding(DSSpacing.lg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DSColors.background.ignoresSafeArea())
+    }
+}

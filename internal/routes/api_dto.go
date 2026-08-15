@@ -326,6 +326,138 @@ func GoalsFromModels(gs []models.Goal) []GoalDTO {
 	return out
 }
 
+// --- Weight ---
+
+// WeightEntryDTO is the JSON shape for a single body-weight
+// entry on the /api/v1/weight namespace. Mirrors the
+// models.WeightEntry domain type but resolves the storage key
+// into a fully-qualified `PhotoURL` so the iOS client can hand
+// it straight to AsyncImage without any extra config.
+//
+// `PhotoKey` is included alongside `PhotoURL` so the iOS
+// editor can re-submit it on update (the server's PUT handler
+// expects to be told the existing key explicitly — see
+// `UpdateWeight` in `internal/routes/weight.go:127`). When
+// `HasPhoto` is false the `PhotoKey` and `PhotoURL` fields are
+// omitted from the JSON so a client can rely on `HasPhoto`
+// as the single source of truth (rather than checking both
+// fields for emptiness).
+type WeightEntryDTO struct {
+	ID        string    `json:"id"`
+	Weight    float64   `json:"weight"`
+	Notes     string    `json:"notes"`
+	PhotoKey  string    `json:"photo_key,omitempty"`
+	PhotoURL  string    `json:"photo_url,omitempty"`
+	HasPhoto  bool      `json:"has_photo"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// WeightEntryFromModel converts a models.WeightEntry into its
+// JSON DTO. The photo URL is resolved via utils.PublicURLFor
+// so the iOS client never sees raw storage keys in the
+// photo_url field.
+func WeightEntryFromModel(e models.WeightEntry) WeightEntryDTO {
+	dto := WeightEntryDTO{
+		ID:        e.ID,
+		Weight:    e.Weight,
+		Notes:     e.Notes,
+		PhotoKey:  e.PhotoKey,
+		HasPhoto:  e.HasPhoto(),
+		CreatedAt: e.CreatedAt,
+	}
+	if e.HasPhoto() {
+		dto.PhotoURL = utils.PublicURLFor(e.PhotoKey)
+	}
+	return dto
+}
+
+// WeightEntriesFromModels converts a slice of weight entries
+// into the DTO slice. Returns an empty (non-nil) slice when
+// the input is empty so the JSON encoder writes `[]` rather
+// than `null` — easier for the Swift Codable decoder.
+func WeightEntriesFromModels(es []models.WeightEntry) []WeightEntryDTO {
+	out := make([]WeightEntryDTO, 0, len(es))
+	for _, e := range es {
+		out = append(out, WeightEntryFromModel(e))
+	}
+	return out
+}
+
+// WeightEntriesResponse wraps the weight entry slice in a
+// named envelope so the server can add fields (pagination
+// metadata, summary stats, etc.) without breaking the iOS
+// contract. The iOS view treats the response as opaque and
+// only reads `entries`.
+type WeightEntriesResponse struct {
+	Entries []WeightEntryDTO `json:"entries"`
+}
+
+// CreateWeightEntryRequest is the body for POST /api/v1/weight.
+// Mirrors the web form's three fields (weight, notes,
+// photo_key) and the optional `created_at` that lets the
+// client backdate an entry without manually re-issuing the
+// server's time.Now() default.
+//
+// The numeric and length limits match the HTML form
+// (`weightFormInput` at `internal/routes/weight.go:19`) so
+// the JSON and HTML surfaces reject the same inputs.
+type CreateWeightEntryRequest struct {
+	Weight    float64    `json:"weight"     validate:"required,gte=0,lte=1000"`
+	Notes     string     `json:"notes"      validate:"max=1000"`
+	PhotoKey  string     `json:"photo_key,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+}
+
+// UpdateWeightEntryRequest is the body for PUT /api/v1/weight/:id.
+// Same shape as the create request, plus `remove_photo` so the
+// iOS editor can clear the existing photo without first having
+// to delete the entry and re-create it. When `remove_photo` is
+// true the server ignores `photo_key` and clears the
+// associated column. When `photo_key` is non-empty the server
+// replaces the existing key with the new one. When both are
+// empty / false the existing key is preserved.
+type UpdateWeightEntryRequest struct {
+	Weight      float64    `json:"weight"       validate:"required,gte=0,lte=1000"`
+	Notes       string     `json:"notes"        validate:"max=1000"`
+	PhotoKey    string     `json:"photo_key,omitempty"`
+	RemovePhoto bool       `json:"remove_photo,omitempty"`
+	CreatedAt   *time.Time `json:"created_at,omitempty"`
+}
+
+// WeightCompareResponse is the body for GET /api/v1/weight/compare.
+// Returned in the same order the entries occurred on the
+// timeline (Before/After) so the iOS view can render the slider
+// with the historical photo on the left and the more recent one
+// on the right without having to sort client-side.
+// `DeltaText` is the formatted "+2.5 kg" / "−1.5 kg" / ""
+// string the server already produces for the web compare
+// modal — see `formatWeightDelta` in `internal/routes/weight.go:241`.
+type WeightCompareResponse struct {
+	Before    WeightEntryDTO `json:"before"`
+	After     WeightEntryDTO `json:"after"`
+	DeltaText string         `json:"delta_text"`
+}
+
+// WeightPhotoUploadRequest is the JSON body for POST
+// /api/v1/weight/photo-upload. Mirrors the existing
+// `photoUploadRequest` at `internal/routes/photos.go:16` but
+// is exposed as a public type so the iOS DTO and the Go
+// validation tags live next to the rest of the weight API.
+type WeightPhotoUploadRequest struct {
+	Filename    string `json:"filename"     validate:"required"`
+	ContentType string `json:"content_type" validate:"required"`
+}
+
+// WeightPhotoUploadResponse is the JSON body returned by POST
+// /api/v1/weight/photo-upload. The client PUTs the file bytes
+// directly to `URL`, then submits `Key` back to the create or
+// update form. `URL` is a presigned R2 PUT URL and is valid
+// for one hour.
+type WeightPhotoUploadResponse struct {
+	URL string `json:"url"`
+	Key string `json:"key"`
+}
+
 // --- Feedback ---
 
 // SubmitFeedbackRequest is the body for POST /api/v1/feedback.

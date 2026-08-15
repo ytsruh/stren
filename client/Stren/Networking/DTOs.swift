@@ -478,3 +478,202 @@ public struct SubmitFeedbackRequest: Encodable, Equatable {
         self.message = message
     }
 }
+
+// MARK: Weight
+
+/// JSON shape for a single body-weight entry on the
+/// `/api/v1/weight/*` namespace. Mirrors the server's
+/// `WeightEntryDTO` in `internal/routes/api_dto.go`. The
+/// server resolves the raw R2 storage key into a fully
+/// qualified `photoURL` so the iOS view can hand it
+/// straight to `AsyncImage` without any extra config.
+///
+/// `hasPhoto` is the single source of truth for "is there
+/// a renderable image?" — checking both `photoKey` and
+/// `photoURL` for emptiness is unnecessary because the
+/// server omits both fields when there is no photo
+/// (the `omitempty` JSON tag). The custom decoder below
+/// uses `decodeIfPresent` for those two fields so a
+/// missing key is mapped to an empty string rather than
+/// failing the decode.
+///
+/// `photoKey` is included so the iOS editor can re-submit
+/// the existing key on update (the server's PUT handler
+/// expects to be told the existing key explicitly when
+/// replacing a photo). The iOS view is free to ignore it
+/// for read-only display.
+public struct WeightEntryDTO: Codable, Equatable, Identifiable, Hashable {
+    public let id: String
+    public let weight: Double
+    public let notes: String
+    public let photoKey: String
+    public let photoURL: String
+    public let hasPhoto: Bool
+    public let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case weight
+        case notes
+        case photoKey = "photo_key"
+        case photoURL = "photo_url"
+        case hasPhoto = "has_photo"
+        case createdAt = "created_at"
+    }
+
+    public init(
+        id: String,
+        weight: Double,
+        notes: String,
+        photoKey: String,
+        photoURL: String,
+        hasPhoto: Bool,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.weight = weight
+        self.notes = notes
+        self.photoKey = photoKey
+        self.photoURL = photoURL
+        self.hasPhoto = hasPhoto
+        self.createdAt = createdAt
+    }
+
+    /// Custom decoder. The server uses `omitempty` on
+    /// `photo_key` and `photo_url`, so a photo-less
+    /// entry omits both fields entirely from the JSON
+    /// response. `decodeIfPresent` maps that to an
+    /// empty string here so the DTO's non-optional
+    /// invariant holds (`hasPhoto` is the single source
+    /// of truth for "is there a photo?").
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.weight = try container.decode(Double.self, forKey: .weight)
+        self.notes = try container.decode(String.self, forKey: .notes)
+        self.photoKey = try container.decodeIfPresent(String.self, forKey: .photoKey) ?? ""
+        self.photoURL = try container.decodeIfPresent(String.self, forKey: .photoURL) ?? ""
+        self.hasPhoto = try container.decode(Bool.self, forKey: .hasPhoto)
+        self.createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
+
+    /// Pretty-printed weight in the user's preferred unit.
+    /// The unit is the caller's responsibility — the DTO
+    /// carries the raw number so the iOS view can re-label
+    /// it whenever the user flips their unit preference in
+    /// Profile.
+    public func formattedWeight(in unit: String) -> String {
+        String(format: "%.1f %@", weight, unit)
+    }
+}
+
+/// Response body for `GET /api/v1/weight`. Wrapping the
+/// slice in a named struct (rather than returning
+/// `[WeightEntryDTO]` directly) lets the server add fields
+/// like pagination or summary stats without breaking the
+/// iOS contract.
+public struct WeightEntriesResponse: Decodable, Equatable {
+    public let entries: [WeightEntryDTO]
+}
+
+/// JSON body for `POST /api/v1/weight`. Mirrors the server's
+/// `CreateWeightEntryRequest`. `weight` is the only required
+/// field; `notes` and `photoKey` are optional, and `createdAt`
+/// is optional (defaults to time.Now() on the server when
+/// omitted) so the iOS "log it now" button can send an empty
+/// body field.
+///
+/// `createdAt` is a `Date?` rather than a `Date` so the JSON
+/// encoder can omit the field entirely when the user wants
+/// the server default. The server-side limit mirrors the
+/// HTML form: weight 0–1000, notes ≤ 1000.
+public struct CreateWeightEntryRequest: Encodable, Equatable {
+    public let weight: Double
+    public let notes: String
+    public let photoKey: String
+    public let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case weight
+        case notes
+        case photoKey = "photo_key"
+        case createdAt = "created_at"
+    }
+
+    public init(
+        weight: Double,
+        notes: String,
+        photoKey: String,
+        createdAt: Date?
+    ) {
+        self.weight = weight
+        self.notes = notes
+        self.photoKey = photoKey
+        self.createdAt = createdAt
+    }
+}
+
+/// JSON body for `PUT /api/v1/weight/:id`. Mirrors the
+/// server's `UpdateWeightEntryRequest`. The photo-handling
+/// precedence matches the HTML form:
+///
+///   - `removePhoto = true` clears the photo (the server
+///     ignores `photoKey` in this case)
+///   - non-empty `photoKey` replaces the existing key
+///   - otherwise the existing key is preserved
+///
+/// `createdAt` is optional and preserves the existing
+/// timestamp when omitted so the "edit a recent entry"
+/// flow doesn't accidentally reset the entry to time.Now().
+public struct UpdateWeightEntryRequest: Encodable, Equatable {
+    public let weight: Double
+    public let notes: String
+    public let photoKey: String
+    public let removePhoto: Bool
+    public let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case weight
+        case notes
+        case photoKey = "photo_key"
+        case removePhoto = "remove_photo"
+        case createdAt = "created_at"
+    }
+
+    public init(
+        weight: Double,
+        notes: String,
+        photoKey: String,
+        removePhoto: Bool,
+        createdAt: Date?
+    ) {
+        self.weight = weight
+        self.notes = notes
+        self.photoKey = photoKey
+        self.removePhoto = removePhoto
+        self.createdAt = createdAt
+    }
+}
+
+/// JSON body for `POST /api/v1/weight/photo-upload`. The
+/// iOS client POSTs the user's filename + preferred content
+/// type, receives a presigned R2 PUT URL and a server-side
+/// storage key, then PUTs the file bytes directly to R2.
+public struct WeightPhotoUploadRequest: Encodable, Equatable {
+    public let filename: String
+    public let contentType: String
+
+    public init(filename: String, contentType: String) {
+        self.filename = filename
+        self.contentType = contentType
+    }
+}
+
+/// JSON body returned by `POST /api/v1/weight/photo-upload`.
+/// `url` is a presigned R2 PUT URL (valid for one hour) and
+/// `key` is the server-side storage key the iOS view submits
+/// back to the create or update form.
+public struct WeightPhotoUploadResponse: Decodable, Equatable {
+    public let url: String
+    public let key: String
+}
