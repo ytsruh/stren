@@ -1,19 +1,15 @@
 import SwiftUI
 
-/// The "Weight" tab. Mirrors the web's `/weight` page
-/// (`internal/views/weight/list.templ`):
+/// The "Weight" tab. Layout (top → bottom):
 ///
-///   - Chart at the top (only with ≥ 2 entries) showing
-///     the user's body-weight trend, plus a horizontal
-///     "target" line when one is set
+///   - Chart (only with ≥ 2 entries) showing the user's
+///     body-weight trend, plus a horizontal "target" line
+///     when one is set
 ///   - Progress card under the chart with the current
 ///     weight, target, percent, and remaining gap
 ///   - Date-grouped list of entries, newest first
 ///
-/// Each row is tappable to open the editor. The list
-/// shows the same iOS-native card chrome used elsewhere
-/// in the app (Goals, Exercises history) so the page
-/// reads as one consistent system.
+/// Each row is tappable to open the editor.
 struct WeightListView: View {
     @EnvironmentObject private var env: AppEnvironment
     @EnvironmentObject private var authStore: AuthStore
@@ -120,7 +116,11 @@ struct WeightListView: View {
     }
 
     /// The main scroll view: chart + progress card (when
-    /// applicable) + entries.
+    /// applicable) + entries. The chart and progress sit
+    /// in their original card chrome at the top; the
+    /// entries live below in a card with the iOS-native
+    /// "list" feel (rounded corners, separator strokes,
+    /// thumbnail-on-left row design).
     private var loadedList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.md) {
@@ -167,32 +167,42 @@ struct WeightListView: View {
         }
     }
 
-    /// Date-grouped list of entries. No section header
-    /// — the list card's content is self-describing, so
-    /// a "Entries" title would be redundant (matches the
-    /// other card-driven tabs).
+    /// Date-grouped list of entries, styled to feel like
+    /// an iOS-native list card (rounded corners, hairline
+    /// separators between rows). The row layout itself —
+    /// thumbnail on the left, weight + date inline —
+    /// matches the `ExerciseRow` pattern in
+    /// `ExerciseListView` so the two list-heavy tabs read
+    /// as part of the same iOS-native idiom.
     private var entriesSection: some View {
-        VStack(spacing: 0) {
-            ForEach(store.entries) { entry in
-                WeightRow(
-                    entry: entry,
-                    weightUnit: weightUnit,
-                    onTap: { editingEntry = entry }
-                )
-                if entry.id != store.entries.last?.id {
-                    Divider()
+        VStack(alignment: .leading, spacing: DSSpacing.xs) {
+            Text("History")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DSColors.textSecondary)
+                .padding(.horizontal, DSSpacing.md)
+            VStack(spacing: 0) {
+                ForEach(store.entries) { entry in
+                    WeightRow(
+                        entry: entry,
+                        weightUnit: weightUnit,
+                        onTap: { editingEntry = entry }
+                    )
+                    if entry.id != store.entries.last?.id {
+                        Divider()
+                            .padding(.leading, DSSpacing.md + 60 + DSSpacing.md)
+                    }
                 }
             }
+            .padding(.horizontal, DSSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                    .fill(DSColors.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                    .stroke(DSColors.separator, lineWidth: 0.5)
+            )
         }
-        .padding(.horizontal, DSSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
-                .fill(DSColors.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
-                .stroke(DSColors.separator, lineWidth: 0.5)
-        )
     }
 
     /// Empty state. Encourages the user to log their first

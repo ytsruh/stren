@@ -1,11 +1,19 @@
 import SwiftUI
 
-/// Single row for the weight list. Mirrors the web's
-/// `WeightRow` template (`internal/views/weight/list.templ:206`)
-/// — date + weight always, photo thumbnail and notes when
-/// present. Tapping the row opens the edit sheet so the
-/// user has a single affordance for both viewing and
-/// editing.
+/// Single row for the weight list. Layout (left → right):
+///
+///   [ thumbnail ]   [ date           ]   [ weight ]
+///                   [ notes (opt.)   ]
+///
+/// The thumbnail is filled with the entry's photo when
+/// one exists; otherwise a muted placeholder tile with the
+/// "figure.stand" icon is shown in the same slot so every
+/// row has the same visual rhythm — matches the
+/// `ExerciseRow` pattern in `ExerciseListView.swift`.
+///
+/// Tapping the row fires `onTap` so the parent can open
+/// the editor. The whole row is the hit target (iOS
+/// list rows are inherently tappable).
 struct WeightRow: View {
     let entry: WeightEntryDTO
     let weightUnit: String
@@ -25,53 +33,67 @@ struct WeightRow: View {
     }
 
     var body: some View {
-        HStack(spacing: DSSpacing.sm) {
+        HStack(spacing: DSSpacing.md) {
+            thumbnail
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(formattedDate)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(DSColors.text)
                 Text(entry.formattedWeight(in: weightUnit))
-                    .font(.body)
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
                     .foregroundStyle(DSColors.text)
                 if !entry.notes.isEmpty {
                     Text(entry.notes)
                         .font(.caption)
                         .foregroundStyle(DSColors.textSecondary)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
-
-            if entry.hasPhoto, let url = URL(string: entry.photoURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure, .empty:
-                        photoPlaceholder
-                    @unknown default:
-                        photoPlaceholder
-                    }
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: DSSpacing.cornerRadiusSmall, style: .continuous))
-            }
+            Text(formattedDate)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DSColors.text)
         }
-        .padding(.vertical, DSSpacing.xs)
+        .padding(.vertical, DSSpacing.xxs)
         .contentShape(Rectangle())
         .onTapGesture {
             onTap()
         }
     }
 
-    private var photoPlaceholder: some View {
+    @ViewBuilder
+    private var thumbnail: some View {
+        if entry.hasPhoto, let url = URL(string: entry.photoURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure, .empty:
+                    placeholder
+                @unknown default:
+                    placeholder
+                }
+            }
+            .frame(width: 60, height: 40)
+            .clipShape(RoundedRectangle(cornerRadius: DSSpacing.cornerRadiusSmall, style: .continuous))
+        } else {
+            placeholder
+                .frame(width: 60, height: 40)
+        }
+    }
+
+    /// Muted tile with the figure.stand icon shown when
+    /// the entry has no photo. Keeps every row's leading
+    /// edge at the same width so the date / notes column
+    /// aligns across the list — matches the placeholder
+    /// shape used by `ExerciseRow` for the catalogue list.
+    private var placeholder: some View {
         RoundedRectangle(cornerRadius: DSSpacing.cornerRadiusSmall, style: .continuous)
             .fill(DSColors.surfaceElevated)
             .overlay(
-                Image(systemName: "photo")
+                Image(systemName: "figure.stand")
+                    .font(.system(size: 16))
                     .foregroundStyle(DSColors.textSecondary)
             )
     }

@@ -248,7 +248,7 @@ struct WeightEditorView: View {
                     }
                 } else {
                     Label("Add photo", systemImage: "photo")
-                        .foregroundStyle(DSColors.accent)
+                        .foregroundStyle(DSColors.text)
                 }
             }
             .buttonStyle(.plain)
