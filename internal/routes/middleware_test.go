@@ -20,6 +20,7 @@ func TestIsPublicRoute(t *testing.T) {
 	}{
 		{"/login", true},
 		{"/register", true},
+		{"/api/v1/auth/password-reset/request", true},
 		{"/css/styles.css", true},
 		{"/icons/icon-192.png", true},
 		{"/manifest.json", true},
@@ -184,7 +185,7 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 		if claims == nil {
 			t.Fatal("expected claims to be set in context")
 		}
-if claims.UserID != "user-42" {
+	if claims.UserID != "user-42" {
 		t.Fatalf("expected user_id 'user-42', got %q", claims.UserID)
 	}
 		if claims.Email != "alice@example.com" {

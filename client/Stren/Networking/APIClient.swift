@@ -100,6 +100,18 @@ public final class APIClient: @unchecked Sendable {
         )
     }
 
+    /// Requests a password-reset email. The link opens the existing
+    /// web reset form; the iOS app deliberately does not handle the
+    /// reset token or duplicate that form.
+    public func requestPasswordReset(email: String) async throws {
+        let _: PasswordResetResponse = try await send(
+            "POST",
+            "auth/password-reset/request",
+            body: PasswordResetRequest(email: email),
+            requiresAuth: false
+        )
+    }
+
     public func logout() async throws {
         try await sendVoid("POST", "auth/logout", requiresAuth: false)
     }

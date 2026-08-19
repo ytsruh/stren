@@ -65,6 +65,27 @@ func (h *Handler) APIRegister(c echo.Context) error {
 	return c.JSON(http.StatusOK, AuthResponse{Token: token, User: UserFromModel(user)})
 }
 
+// APIRequestPasswordReset handles password-reset requests from native
+// clients. The reset link still points to the web reset form, so the
+// client does not need to handle reset tokens or duplicate that form.
+// Unknown emails receive the same successful response as known emails.
+func (h *Handler) APIRequestPasswordReset(c echo.Context) error {
+	var in PasswordResetRequest
+	if err := c.Bind(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "invalid request body"})
+	}
+	if err := h.validator.ValidateStruct(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: friendlyValidationError(err)})
+	}
+
+	if err := h.authRecoveryCtrl.RequestPasswordReset(c.Request().Context(), in.Email); err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "could not send password reset email"})
+	}
+	return c.JSON(http.StatusOK, PasswordResetResponse{
+		Message: "If an account exists for that email, a reset link has been sent.",
+	})
+}
+
 // APILogout handles POST /api/v1/auth/logout. Stateless: the
 // server has nothing to do because the JWT is self-contained.
 // The client discards its token. Returns 204 No Content so the

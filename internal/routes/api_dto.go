@@ -34,6 +34,19 @@ type RegisterRequest struct {
 	Password string `json:"password" validate:"required,min=6"`
 }
 
+// PasswordResetRequest is the JSON body for
+// POST /api/v1/auth/password-reset/request.
+type PasswordResetRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+// PasswordResetResponse is returned for every accepted password-reset
+// request. The message deliberately does not reveal whether the email
+// belongs to an account.
+type PasswordResetResponse struct {
+	Message string `json:"message"`
+}
+
 // AuthResponse is the JSON body returned by login and register.
 // Token is a signed JWT the client stores in the Keychain; User
 // is the safe public-facing view of the user record.

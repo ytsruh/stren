@@ -229,6 +229,7 @@ func registerAPIRoutes(e *echo.Echo, h *Handler) {
 	// Auth (login & register are public — see isPublicRoute)
 	e.POST("/api/v1/auth/login", h.APILogin)
 	e.POST("/api/v1/auth/register", h.APIRegister)
+	e.POST("/api/v1/auth/password-reset/request", h.APIRequestPasswordReset)
 	e.POST("/api/v1/auth/logout", h.APILogout)
 
 	// Current user

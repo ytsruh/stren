@@ -186,6 +186,29 @@ func TestAPIRegister_DuplicateEmail(t *testing.T) {
 	}
 }
 
+// --- /auth/password-reset/request ---
+
+func TestAPIRequestPasswordReset_UnknownEmailDoesNotEnumerate(t *testing.T) {
+	_, _, _, e := setupHandler(t)
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/auth/password-reset/request", "", PasswordResetRequest{
+		Email: "unknown@example.com",
+	})
+	resp := decodeAPI[PasswordResetResponse](t, rec, http.StatusOK)
+	if resp.Message == "" {
+		t.Fatal("expected a generic reset confirmation message")
+	}
+}
+
+func TestAPIRequestPasswordReset_InvalidEmail(t *testing.T) {
+	_, _, _, e := setupHandler(t)
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/auth/password-reset/request", "", PasswordResetRequest{
+		Email: "not-an-email",
+	})
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
 // --- /me ---
 
 func TestAPIMe_Success(t *testing.T) {

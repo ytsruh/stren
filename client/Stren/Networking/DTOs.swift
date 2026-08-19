@@ -35,6 +35,18 @@ public struct RegisterRequest: Encodable {
     }
 }
 
+public struct PasswordResetRequest: Encodable {
+    public let email: String
+
+    public init(email: String) {
+        self.email = email
+    }
+}
+
+public struct PasswordResetResponse: Decodable {
+    public let message: String
+}
+
 public struct AuthResponse: Decodable {
     public let token: String
     public let user: UserDTO
