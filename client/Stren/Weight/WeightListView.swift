@@ -18,6 +18,11 @@ struct WeightListView: View {
 
     @State private var showingNewWeight: Bool = false
     @State private var editingEntry: WeightEntryDTO?
+    @State private var selectedPhotoIDs: [String] = []
+    @State private var comparison: WeightCompareResponse?
+    @State private var showingComparison: Bool = false
+    @State private var comparisonError: String?
+    @State private var isLoadingComparison: Bool = false
 
     /// Sorted chart points (oldest-first) so the chart
     /// draws left-to-right. Cached because the sort runs
@@ -79,6 +84,14 @@ struct WeightListView: View {
                         .environmentObject(env)
                         .environmentObject(authStore)
                 }
+                .sheet(isPresented: $showingComparison) {
+                    if let comparison {
+                        WeightComparisonView(
+                            comparison: comparison,
+                            weightUnit: weightUnit
+                        )
+                    }
+                }
         }
         .task { await store.load() }
         .refreshable { await store.load() }
@@ -126,6 +139,7 @@ struct WeightListView: View {
             VStack(alignment: .leading, spacing: DSSpacing.md) {
                 chartSection
                 entriesSection
+                comparisonBar
             }
             .padding(DSSpacing.md)
         }
@@ -185,7 +199,9 @@ struct WeightListView: View {
                     WeightRow(
                         entry: entry,
                         weightUnit: weightUnit,
-                        onTap: { editingEntry = entry }
+                        onTap: { editingEntry = entry },
+                        isSelected: selectedPhotoIDs.contains(entry.id),
+                        onToggleSelection: entry.hasPhoto ? { togglePhotoSelection(entry.id) } : nil
                     )
                     if entry.id != store.entries.last?.id {
                         Divider()
@@ -194,6 +210,57 @@ struct WeightListView: View {
                 }
             }
             .padding(.horizontal, DSSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                    .fill(DSColors.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
+                    .stroke(DSColors.separator, lineWidth: 0.5)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var comparisonBar: some View {
+        if !selectedPhotoIDs.isEmpty {
+            VStack(spacing: DSSpacing.sm) {
+                HStack {
+                    VStack(alignment: .leading, spacing: DSSpacing.xxs) {
+                        Text("Compare photos")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(DSColors.text)
+                        Text("\(selectedPhotoIDs.count) of 2 selected")
+                            .font(.caption)
+                            .foregroundStyle(DSColors.textSecondary)
+                    }
+                    Spacer()
+                    Button("Clear") {
+                        selectedPhotoIDs.removeAll()
+                    }
+                    .buttonStyle(.dsSecondary)
+                    Button {
+                        Task { await loadComparison() }
+                    } label: {
+                        if isLoadingComparison {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Compare")
+                        }
+                    }
+                    .buttonStyle(.dsPrimary)
+                    .disabled(selectedPhotoIDs.count != 2 || isLoadingComparison)
+                }
+
+                if let comparisonError {
+                    Text(comparisonError)
+                        .font(.caption)
+                        .foregroundStyle(DSColors.destructive)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(DSSpacing.md)
             .background(
                 RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
                     .fill(DSColors.surface)
@@ -251,5 +318,33 @@ struct WeightListView: View {
         .padding(DSSpacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DSColors.background.ignoresSafeArea())
+    }
+
+    private func togglePhotoSelection(_ id: String) {
+        comparisonError = nil
+        if let index = selectedPhotoIDs.firstIndex(of: id) {
+            selectedPhotoIDs.remove(at: index)
+        } else if selectedPhotoIDs.count < 2 {
+            selectedPhotoIDs.append(id)
+        }
+    }
+
+    private func loadComparison() async {
+        guard selectedPhotoIDs.count == 2 else { return }
+        comparisonError = nil
+        isLoadingComparison = true
+        defer { isLoadingComparison = false }
+
+        do {
+            comparison = try await env.api.compareWeightEntries(
+                a: selectedPhotoIDs[0],
+                b: selectedPhotoIDs[1]
+            )
+            showingComparison = true
+        } catch let error as APIError {
+            comparisonError = error.errorDescription
+        } catch {
+            comparisonError = "Could not compare the selected photos."
+        }
     }
 }

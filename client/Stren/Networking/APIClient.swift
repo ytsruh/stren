@@ -231,6 +231,13 @@ public final class APIClient: @unchecked Sendable {
         return response.entries
     }
 
+    /// Fetches two photo-bearing weight entries for the native
+    /// comparison view. The server orders them chronologically
+    /// and supplies the display-ready photo URLs.
+    public func compareWeightEntries(a: String, b: String) async throws -> WeightCompareResponse {
+        try await send("GET", "weight/compare?a=\(a)&b=\(b)")
+    }
+
     /// Creates a new weight entry. `createdAt` is optional
     /// on the server — when the client sends `nil` the
     /// server stamps the entry with the current time. The

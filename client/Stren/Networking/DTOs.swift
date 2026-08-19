@@ -576,6 +576,22 @@ public struct WeightEntriesResponse: Decodable, Equatable {
     public let entries: [WeightEntryDTO]
 }
 
+/// Response body for `GET /api/v1/weight/compare`. The server
+/// validates ownership and photo availability, then returns the
+/// pair in chronological order so the client can render `before`
+/// and `after` without duplicating that business rule.
+public struct WeightCompareResponse: Decodable, Equatable {
+    public let before: WeightEntryDTO
+    public let after: WeightEntryDTO
+    public let deltaText: String
+
+    enum CodingKeys: String, CodingKey {
+        case before
+        case after
+        case deltaText = "delta_text"
+    }
+}
+
 /// JSON body for `POST /api/v1/weight`. Mirrors the server's
 /// `CreateWeightEntryRequest`. `weight` is the only required
 /// field; `notes` and `photoKey` are optional, and `createdAt`
