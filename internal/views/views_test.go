@@ -5,7 +5,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/a-h/templ"
 )
@@ -18,14 +17,6 @@ func renderToString(t *testing.T, component templ.Component) string {
 		t.Fatalf("failed to render component: %v", err)
 	}
 	return buf.String()
-}
-
-func TestFormatDateTimeLocal(t *testing.T) {
-	tm := time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC)
-	got := FormatDateTimeLocal(tm)
-	if got != "2024-06-15T14:30" {
-		t.Errorf("FormatDateTimeLocal = %q, want %q", got, "2024-06-15T14:30")
-	}
 }
 
 func TestToast_Error(t *testing.T) {
@@ -53,7 +44,10 @@ func TestEmptyState(t *testing.T) {
 	if !strings.Contains(html, "No workouts in the last 7 days") {
 		t.Error("expected empty state heading")
 	}
-	if !strings.Contains(html, "Add Set") {
-		t.Error("expected call-to-action button")
+	// The web app is read-only for exercise entries (logging happens
+	// in the iOS client), so the empty state must not offer a
+	// server-side "Add Set" action.
+	if strings.Contains(html, "Add Set") || strings.Contains(html, "/exercise-entries/new") {
+		t.Error("empty state should not link to the removed set-logging form")
 	}
 }

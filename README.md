@@ -2,17 +2,30 @@
 
 A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS + Basecoat CSS, and SQLite/Turso. HTMX and Basecoat give a simple, clean semantic view layer. Built using an MVC architecture and focused on using as few dependencies as possible.
 
+## Product shape
+
+The iOS app (`client/`) is the primary user surface — logging sets, weigh-ins,
+goals, timers, and feedback all happen there over the `/api/v1` JSON namespace.
+
+This web app is a limited companion surface:
+- Read-only dashboard (recent activity + 7-day stats)
+- Per-exercise history and chart pages
+- Profile settings (name, appearance, target weight & unit, push toggle, weight-reminder preferences)
+- Weight data export (`/weight/export`, linked from the profile)
+- Admin: exercise management (+ image upload), users, feedback inbox
+- Authentication (register / login / password reset)
+
 ## Features
 
-- Installable PWA
 - User based authentication
-- Track individual exercise sets with weight (in kg), set number, and notes
-- Exercise history view showing all sets for a specific exercise
-- Rest/countdown timer & an EMOM timer
-- Weight tracking
-- User notifications (push & email)
+- Read-only exercise dashboard & history views
+- Weight reminder notifications (email & push, hourly cron)
+- Weight data ZIP export
+- Installable PWA (used for push notifications)
 
 ## Environment Variables
+
+All variables are required and validated at startup. See `.env.example`.
 
 - `PORT` - Server port (default: 8080)
 - `JWT_SECRET` - Secret used to sign auth info

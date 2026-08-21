@@ -286,39 +286,6 @@ func setupExerciseEntryController(t *testing.T) (*ExerciseEntryController, *mock
 	return NewExerciseEntryController(mock), mock
 }
 
-func TestExerciseEntryController_ListExerciseEntries(t *testing.T) {
-	ec, _ := setupExerciseEntryController(t)
-	mock := ec.repo.(*mockRepository)
-	mock.exerciseEntries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
-		{ID: "entry-2", UserID: "user-1", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
-	}
-
-	exerciseEntries, err := ec.ListExerciseEntries("user-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(exerciseEntries) != 2 {
-		t.Fatalf("expected 2 exercise entries, got %d", len(exerciseEntries))
-	}
-}
-
-func TestExerciseEntryController_ListExerciseEntries_Limit(t *testing.T) {
-	ec, mock := setupExerciseEntryController(t)
-	mock.exerciseEntries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
-		{ID: "entry-2", UserID: "user-1", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
-	}
-
-	exerciseEntries, err := ec.ListExerciseEntries("user-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(exerciseEntries) != 2 {
-		t.Fatalf("expected 2 exercise entries, got %d", len(exerciseEntries))
-	}
-}
-
 func TestExerciseEntryController_GetExerciseEntry(t *testing.T) {
 	ec, _ := setupExerciseEntryController(t)
 	mock := ec.repo.(*mockRepository)
@@ -348,31 +315,6 @@ func TestExerciseEntryController_GetExerciseEntry_WrongUser(t *testing.T) {
 	}
 	if exerciseEntry != nil {
 		t.Error("expected nil exercise entry for wrong user")
-	}
-}
-
-func TestExerciseEntryController_CreateExerciseEntry(t *testing.T) {
-	ec, _ := setupExerciseEntryController(t)
-
-	exerciseEntry, err := ec.CreateExerciseEntry("user-1", "ex-1", "great set", time.Now(), 5, 100, 60)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if exerciseEntry.ExerciseID != "ex-1" {
-		t.Errorf("expected 'ex-1', got %q", exerciseEntry.ExerciseID)
-	}
-	if exerciseEntry.Reps != 5 {
-		t.Errorf("expected 5 reps, got %d", exerciseEntry.Reps)
-	}
-}
-
-func TestExerciseEntryController_CreateExerciseEntry_RepositoryError(t *testing.T) {
-	ec, mock := setupExerciseEntryController(t)
-	mock.errCreateExerciseEntry = errors.New("db error")
-
-	_, err := ec.CreateExerciseEntry("user-1", "ex-1", "great set", time.Now(), 5, 100, 60)
-	if err == nil {
-		t.Fatal("expected error, got nil")
 	}
 }
 

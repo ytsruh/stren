@@ -27,10 +27,10 @@ func TestIsPublicRoute(t *testing.T) {
 		{"/sw.js", true},
 		{"/favicon.ico", true},
 		{"/", false},
-		{"/exercise-entries", false},
-		{"/exercise-entries/new", false},
+		{"/profile", false},
 		{"/exercises/Squat", false},
-		{"/api/exercises", false},
+		{"/weight/export", false},
+		{"/admin/users", false},
 	}
 
 	for _, tt := range tests {

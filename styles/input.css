@@ -208,16 +208,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-/*
- * image-compare-viewer in fluidMode hides the <img> tags and renders
- * both photos as background-image on absolutely-positioned wrappers.
- * Those wrappers don't contribute to the container's height, so the
- * container needs an explicit size or it collapses to 0px and nothing
- * renders.
- */
-.image-compare {
-  width: 100%;
-  max-height: 70vh;
-  aspect-ratio: 3 / 4;
-}

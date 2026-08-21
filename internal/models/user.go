@@ -278,17 +278,3 @@ func parseReminderTime(s string) (int, int, error) {
 func ParseReminderTimeForRoute(s string) (int, int, error) {
 	return parseReminderTime(s)
 }
-
-// FormatReminderHour returns "HH:00" for the given 0–23 hour.
-// Used by the form when re-rendering the time picker so the
-// default selection is always in the same format the server
-// expects.
-func FormatReminderHour(hour int) string {
-	if hour < 0 {
-		hour = 0
-	}
-	if hour > 23 {
-		hour = 23
-	}
-	return fmt.Sprintf("%02d:00", hour)
-}

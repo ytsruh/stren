@@ -55,7 +55,6 @@ templ Layout(data PageData) {
 				})();
 			</script>
 			<link rel="stylesheet" href="/css/styles.css"/>
-			<link rel="stylesheet" href="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.css"/>
 			<script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
 			// Pin htmx 1.x defaults we rely on. htmx 2 flipped
 			// `scrollBehavior` from "smooth" to "auto"; the
@@ -67,16 +66,7 @@ templ Layout(data PageData) {
 					htmx.config.scrollBehavior = 'smooth';
 				}
 			</script>
-			<script src="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.js" defer></script>
 			<script src="/js/basecoat.js" defer></script>
-			// canvas-confetti is loaded on every page so the goals
-			// page can fire its celebration burst without a per-page
-			// script tag. The library is a small (~9KB) zero-dep
-			// function (window.confetti) and is a no-op when no
-			// event fires. Loaded after the basecoat script so
-			// blocking-CDN failures don't disrupt the rest of the
-			// app.
-			<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
 		</head>
 		<body>
 			if data.IsAuthenticated {
@@ -105,17 +95,6 @@ templ Layout(data PageData) {
 									</li>
 									<li>
 										<a
-											href="/exercise-entries/new"
-											if data.CurrentPath == "/exercise-entries/new" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "plus", Size: 18})
-											<span>New Set</span>
-										</a>
-									</li>
-									<li>
-										<a
 											href="/exercises"
 											if data.CurrentPath == "/exercises" {
 												aria-current="page"
@@ -123,44 +102,6 @@ templ Layout(data PageData) {
 										>
 											@components.Icon(components.IconProps{Name: "dumbbell", Size: 18})
 											<span>Exercises</span>
-										</a>
-									</li>
-									<li>
-										<a
-											href="/timer"
-											if data.CurrentPath == "/timer" || data.CurrentPath == "/timer/emom" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "timer", Size: 18})
-											<span>Timer</span>
-										</a>
-									</li>
-								</ul>
-							</div>
-							<div>
-								<h3>Tracking</h3>
-								<ul>
-									<li>
-										<a
-											href="/weight"
-											if data.CurrentPath == "/weight" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "scale", Size: 18})
-											<span>Weight</span>
-										</a>
-									</li>
-									<li>
-										<a
-											href="/goals"
-											if data.CurrentPath == "/goals" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "target", Size: 18})
-											<span>Goals</span>
 										</a>
 									</li>
 								</ul>
@@ -202,17 +143,6 @@ templ Layout(data PageData) {
 												<span>Feedback</span>
 											</a>
 										</li>
-										<li>
-											<a
-												href="/admin/notifications"
-												if data.CurrentPath == "/admin/notifications" {
-													aria-current="page"
-												}
-											>
-												@components.Icon(components.IconProps{Name: "bell", Size: 18})
-												<span>Notifications</span>
-											</a>
-										</li>
 									</ul>
 								</div>
 							}
@@ -228,17 +158,6 @@ templ Layout(data PageData) {
 										>
 											@components.Icon(components.IconProps{Name: "user", Size: 18})
 											<span>Profile</span>
-										</a>
-									</li>
-									<li>
-										<a
-											href="/feedback"
-											if data.CurrentPath == "/feedback" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "message", Size: 18})
-											<span>Feedback</span>
 										</a>
 									</li>
 									<li>
@@ -278,13 +197,6 @@ templ Layout(data PageData) {
 									</li>
 									<a href="/"><li class="flex lg:hidden text-primary">Stren</li></a>
 								</div>
-								<div class="flex gap-1">
-									<li>
-										<a href="/exercise-entries/new" class="btn-ghost">
-											@components.Icon(components.IconProps{Name: "plus", Size: 20})
-										</a>
-									</li>
-								</div>
 							} else {
 								<div class="w-full flex items-center justify-between">
 									<div class="flex items-center px-2 gap-2">
@@ -317,15 +229,14 @@ templ Layout(data PageData) {
 								The OK button defaults to `btn-destructive`
 								because the dialog was originally built for
 								"are you sure you want to delete …?"
-								confirmations (the only htmx-confirm uses in
-								the app today). Non-destructive callers
-								(e.g. the weight export) swap the class to
-								`btn` (or another non-destructive variant)
-								right before showModal() and restore the
-								original className on the dialog's `close`
-								event — see WeightExportScript in
-								internal/views/weight/list.templ for the
-								canonical example.
+								confirmations. Non-destructive callers
+								swap the class to `btn` (or another
+								non-destructive variant) right before
+								showModal() and restore the original
+								className on the dialog's `close`
+								event — see openConfirm in
+								internal/views/components/image_upload.templ
+								for the canonical example.
 							*/
 						}}
 						<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
@@ -353,11 +264,6 @@ templ Layout(data PageData) {
 					if (dialog.open) {
 						dialog.close();
 					}
-				});
-				document.body.addEventListener('triggerRedirect', function(evt) {
-					setTimeout(function() {
-						window.location.href = evt.detail.value;
-					}, 500);
 				});
 			</script>
 			<script>
@@ -461,13 +367,7 @@ templ EmptyState() {
 				@components.Icon(components.IconProps{Name: "dumbbell", Size: 24})
 			</div>
 			<h3 class="text-lg font-semibold">No workouts in the last 7 days</h3>
-			<p class="text-muted-foreground text-sm">Log a session to keep your streak going.</p>
+			<p class="text-muted-foreground text-sm">Log a session with the Stren app to keep your streak going.</p>
 		</header>
-		<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
-			<a href="/exercise-entries/new" class="btn">
-				@components.Icon(components.IconProps{Name: "plus", Size: 18})
-				Add Set
-			</a>
-		</section>
 	</div>
 }

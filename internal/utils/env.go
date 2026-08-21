@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -47,15 +46,9 @@ type EnvVar struct {
 	PUBLIC_URL string `env:"PUBLIC_URL"`
 }
 
-var (
-	config   *EnvVar
-	configMu sync.RWMutex
-)
-
 // LoadAndValidateEnv loads environment variables from a .env file (if present)
 // and the system environment, then validates that all required variables are set.
 // It returns the loaded configuration and an error if any required variable is missing.
-// On success, the configuration is stored for global access via GetEnvVars.
 func LoadAndValidateEnv() (*EnvVar, error) {
 	// Load from .env file if it exists (typically in development).
 	// This is silently ignored in production where env vars are set in the environment.
@@ -82,14 +75,7 @@ func LoadAndValidateEnv() (*EnvVar, error) {
 		return nil, fmt.Errorf("missing required environment variables: %v", missingVars)
 	}
 
-	// Store the config safely for global access
-	configMu.Lock()
-	config = &env
-	configMu.Unlock()
-
-	// Return a copy to prevent external mutation of the global state
-	cfgCopy := env
-	return &cfgCopy, nil
+	return &env, nil
 }
 
 // ValidateEnvVars checks if all fields in the EnvVar struct are non-empty.
@@ -114,17 +100,4 @@ func ValidateEnvVars(env EnvVar) []string {
 	}
 
 	return missingVars
-}
-
-// GetEnvVars returns the current environment variables configuration.
-// Returns a copy to prevent external mutation of the global state.
-// Returns nil if LoadAndValidateEnv has not yet been called successfully.
-func GetEnvVars() *EnvVar {
-	configMu.RLock()
-	defer configMu.RUnlock()
-	if config == nil {
-		return nil
-	}
-	cfgCopy := *config
-	return &cfgCopy
 }

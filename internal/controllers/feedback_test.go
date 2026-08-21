@@ -88,51 +88,6 @@ func (m *mockFeedbackRepository) UpdateStatus(id string, isClosed bool) error {
 	return nil
 }
 
-type mockFeedbackUserRepository struct {
-	mu    sync.Mutex
-	users map[string]*models.User
-}
-
-func newMockFeedbackUserRepository() *mockFeedbackUserRepository {
-	return &mockFeedbackUserRepository{
-		users: make(map[string]*models.User),
-	}
-}
-
-func (m *mockFeedbackUserRepository) CreateUser(user *models.User) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.users[user.ID] = user
-	return nil
-}
-
-func (m *mockFeedbackUserRepository) GetUserByEmail(email string) (*models.User, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, u := range m.users {
-		if u.Email == email {
-			return u, nil
-		}
-	}
-	return nil, nil
-}
-
-func (m *mockFeedbackUserRepository) GetUserByID(id string) (*models.User, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if u, ok := m.users[id]; ok {
-		return u, nil
-	}
-	return nil, nil
-}
-
-func (m *mockFeedbackUserRepository) UpdateUser(user *models.User) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.users[user.ID] = user
-	return nil
-}
-
 func TestFeedbackController_Submit_Success(t *testing.T) {
 	mock := newMockFeedbackRepository()
 	ctrl := NewFeedbackController(mock)

@@ -115,19 +115,16 @@ func main() {
 	adminCtrl := controllers.NewAdminController(repo)
 	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
-	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(weightRepo, r2PhotoGetter{})
 	pushCtrl := controllers.NewPushController(pushRepo)
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(userRepo, authTokenRepo, emailService)
 	goalsCtrl := controllers.NewGoalsController(goalsRepo)
 
-	// Initialize the per-user weight-reminder orchestrator here
-	// (above the admin notifications controller it is wired
-	// into) so the controller constructor can take a non-nil
-	// pointer. The orchestrator's own scheduler is started
-	// further down, after the Echo routes are registered, so
-	// an init failure here is the same as an init failure
-	// there (log.Fatal).
+	// Initialize the per-user weight-reminder orchestrator here so
+	// the hourly cron scheduler below can drive it. The orchestrator
+	// fires each due user's chosen channels (email and/or push) on
+	// every tick; there is no admin UI for it any more — the hourly
+	// schedule is the only trigger.
 	weightReminder, err := reminders.NewUserReminder(
 		userRepo,
 		emailService,
@@ -138,8 +135,6 @@ func main() {
 		log.Fatalf("Failed to initialize weight reminder: %v", err)
 	}
 
-	adminNotificationsCtrl := controllers.NewAdminNotificationsController(pushService, weightReminder)
-
 	// Initialize route handlers
 	validator := utils.NewValidator()
 	h := routes.NewHandler(
@@ -149,10 +144,8 @@ func main() {
 		adminCtrl,
 		adminUserCtrl,
 		feedbackCtrl,
-		timersCtrl,
 		weightCtrl,
 		pushCtrl,
-		adminNotificationsCtrl,
 		goalsCtrl,
 		pushRepo,
 		vapidPublicKey,
@@ -203,24 +196,17 @@ func main() {
 	h.RegisterRoutes(e)
 
 	// Start the hourly weight-reminder scheduler. The
-	// orchestrator was constructed above and is also
-	// shared with the admin notifications controller
-	// (the "send all due reminders now" button). The cron
-	// wrapper is the only place in the codebase that
-	// imports the third-party scheduling library, so
-	// a future "swap for a queue / system cron" change
-	// is a one-package diff. A bad spec (e.g. a typo
-	// in "0 * * * *") fails startup rather than
-	// silently never firing.
+	// orchestrator was constructed above; the cron wrapper is
+	// the only place in the codebase that imports the
+	// third-party scheduling library, so a future "swap for a
+	// queue / system cron" change is a one-package diff. A bad
+	// spec (e.g. a typo in "0 * * * *") fails startup rather
+	// than silently never firing.
 	scheduler, err := reminders.NewCronScheduler(
 		weightReminderCronSpec,
 		time.UTC,
 		// The cron job discards the TickResult — every
-		// useful field is already written to the server
-		// log. The admin "send all due reminders" route
-		// calls Run directly and renders the result
-		// into a result card; the cron path
-		// intentionally does not duplicate that.
+		// useful field is already written to the server log.
 		func(ctx context.Context) { _, _ = weightReminder.Run(ctx) },
 	)
 	if err != nil {

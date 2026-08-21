@@ -43,13 +43,6 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 					>
 						@components.Icon(components.IconProps{Name: "trending-up", Size: 18})
 					</a>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/new", exercise.ID)) }
-						class="btn"
-					>
-						@components.Icon(components.IconProps{Name: "plus", Size: 18})
-						Add
-					</a>
 				</div>
 			</div>
 			<div class="hidden md:flex mb-4 flex-col items-start gap-4">
@@ -124,12 +117,6 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 					@components.Title(components.TitleProps{Size: "md", Color: "default", Title: "No sets yet"})
 					<p class="text-muted-foreground text-sm">You haven't logged any sets for { exercise.Name } yet.</p>
 				</header>
-				<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
-					<a href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/new", exercise.ID)) } class="btn">
-						@components.Icon(components.IconProps{Name: "plus", Size: 18})
-						Log First Set
-					</a>
-				</section>
 			</div>
 		} else {
 			<div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -157,6 +144,9 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 // previous / next controls. It is also the swap target for htmx-driven page
 // changes: the outer wrapper carries an id so the response replaces it via
 // outerHTML.
+// HistoryTable renders the paginated exercise-entry table for a
+// single exercise. Read-only on the web — editing a set happens in
+// the iOS client.
 //
 // weightUnit is forwarded to exerciseEntry.FormattedWeight so each row's
 // "Weight" cell is labelled with the user's preferred unit.
@@ -170,7 +160,6 @@ templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage, weightUn
 						<th>Reps</th>
 						<th>Weight</th>
 						<th>Notes</th>
-						<th>Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -180,15 +169,6 @@ templ HistoryTable(exerciseID string, page *models.ExerciseHistoryPage, weightUn
 							<td>{ fmt.Sprintf("%d", exerciseEntry.Reps) }</td>
 							<td>{ exerciseEntry.FormattedWeight(weightUnit) }</td>
 							<td>{ exerciseEntry.Notes }</td>
-							<td>
-								<a
-									href={ templ.SafeURL(fmt.Sprintf("/exercise-entries/%s/edit", exerciseEntry.ID)) }
-									class="btn-outline p-2"
-									title="Edit"
-								>
-									@components.Icon(components.IconProps{Name: "edit", Size: 16})
-								</a>
-							</td>
 						</tr>
 					}
 				</tbody>

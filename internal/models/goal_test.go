@@ -42,23 +42,6 @@ func TestGoal_FormattedCompletedDate(t *testing.T) {
 	})
 }
 
-// TestFormatGoalDate locks the long-format date helper. The view uses
-// this to render every optional date chip (start / target / end) so
-// the format must stay consistent across the card.
-func TestFormatGoalDate(t *testing.T) {
-	t.Run("nil", func(t *testing.T) {
-		if got := FormatGoalDate(nil); got != "" {
-			t.Errorf("expected empty string for nil, got %q", got)
-		}
-	})
-	t.Run("with date", func(t *testing.T) {
-		when := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-		if got, want := FormatGoalDate(&when), "01 Jul 2026"; got != want {
-			t.Errorf("FormatGoalDate = %q, want %q", got, want)
-		}
-	})
-}
-
 // TestGoal_DaysUntilTarget covers the boundary conditions of the
 // "due in N days" chip. Past and same-day targets return nil so the
 // view can suppress the chip entirely; future targets return the

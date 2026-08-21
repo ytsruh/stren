@@ -18,11 +18,6 @@ func NewExerciseEntryController(repo models.Repository) *ExerciseEntryController
 	return &ExerciseEntryController{repo: repo}
 }
 
-// ListExerciseEntries returns the latest exercise entries for a user.
-func (ec *ExerciseEntryController) ListExerciseEntries(userID string) ([]models.ExerciseEntry, error) {
-	return ec.repo.ListExerciseEntries(userID, 100)
-}
-
 // ListExerciseEntriesLast7Days returns exercise entries from the last 7 days for a user.
 func (ec *ExerciseEntryController) ListExerciseEntriesLast7Days(userID string) ([]models.ExerciseEntry, error) {
 	return ec.repo.ListExerciseEntriesLast7Days(userID)
@@ -51,28 +46,11 @@ type ExerciseSetInput struct {
 	RestTime int
 }
 
-// CreateExerciseEntry creates a new exercise entry for the given user.
-func (ec *ExerciseEntryController) CreateExerciseEntry(userID string, exerciseID, notes string, createdAt time.Time, reps int, weight float64, restTime int) (*models.ExerciseEntry, error) {
-	exerciseEntry := &models.ExerciseEntry{
-		ExerciseID: exerciseID,
-		Notes:      notes,
-		Reps:       reps,
-		Weight:     weight,
-		RestTime:   restTime,
-		UserID:     userID,
-		CreatedAt:  createdAt,
-	}
-	if err := ec.repo.CreateExerciseEntry(exerciseEntry); err != nil {
-		return nil, err
-	}
-	return exerciseEntry, nil
-}
-
 // CreateExerciseEntries persists a group of sets in a single submission, all
 // sharing the same exercise, user, notes and the supplied createdAt timestamp.
-// The timestamp comes from the caller (typically parsed from the form's
-// created_at field, or time.Now() when the field is empty) so a multi-set
-// submission can be back-dated as a single unit. On the first repository
+// The timestamp comes from the caller (parsed from the client's created_at
+// field, or time.Now() when absent) so a multi-set submission can be
+// back-dated as a single unit. On the first repository
 // error the loop aborts and the error is returned; partial-success semantics
 // aren't worth the complexity for a workout log.
 func (ec *ExerciseEntryController) CreateExerciseEntries(userID, exerciseID, notes string, createdAt time.Time, sets []ExerciseSetInput) ([]models.ExerciseEntry, error) {

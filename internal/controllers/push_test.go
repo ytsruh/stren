@@ -152,65 +152,6 @@ func TestPushController_HasSubscription(t *testing.T) {
 		t.Fatal("expected has=true")
 	}
 }
-
-func TestAdminNotifications_BroadcastInput_Validate(t *testing.T) {
-	cases := []struct {
-		name string
-		in   BroadcastInput
-		want error
-	}{
-		{"ok", BroadcastInput{Title: "Hello", Body: "World"}, nil},
-		{"empty title", BroadcastInput{Title: "", Body: "World"}, ErrNotificationTitleEmpty},
-		{"whitespace title", BroadcastInput{Title: "   ", Body: "World"}, ErrNotificationTitleEmpty},
-		{"title too long", BroadcastInput{Title: longString(MaxNotificationTitleLength + 1), Body: "World"}, ErrNotificationTitleLong},
-		{"empty body", BroadcastInput{Title: "Hello", Body: ""}, ErrNotificationBodyEmpty},
-		{"body too long", BroadcastInput{Title: "Hello", Body: longString(MaxNotificationBodyLength + 1)}, ErrNotificationBodyLong},
-		{"url too long", BroadcastInput{Title: "Hello", Body: "World", URL: longString(MaxNotificationURLLength + 1)}, ErrNotificationURLLong},
-		{"url ok", BroadcastInput{Title: "Hello", Body: "World", URL: "/foo"}, nil},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := tc.in.Validate()
-			if !errors.Is(got, tc.want) {
-				t.Fatalf("want %v, got %v", tc.want, got)
-			}
-		})
-	}
-}
-
-func TestAdminNotifications_Broadcast_NilService(t *testing.T) {
-	c := NewAdminNotificationsController(nil, nil)
-	_, err := c.Broadcast(context.Background(), BroadcastInput{Title: "x", Body: "y"})
-	if !errors.Is(err, ErrPushNotConfigured) {
-		t.Fatalf("expected ErrPushNotConfigured, got %v", err)
-	}
-}
-
-func TestAdminNotifications_SendWeightReminder_NilReminder(t *testing.T) {
-	// A nil orchestrator (e.g. a server started without
-	// the reminders package) must produce a clean error so
-	// the route handler can render a friendly error card.
-	// Returning a typed sentinel — rather than panicking
-	// on a nil dereference — keeps the failure mode
-	// observable in the admin UI.
-	c := NewAdminNotificationsController(nil, nil)
-	_, attempted, err := c.SendAllDueReminders(context.Background())
-	if !errors.Is(err, ErrWeightReminderNotConfigured) {
-		t.Fatalf("expected ErrWeightReminderNotConfigured, got %v", err)
-	}
-	if attempted {
-		t.Error("attempted = true, want false when reminder is nil")
-	}
-}
-
-func longString(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = 'a'
-	}
-	return string(b)
-}
-
 // keep push import alive in case the broadcast tests above are
 // removed in a future refactor; the symbol is referenced indirectly
 // through the push package types in the test file.

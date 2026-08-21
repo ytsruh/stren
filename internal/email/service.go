@@ -16,18 +16,10 @@ import (
 // Sender is the narrow contract Service depends on for delivering
 // one message over SMTP. Defined as an interface (rather than
 // depending on *Client directly) so the service can be unit-tested
-// with a fake — see SenderFunc and the tests in service_test.go.
+// with a fake — see the fakes in service_test.go.
 type Sender interface {
 	Send(ctx context.Context, msg Message) error
 }
-
-// SenderFunc adapts a plain function to the Sender interface. Lets
-// the tests use `SenderFunc(func(...) error {...})` without writing
-// a method-receiver type.
-type SenderFunc func(ctx context.Context, msg Message) error
-
-// Send implements Sender.
-func (f SenderFunc) Send(ctx context.Context, msg Message) error { return f(ctx, msg) }
 
 // Service is the high-level email entry point used by the
 // controllers. It composes templated messages and hands them to a

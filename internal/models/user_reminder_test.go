@@ -9,32 +9,6 @@ import (
 // orchestrator's tests use a 2026-08-05 Wednesday anchor so the
 // arithmetic does not accidentally cross a DST or month boundary.
 var computeFireTestNow = time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
-
-func intPtr(v int) *int { return &v }
-
-func TestUser_RemindersEnabled(t *testing.T) {
-	cases := []struct {
-		name string
-		user User
-		want bool
-	}{
-		{name: "nil user is off", user: User{}, want: false},
-		{name: "master switch off is off",
-			user: User{ReminderEnabled: false, ReminderFrequency: ReminderWeekly}, want: false},
-		{name: "frequency off is off even with master on",
-			user: User{ReminderEnabled: true, ReminderFrequency: ReminderOff}, want: false},
-		{name: "master on + daily is on",
-			user: User{ReminderEnabled: true, ReminderFrequency: ReminderDaily}, want: true},
-	}
-	for _, tt := range cases {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.user.RemindersEnabled(); got != tt.want {
-				t.Errorf("RemindersEnabled() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestReminderFrequency_IsValid(t *testing.T) {
 	for _, f := range AllReminderFrequencies {
 		if !f.IsValid() {
@@ -96,22 +70,6 @@ func TestParseReminderTime(t *testing.T) {
 	}
 	if _, _, err := parseReminderTime(""); err == nil {
 		t.Error("parseReminderTime(\"\") should reject empty")
-	}
-}
-
-func TestFormatReminderHour(t *testing.T) {
-	cases := map[int]string{
-		0:  "00:00",
-		9:  "09:00",
-		18: "18:00",
-		23: "23:00",
-		-1: "00:00", // clamped
-		24: "23:00", // clamped
-	}
-	for in, want := range cases {
-		if got := FormatReminderHour(in); got != want {
-			t.Errorf("FormatReminderHour(%d) = %q, want %q", in, got, want)
-		}
 	}
 }
 

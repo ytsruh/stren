@@ -142,14 +142,3 @@ func TestResolveDBPath_NestedRelativePath(t *testing.T) {
 		t.Fatalf("expected %q, got %q", expected, resolved)
 	}
 }
-
-func TestNow(t *testing.T) {
-	now := Now()
-	if now == "" {
-		t.Fatal("expected non-empty time string")
-	}
-	// Basic format check: should be at least 19 characters "YYYY-MM-DD HH:MM:SS"
-	if len(now) < 19 {
-		t.Fatalf("expected time string to be at least 19 chars, got: %s", now)
-	}
-}

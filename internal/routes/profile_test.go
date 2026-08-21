@@ -39,17 +39,15 @@ func profileTestHarness(t *testing.T) (*Handler, *mockUserRepository, *mockPushS
 	adminCtrl := controllers.NewAdminController(mockRepo)
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
-	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(mockWeight, nil)
 	pushCtrl := controllers.NewPushController(mockPush)
-	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil, nil)
 	goalsCtrl := controllers.NewGoalsController(newMockGoalRepository())
 	validator := utils.NewValidator()
 	proc, upl := newFakeImagePipeline()
 	h := NewHandler(
 		authCtrl, authRecoveryCtrl, entryCtrl, adminCtrl, adminUserCtrl,
-		feedbackCtrl, timersCtrl, weightCtrl,
-		pushCtrl, adminNotificationsCtrl, goalsCtrl,
+		feedbackCtrl, weightCtrl,
+		pushCtrl, goalsCtrl,
 		mockPush, "vapid-key", true,
 		mockUser, jwtService, validator,
 		proc, upl, DefaultExerciseImageConfig,
