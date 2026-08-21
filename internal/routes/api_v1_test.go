@@ -14,6 +14,7 @@ import (
 
 	"stren/internal/controllers"
 	"stren/internal/models"
+	"stren/internal/utils"
 )
 
 // --- Test helpers ---
@@ -183,6 +184,29 @@ func TestAPIRegister_DuplicateEmail(t *testing.T) {
 	if apiErr.Error == "" {
 		t.Fatal("expected conflict error message")
 	}
+}
+
+// --- /auth/password-reset/request ---
+
+func TestAPIRequestPasswordReset_UnknownEmailDoesNotEnumerate(t *testing.T) {
+	_, _, _, e := setupHandler(t)
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/auth/password-reset/request", "", PasswordResetRequest{
+		Email: "unknown@example.com",
+	})
+	resp := decodeAPI[PasswordResetResponse](t, rec, http.StatusOK)
+	if resp.Message == "" {
+		t.Fatal("expected a generic reset confirmation message")
+	}
+}
+
+func TestAPIRequestPasswordReset_InvalidEmail(t *testing.T) {
+	_, _, _, e := setupHandler(t)
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/auth/password-reset/request", "", PasswordResetRequest{
+		Email: "not-an-email",
+	})
+	decodeAPIError(t, rec, http.StatusBadRequest)
 }
 
 // --- /me ---
@@ -1092,5 +1116,347 @@ func TestAPISubmitFeedback_RequiresAuth(t *testing.T) {
 	})
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+// --- /weight ---
+
+// mustSwapWeightRepo replaces h.weightCtrl with a new controller
+// backed by the supplied mockWeightRepository. Mirrors the
+// mustSwapGoalsRepo / mustSwapFeedbackRepo pattern: swap the
+// controller in place so individual tests can seed and assert on
+// the repository directly.
+func mustSwapWeightRepo(t *testing.T, h *Handler, repo *mockWeightRepository) *mockWeightRepository {
+	t.Helper()
+	h.weightCtrl = controllers.NewWeightController(repo, nil)
+	return repo
+}
+
+func TestAPIListWeightEntries_Empty(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wle@example.com", "WLE")
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/weight", token, nil)
+	resp := decodeAPI[WeightEntriesResponse](t, rec, http.StatusOK)
+	if len(resp.Entries) != 0 {
+		t.Fatalf("entries len = %d, want 0", len(resp.Entries))
+	}
+}
+
+func TestAPIListWeightEntries_ReturnsUserEntries(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wleu@example.com", "WLEU")
+	userID := "user-wleu@example.com"
+
+	// Load a storage config so utils.PublicURLFor resolves the
+	// photo key to a real URL (otherwise the DTO comes back with
+	// an empty photo_url even though has_photo is true).
+	for _, v := range []string{
+		"STORAGE_ENDPOINT", "STORAGE_ACCESS_KEY", "STORAGE_SECRET_KEY",
+		"STORAGE_BUCKET", "STORAGE_PUBLIC_URL",
+	} {
+		t.Setenv(v, "test")
+	}
+	if _, err := utils.LoadStorageConfig(); err != nil {
+		t.Fatalf("LoadStorageConfig: %v", err)
+	}
+
+	repo := mustSwapWeightRepo(t, h, newMockWeightRepository())
+	now := time.Now()
+	repo.entries = []models.WeightEntry{
+		{ID: "w1", UserID: userID, Weight: 80, Notes: "morning", CreatedAt: now.Add(-24 * time.Hour)},
+		{ID: "w2", UserID: userID, Weight: 79.5, PhotoKey: "weight/u/w2.jpg", CreatedAt: now},
+		// Mixed in: a row that belongs to a different user must
+		// not appear in the response. The mock's `List` already
+		// filters by userID, but the test makes that contract
+		// explicit.
+		{ID: "w-other", UserID: "other-user", Weight: 70, CreatedAt: now},
+	}
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/weight", token, nil)
+	resp := decodeAPI[WeightEntriesResponse](t, rec, http.StatusOK)
+	if len(resp.Entries) != 2 {
+		t.Fatalf("entries len = %d, want 2", len(resp.Entries))
+	}
+	// has_photo should mirror whether PhotoKey is set.
+	var withPhoto *WeightEntryDTO
+	for i := range resp.Entries {
+		if resp.Entries[i].ID == "w2" {
+			withPhoto = &resp.Entries[i]
+		}
+	}
+	if withPhoto == nil {
+		t.Fatal("w2 not in response")
+	}
+	if !withPhoto.HasPhoto {
+		t.Errorf("has_photo = false, want true (PhotoKey is set)")
+	}
+	if withPhoto.PhotoURL == "" {
+		t.Errorf("photo_url = empty, want resolved via utils.PublicURLFor")
+	}
+}
+
+func TestAPICreateWeightEntry_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wc@example.com", "WC")
+	repo := mustSwapWeightRepo(t, h, newMockWeightRepository())
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/weight", token, CreateWeightEntryRequest{
+		Weight: 81.4,
+		Notes:  "post-lunch",
+	})
+	dto := decodeAPI[WeightEntryDTO](t, rec, http.StatusCreated)
+	if dto.ID == "" {
+		t.Fatal("expected generated id")
+	}
+	if dto.Weight != 81.4 {
+		t.Fatalf("weight = %v, want 81.4", dto.Weight)
+	}
+	if dto.Notes != "post-lunch" {
+		t.Fatalf("notes = %q, want post-lunch", dto.Notes)
+	}
+	if dto.HasPhoto {
+		t.Errorf("has_photo = true, want false for a new entry without a photo")
+	}
+	if len(repo.entries) != 1 {
+		t.Fatalf("repo.size = %d, want 1", len(repo.entries))
+	}
+}
+
+func TestAPICreateWeightEntry_ValidationError(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wcv@example.com", "WCV")
+
+	// Negative weight is rejected by the validator.
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/weight", token, CreateWeightEntryRequest{
+		Weight: -1,
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if apiErr.Error == "" {
+		t.Fatal("expected non-empty error message")
+	}
+}
+
+func TestAPICreateWeightEntry_WeightTooHigh(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wcth@example.com", "WCTH")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/weight", token, CreateWeightEntryRequest{
+		Weight: 2000,
+	})
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+func TestAPICreateWeightEntry_Backdated(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wcb@example.com", "WCB")
+
+	back := time.Date(2025, 6, 1, 7, 0, 0, 0, time.UTC)
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/weight", token, CreateWeightEntryRequest{
+		Weight:    82.0,
+		CreatedAt: &back,
+	})
+	dto := decodeAPI[WeightEntryDTO](t, rec, http.StatusCreated)
+	if !dto.CreatedAt.Equal(back) {
+		t.Fatalf("created_at = %v, want %v", dto.CreatedAt, back)
+	}
+}
+
+func TestAPICreateWeightEntry_RequiresAuth(t *testing.T) {
+	_, _, _, e := setupHandler(t)
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/weight", "", CreateWeightEntryRequest{Weight: 80})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestAPIGetWeightEntry_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wg@example.com", "WG")
+
+	created := decodeAPI[WeightEntryDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/weight", token, CreateWeightEntryRequest{Weight: 80.5}), http.StatusCreated)
+
+	got := decodeAPI[WeightEntryDTO](t, apiDo(t, e, http.MethodGet, "/api/v1/weight/"+created.ID, token, nil), http.StatusOK)
+	if got.ID != created.ID {
+		t.Fatalf("id = %q, want %q", got.ID, created.ID)
+	}
+	if got.Weight != 80.5 {
+		t.Fatalf("weight = %v, want 80.5", got.Weight)
+	}
+}
+
+func TestAPIGetWeightEntry_NotFound(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wgnf@example.com", "WGNF")
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/weight/missing-id", token, nil)
+	decodeAPIError(t, rec, http.StatusNotFound)
+}
+
+func TestAPIUpdateWeightEntry_ReplacePhoto(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wup@example.com", "WUP")
+
+	created := decodeAPI[WeightEntryDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/weight", token, CreateWeightEntryRequest{
+		Weight:   80,
+		PhotoKey: "weight/u/old.jpg",
+	}), http.StatusCreated)
+	if !created.HasPhoto {
+		t.Fatal("created photo state should be true")
+	}
+
+	updated := decodeAPI[WeightEntryDTO](t, apiDo(t, e, http.MethodPut, "/api/v1/weight/"+created.ID, token, UpdateWeightEntryRequest{
+		Weight:   80.5,
+		PhotoKey: "weight/u/new.jpg",
+	}), http.StatusOK)
+	if updated.PhotoKey != "weight/u/new.jpg" {
+		t.Fatalf("photo_key = %q, want weight/u/new.jpg", updated.PhotoKey)
+	}
+	if !updated.HasPhoto {
+		t.Errorf("has_photo = false, want true")
+	}
+}
+
+func TestAPIUpdateWeightEntry_RemovePhoto(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wur@example.com", "WUR")
+
+	created := decodeAPI[WeightEntryDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/weight", token, CreateWeightEntryRequest{
+		Weight:   80,
+		PhotoKey: "weight/u/del.jpg",
+	}), http.StatusCreated)
+
+	updated := decodeAPI[WeightEntryDTO](t, apiDo(t, e, http.MethodPut, "/api/v1/weight/"+created.ID, token, UpdateWeightEntryRequest{
+		Weight:      80,
+		RemovePhoto: true,
+	}), http.StatusOK)
+	if updated.HasPhoto {
+		t.Errorf("has_photo = true, want false after remove_photo=true")
+	}
+	if updated.PhotoKey != "" {
+		t.Errorf("photo_key = %q, want empty after remove_photo=true", updated.PhotoKey)
+	}
+}
+
+func TestAPIUpdateWeightEntry_PreservesPhotoWhenNotTouched(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wupp@example.com", "WUPP")
+
+	created := decodeAPI[WeightEntryDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/weight", token, CreateWeightEntryRequest{
+		Weight:   80,
+		PhotoKey: "weight/u/keep.jpg",
+	}), http.StatusCreated)
+
+	// Update only the weight — photo_key must come through unchanged.
+	updated := decodeAPI[WeightEntryDTO](t, apiDo(t, e, http.MethodPut, "/api/v1/weight/"+created.ID, token, UpdateWeightEntryRequest{
+		Weight: 80.1,
+	}), http.StatusOK)
+	if updated.PhotoKey != "weight/u/keep.jpg" {
+		t.Fatalf("photo_key = %q, want weight/u/keep.jpg (unchanged)", updated.PhotoKey)
+	}
+}
+
+func TestAPIUpdateWeightEntry_NotFound(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wunf@example.com", "WUNF")
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/weight/missing-id", token, UpdateWeightEntryRequest{Weight: 80})
+	decodeAPIError(t, rec, http.StatusNotFound)
+}
+
+func TestAPIDeleteWeightEntry_Success(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wd@example.com", "WD")
+
+	created := decodeAPI[WeightEntryDTO](t, apiDo(t, e, http.MethodPost, "/api/v1/weight", token, CreateWeightEntryRequest{Weight: 80}), http.StatusCreated)
+
+	rec := apiDo(t, e, http.MethodDelete, "/api/v1/weight/"+created.ID, token, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204, body = %s", rec.Code, rec.Body.String())
+	}
+
+	// Subsequent GET must 404.
+	decodeAPIError(t, apiDo(t, e, http.MethodGet, "/api/v1/weight/"+created.ID, token, nil), http.StatusNotFound)
+}
+
+func TestAPIDeleteWeightEntry_Idempotent(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wdnf@example.com", "WDNF")
+
+	// The web's DeleteWeight returns 204 even when the entry
+	// doesn't exist (no existence check before the DB delete).
+	// The JSON API mirrors that behaviour so the iOS client can
+	// rely on "delete then refresh" without a race condition
+	// when an entry was deleted from another device first.
+	rec := apiDo(t, e, http.MethodDelete, "/api/v1/weight/missing-id", token, nil)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (idempotent), body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAPICompareWeight_HappyPath(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wcmp@example.com", "WCMP")
+	userID := "user-wcmp@example.com"
+
+	repo := mustSwapWeightRepo(t, h, newMockWeightRepository())
+
+	earlier := time.Date(2025, 1, 1, 8, 0, 0, 0, time.UTC)
+	later := time.Date(2025, 6, 1, 8, 0, 0, 0, time.UTC)
+	repo.entries = []models.WeightEntry{
+		{ID: "w-old", UserID: userID, Weight: 90, PhotoKey: "weight/u/w-old.jpg", CreatedAt: earlier},
+		{ID: "w-new", UserID: userID, Weight: 85, PhotoKey: "weight/u/w-new.jpg", CreatedAt: later},
+	}
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/weight/compare?a=w-old&b=w-new", token, nil)
+	resp := decodeAPI[WeightCompareResponse](t, rec, http.StatusOK)
+
+	// The controller sorts by created_at ascending, so the
+	// older entry must come back as Before.
+	if resp.Before.ID != "w-old" {
+		t.Errorf("before.id = %q, want w-old", resp.Before.ID)
+	}
+	if resp.After.ID != "w-new" {
+		t.Errorf("after.id = %q, want w-new", resp.After.ID)
+	}
+	// 85 - 90 = -5 → "−5.0 kg"
+	if resp.DeltaText != "−5.0 kg" {
+		t.Errorf("delta_text = %q, want −5.0 kg", resp.DeltaText)
+	}
+}
+
+func TestAPICompareWeight_MissingPhoto(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wcmpnp@example.com", "WCMPNP")
+	userID := "user-wcmpnp@example.com"
+
+	repo := mustSwapWeightRepo(t, h, newMockWeightRepository())
+	repo.entries = []models.WeightEntry{
+		{ID: "w-a", UserID: userID, Weight: 90, PhotoKey: "weight/u/a.jpg", CreatedAt: time.Now().Add(-24 * time.Hour)},
+		{ID: "w-b", UserID: userID, Weight: 85, PhotoKey: "", CreatedAt: time.Now()},
+	}
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/weight/compare?a=w-a&b=w-b", token, nil)
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if !strings.Contains(apiErr.Error, "photo") {
+		t.Errorf("error = %q, want it to mention a photo", apiErr.Error)
+	}
+}
+
+func TestAPICompareWeight_SameID(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "wcmpsi@example.com", "WCMPSI")
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/weight/compare?a=w1&b=w1", token, nil)
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+func TestAPIWeight_RequiresAuth(t *testing.T) {
+	_, _, _, e := setupHandler(t)
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/weight", "", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
 	}
 }

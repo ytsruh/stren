@@ -24,6 +24,7 @@ struct GoalsListView: View {
     @State private var showingNewGoal: Bool = false
     @State private var editingGoal: GoalDTO?
     @State private var completedExpanded: Bool = false
+    @State private var completionCelebrationTrigger: Int = 0
 
     var body: some View {
         NavigationStack {
@@ -38,6 +39,11 @@ struct GoalsListView: View {
                     GoalEditorView(mode: .edit(goal), store: store)
                         .environmentObject(env)
                 }
+        }
+        .overlay {
+            GoalCompletionCelebration(trigger: completionCelebrationTrigger)
+                .allowsHitTesting(false)
+                .ignoresSafeArea()
         }
         .task { await store.load() }
         .refreshable { await store.load() }
@@ -233,6 +239,7 @@ struct GoalsListView: View {
     /// confirmation that the goal is done.
     private func completeGoal(_ goal: GoalDTO) {
         guard !goal.isCompleted else { return }
+        completionCelebrationTrigger &+= 1
         let generator = UINotificationFeedbackGenerator()
         generator.prepare()
         generator.notificationOccurred(.success)

@@ -65,6 +65,27 @@ func (h *Handler) APIRegister(c echo.Context) error {
 	return c.JSON(http.StatusOK, AuthResponse{Token: token, User: UserFromModel(user)})
 }
 
+// APIRequestPasswordReset handles password-reset requests from native
+// clients. The reset link still points to the web reset form, so the
+// client does not need to handle reset tokens or duplicate that form.
+// Unknown emails receive the same successful response as known emails.
+func (h *Handler) APIRequestPasswordReset(c echo.Context) error {
+	var in PasswordResetRequest
+	if err := c.Bind(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "invalid request body"})
+	}
+	if err := h.validator.ValidateStruct(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: friendlyValidationError(err)})
+	}
+
+	if err := h.authRecoveryCtrl.RequestPasswordReset(c.Request().Context(), in.Email); err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "could not send password reset email"})
+	}
+	return c.JSON(http.StatusOK, PasswordResetResponse{
+		Message: "If an account exists for that email, a reset link has been sent.",
+	})
+}
+
 // APILogout handles POST /api/v1/auth/logout. Stateless: the
 // server has nothing to do because the JWT is self-contained.
 // The client discards its token. Returns 204 No Content so the
@@ -536,4 +557,214 @@ func (h *Handler) APISubmitFeedback(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to submit feedback"})
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Weight ---
+
+// APIListWeightEntries handles GET /api/v1/weight. Returns
+// every weight entry for the authenticated user, newest first
+// (the same order the repository's List method returns). The
+// response is wrapped in a named envelope (`entries`) so the
+// server can add fields like overview stats without breaking
+// the iOS contract.
+func (h *Handler) APIListWeightEntries(c echo.Context) error {
+	claims := GetClaims(c)
+	entries, err := h.weightCtrl.ListWeightEntries(claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to load weight entries"})
+	}
+	return c.JSON(http.StatusOK, WeightEntriesResponse{Entries: WeightEntriesFromModels(entries)})
+}
+
+// APICreateWeightEntry handles POST /api/v1/weight. Validates
+// the body, then delegates to the same controller method the
+// HTML form uses. CreatedAt is optional — the server defaults
+// to time.Now() when omitted so the iOS "log it now" button
+// can send an empty body field. Returns 201 Created with the
+// freshly persisted entry so the iOS view can splice it into
+// its local cache without a follow-up GET.
+func (h *Handler) APICreateWeightEntry(c echo.Context) error {
+	var in CreateWeightEntryRequest
+	if err := c.Bind(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "invalid request body"})
+	}
+	if err := h.validator.ValidateStruct(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: friendlyValidationError(err)})
+	}
+
+	claims := GetClaims(c)
+	createdAt := time.Now()
+	if in.CreatedAt != nil {
+		createdAt = *in.CreatedAt
+	}
+
+	created, err := h.weightCtrl.CreateWeightEntry(claims.UserID, in.Weight, in.Notes, in.PhotoKey)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to create weight entry"})
+	}
+	// The controller stamps CreatedAt internally; honour the
+	// client-supplied timestamp when the request carried one
+	// (e.g. backdating an entry). CreateWeightEntry doesn't
+	// accept a createdAt argument, so we re-update in place
+	// when it differs from the server default.
+	if !createdAt.Equal(created.CreatedAt) {
+		updated, err := h.weightCtrl.UpdateWeightEntry(created.ID, claims.UserID, in.Weight, in.Notes, in.PhotoKey, createdAt)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to backdate weight entry"})
+		}
+		created = updated
+	}
+	return c.JSON(http.StatusCreated, WeightEntryFromModel(*created))
+}
+
+// APIGetWeightEntry handles GET /api/v1/weight/:id. Returns
+// 404 when the entry is missing or owned by another user — the
+// controller's GetByID returns nil for both cases so the iOS
+// view can treat the two outcomes uniformly.
+func (h *Handler) APIGetWeightEntry(c echo.Context) error {
+	claims := GetClaims(c)
+	id := c.Param("id")
+
+	entry, err := h.weightCtrl.GetWeightEntry(id, claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to load weight entry"})
+	}
+	if entry == nil {
+		return c.JSON(http.StatusNotFound, APIError{Error: "weight entry not found"})
+	}
+	return c.JSON(http.StatusOK, WeightEntryFromModel(*entry))
+}
+
+// APIUpdateWeightEntry handles PUT /api/v1/weight/:id. Mirrors
+// the existing HTML PUT handler's photo-handling precedence:
+//   - remove_photo=true clears the photo_key (and best-effort
+//     deletes the underlying R2 object)
+//   - non-empty photo_key replaces the existing key
+//   - otherwise the existing key is preserved
+//
+// CreatedAt is optional; when omitted, the existing timestamp
+// is kept so the "edit a recent entry" flow doesn't
+// accidentally reset the entry to time.Now().
+func (h *Handler) APIUpdateWeightEntry(c echo.Context) error {
+	var in UpdateWeightEntryRequest
+	if err := c.Bind(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "invalid request body"})
+	}
+	if err := h.validator.ValidateStruct(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: friendlyValidationError(err)})
+	}
+
+	claims := GetClaims(c)
+	id := c.Param("id")
+
+	existing, err := h.weightCtrl.GetWeightEntry(id, claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to load weight entry"})
+	}
+	if existing == nil {
+		return c.JSON(http.StatusNotFound, APIError{Error: "weight entry not found"})
+	}
+
+	// Resolve the final photo state following the same
+	// precedence the HTML PUT handler applies (see
+	// internal/routes/weight.go:157-169).
+	photoKey := existing.PhotoKey
+	if in.RemovePhoto {
+		photoKey = ""
+	} else if in.PhotoKey != "" {
+		photoKey = in.PhotoKey
+	}
+
+	createdAt := existing.CreatedAt
+	if in.CreatedAt != nil {
+		createdAt = *in.CreatedAt
+	}
+
+	updated, err := h.weightCtrl.UpdateWeightEntry(id, claims.UserID, in.Weight, in.Notes, photoKey, createdAt)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to update weight entry"})
+	}
+	return c.JSON(http.StatusOK, WeightEntryFromModel(*updated))
+}
+
+// APIDeleteWeightEntry handles DELETE /api/v1/weight/:id.
+// Returns 204 No Content so the iOS app can simply call it
+// and refresh the view. Best-effort deletes the underlying
+// R2 photo (the controller logs and continues on R2 failure
+// so an orphaned bucket object doesn't block the deletion).
+func (h *Handler) APIDeleteWeightEntry(c echo.Context) error {
+	claims := GetClaims(c)
+	id := c.Param("id")
+
+	if err := h.weightCtrl.DeleteWeightEntry(id, claims.UserID); err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to delete weight entry"})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// APICompareWeight handles GET /api/v1/weight/compare?a=<id1>&b=<id2>.
+// Validates the pair (both must exist, both must belong to the
+// user, both must have a photo) and returns the sorted
+// (before, after) pair plus the formatted delta string. The
+// controller's `GetWeightEntriesForCompare` returns a
+// human-readable error for the failure modes so the iOS view
+// can surface it inline.
+func (h *Handler) APICompareWeight(c echo.Context) error {
+	idA := c.QueryParam("a")
+	idB := c.QueryParam("b")
+
+	claims := GetClaims(c)
+	entries, err := h.weightCtrl.GetWeightEntriesForCompare(idA, idB, claims.UserID)
+	if err != nil {
+		// 400 — the request is well-formed but the pair is
+		// not suitable for comparison (missing id, missing
+		// photo, same id twice, etc.). 500 would be wrong
+		// here because the client can fix the request by
+		// choosing a different pair.
+		return c.JSON(http.StatusBadRequest, APIError{Error: err.Error()})
+	}
+
+	before := entries[0]
+	after := entries[1]
+	delta := after.Weight - before.Weight
+
+	// Pull the user's preferred unit from the cached user so
+	// the delta line matches the entry labels the view
+	// renders. The controller doesn't need the unit — that's
+	// only used for display.
+	unit := "kg"
+	if user := h.GetUser(c); user != nil {
+		unit = user.WeightUnitDisplay()
+	}
+
+	return c.JSON(http.StatusOK, WeightCompareResponse{
+		Before:    WeightEntryFromModel(before),
+		After:     WeightEntryFromModel(after),
+		DeltaText: formatWeightDelta(delta, unit),
+	})
+}
+
+// APIRequestPhotoUploadURL handles POST /api/v1/weight/photo-upload.
+// Thin JWT-protected wrapper around the existing presigned-URL
+// flow used by the web app (see `internal/routes/photos.go:33`
+// and the `/api/weight/photo-upload` HTML route). The web app
+// continues to use the unauthenticated-cookie variant; the
+// iOS client uses this JWT-protected variant so the browser
+// session and the native session share no transport-level
+// auth header.
+func (h *Handler) APIRequestPhotoUploadURL(c echo.Context) error {
+	var in WeightPhotoUploadRequest
+	if err := c.Bind(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "invalid request body"})
+	}
+	if err := h.validator.ValidateStruct(&in); err != nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: friendlyValidationError(err)})
+	}
+
+	// Delegate to the existing handler for the file-type /
+	// extension / presigned-URL logic. The shared helper
+	// enforces the same image/* MIME check the web surface
+	// uses, so the iOS client cannot bypass it by going via
+	// the JSON API.
+	return h.PhotoUploadURL(c)
 }

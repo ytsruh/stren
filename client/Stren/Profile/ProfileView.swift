@@ -98,17 +98,16 @@ struct ProfileView: View {
             } message: {
                 Text("We'll read every submission.")
             }
-            .confirmationDialog(
+            .alert(
                 "Sign out of Stren?",
-                isPresented: $showingSignOutConfirm,
-                titleVisibility: .visible
+                isPresented: $showingSignOutConfirm
             ) {
                 Button("Sign out", role: .destructive) {
                     env.authStore.signOut()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You'll need to log in again to view your sets.")
+                Text("You'll need to log in again.")
             }
         }
     }

@@ -13,6 +13,7 @@ struct LoginView: View {
     @State private var errorMessage: String?
 
     @State private var showingRegister: Bool = false
+    @State private var showingForgotPassword: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -23,6 +24,12 @@ struct LoginView: View {
                     VStack(alignment: .leading, spacing: DSSpacing.md) {
                         labeledField(title: "Email", text: $email, contentType: .emailAddress, keyboard: .emailAddress)
                         labeledField(title: "Password", text: $password, contentType: .password, isSecure: true)
+
+                        Button("Forgot password?") {
+                            showingForgotPassword = true
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(DSColors.accent)
                     }
 
                     if let errorMessage {
@@ -57,6 +64,10 @@ struct LoginView: View {
         }
         .sheet(isPresented: $showingRegister) {
             RegisterView()
+                .environmentObject(env)
+        }
+        .sheet(isPresented: $showingForgotPassword) {
+            ForgotPasswordView()
                 .environmentObject(env)
         }
     }
