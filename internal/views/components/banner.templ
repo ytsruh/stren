@@ -1,0 +1,47 @@
+package components
+
+// BannerProps configures a promotional/informational banner.
+// The component is deliberately generic — title, description,
+// link, and icon are all supplied by the caller — so the same
+// component can announce anything (e.g. the iOS app promo on the
+// dashboard today, other announcements later). Styling follows
+// the shared card look (surface fill, hairline separator) with a
+// subtle primary tint so banners read as "announcement" rather
+// than regular content cards.
+type BannerProps struct {
+	ID          string // Optional DOM id
+	Title       string // Headline (rendered as an h3)
+	Description string // Supporting copy under the headline (optional)
+	LinkHref    string // Destination of the call-to-action (optional)
+	LinkLabel   string // Call-to-action label (optional)
+	IconName    string // Lucide icon name shown in the accent chip (optional)
+	Class       string // Additional CSS classes appended to the card classes
+}
+
+// Banner renders a horizontal announcement banner: accent icon
+// chip, headline + description, and an optional call-to-action
+// link. On narrow screens the layout stacks vertically.
+func Banner(props BannerProps) templ.Component {
+	return bannerComponent(props)
+}
+
+templ bannerComponent(props BannerProps) {
+	<div id={ props.ID } class={ "card flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 p-4 " + props.Class }>
+		if props.IconName != "" {
+			<div class="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg">
+				@Icon(IconProps{Name: props.IconName, Size: 20})
+			</div>
+		}
+		<section class="flex-1 min-w-0">
+			<h3 class="font-semibold">{ props.Title }</h3>
+			if props.Description != "" {
+				<p class="text-sm text-muted-foreground">{ props.Description }</p>
+			}
+		</section>
+		if props.LinkHref != "" {
+			<a href={ templ.URL(props.LinkHref) } class="btn-outline shrink-0 w-full sm:w-auto">
+				{ props.LinkLabel }
+			</a>
+		}
+	</div>
+}

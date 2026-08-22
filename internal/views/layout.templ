@@ -172,6 +172,17 @@ templ Layout(data PageData) {
 										</a>
 									</li>
 									<li>
+										<a
+											href="/feedback"
+											if data.CurrentPath == "/feedback" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "message", Size: 18})
+											<span>Feedback</span>
+										</a>
+									</li>
+									<li>
 										<form
 											hx-post="/logout"
 											hx-target="#toaster"
@@ -276,6 +287,36 @@ templ Layout(data PageData) {
 						dialog.close();
 					}
 				});
+				// showToast clones the hidden <template> rendered
+				// above (toastTemplate) for the given category, fills
+				// in the title and description, and appends the clone
+				// to #toaster. The icon SVGs and toast structure live
+				// in one place (this layout) so widgets don't
+				// duplicate them. Falls back to the "default" template
+				// if the requested category isn't present. Global so
+				// any widget can raise a toast from client-side code
+				// (e.g. the photo upload widget, which uploads
+				// directly to R2 via a presigned URL and so can't
+				// piggy-back its toast onto an htmx response).
+				window.showToast = function(category, title, message) {
+					var toaster = document.getElementById('toaster');
+					if (!toaster) return;
+					var template = document.getElementById('toast-template-' + category) || document.getElementById('toast-template-default');
+					if (!template) return;
+					var clone = template.content.cloneNode(true);
+					var h2 = clone.querySelector('[data-toast-title]');
+					if (h2) h2.textContent = title;
+					var p = clone.querySelector('[data-toast-description]');
+					if (p) {
+						if (message) {
+							p.textContent = message;
+							p.classList.remove('hidden');
+						} else {
+							p.remove();
+						}
+					}
+					toaster.appendChild(clone);
+				};
 			</script>
 			<div id="toaster" class="toaster"></div>
 			// Hidden toast templates. Widgets that need to render a

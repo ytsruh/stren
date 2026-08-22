@@ -22,14 +22,18 @@ func renderToString(t *testing.T, component templ.Component) string {
 // TestDataExportPage_RendersBothExports confirms the page surfaces
 // both download links — weight entries and exercise entries — since
 // a missing anchor here silently removes a data-portability option.
+// It also checks the click-spinner wiring (data-download-trigger /
+// data-download-spinner) that the inline loading script relies on.
 func TestDataExportPage_RendersBothExports(t *testing.T) {
 	html := renderToString(t, DataExportPage("Test User", false))
 	for _, want := range []string{
 		"Data Export",
 		"Weight export",
 		"Exercise entries export",
-		`href="/weight/export"`,
-		`href="/exercises/export"`,
+		`href="/export/weight"`,
+		`href="/export/exercises"`,
+		"data-download-trigger",
+		"data-download-spinner",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("expected rendered page to contain %q", want)

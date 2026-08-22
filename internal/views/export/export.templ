@@ -11,13 +11,16 @@ import (
 //
 // Each download is a plain <a download> navigation rather than an
 // htmx request — htmx-swapped binary content doesn't trigger a
-// browser save dialog, so anchors are the right tool here.
+// browser save dialog, so anchors are the right tool here. The
+// inline script at the bottom of this page adds a lightweight
+// loading indicator on click — see its comment for why it is a
+// heuristic rather than a real progress signal.
 templ DataExportPage(userName string, isAdmin bool) {
 	@views.Layout(views.PageData{Title: "Data Export", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/export"}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Data Export"})
 		<div class="w-full flex flex-col gap-5 my-5">
 			// Weight entries ZIP (CSV + photos + manifest), built by
-			// internal/export and streamed from GET /weight/export.
+			// internal/export and streamed from GET /export/weight.
 			<div role="group" class="field" data-orientation="horizontal">
 				<section class="w-1/2">
 					<label for="weight-export">Weight export</label>
@@ -25,19 +28,25 @@ templ DataExportPage(userName string, isAdmin bool) {
 				</section>
 				<div class="w-1/2 flex justify-end">
 					<a
-						href="/weight/export"
+						href="/export/weight"
 						id="weight-export"
 						download
-						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+						data-download-trigger
+						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground hover:cursor-pointer"
 						title="Download all weight entries and photos as a ZIP"
 					>
-						@components.Icon(components.IconProps{Name: "download", Size: 16})
-						Download
+						<span class="flex items-center gap-2">
+							@components.Icon(components.IconProps{Name: "download", Size: 16})
+							Download
+						</span>
+						<span id="weight-export-spinner" data-download-spinner hidden class="flex items-center justify-center animate-spin">
+							@components.Icon(components.IconProps{Name: "loader", Size: 16})
+						</span>
 					</a>
 				</div>
 			</div>
 			// Exercise entries ZIP (CSV + manifest), built by
-			// internal/export and streamed from GET /exercises/export.
+			// internal/export and streamed from GET /export/exercises.
 			<div role="group" class="field" data-orientation="horizontal">
 				<section class="w-1/2">
 					<label for="exercise-entries-export">Exercise entries export</label>
@@ -45,17 +54,60 @@ templ DataExportPage(userName string, isAdmin bool) {
 				</section>
 				<div class="w-1/2 flex justify-end">
 					<a
-						href="/exercises/export"
+						href="/export/exercises"
 						id="exercise-entries-export"
 						download
-						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+						data-download-trigger
+						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground hover:cursor-pointer"
 						title="Download all exercise entries as a ZIP"
 					>
-						@components.Icon(components.IconProps{Name: "download", Size: 16})
-						Download
+						<span class="flex items-center gap-2">
+							@components.Icon(components.IconProps{Name: "download", Size: 16})
+							Download
+						</span>
+						<span id="exercise-entries-export-spinner" data-download-spinner hidden class="flex items-center justify-center animate-spin">
+							@components.Icon(components.IconProps{Name: "loader", Size: 16})
+						</span>
 					</a>
 				</div>
 			</div>
 		</div>
+		<script>
+			// This script exists to give the download links a light
+			// loading indication while the server builds and streams
+			// the zip. It is deliberately simple, for two reasons:
+			//
+			// 1. Native downloads (Content-Disposition: attachment)
+			//    fire no completion event JS can observe — the page
+			//    never navigates, so there is nothing like load or
+			//    afterRequest to hook. That's also why these stay
+			//    plain anchors instead of htmx requests: binary
+			//    responses can't be swapped into the DOM, and faking
+			//    them via XHR blobs adds moving parts for no gain.
+			// 2. Real progress/completion UI already exists in the
+			//    browser's own downloads popup; duplicating it here
+			//    would be guesswork.
+			//
+			// So: first click shows the spinner and starts a fixed
+			// timer to clear it again. Clicks while the spinner is
+			// up are swallowed (preventDefault) so an impatient
+			// double-click can't start duplicate exports. Only
+			// elements carrying the data-download-trigger attribute
+			// are affected.
+			var SPINNER_RESET_MS = 3000;
+			document.body.addEventListener('click', function(evt) {
+				var trigger = evt.target.closest('[data-download-trigger]');
+				if (!trigger) return;
+				var spinner = trigger.querySelector('[data-download-spinner]');
+				if (!spinner || spinner.hidden) {
+					if (spinner) {
+						spinner.hidden = false;
+						setTimeout(function() { spinner.hidden = true; }, SPINNER_RESET_MS);
+					}
+					return;
+				}
+				evt.preventDefault();
+			});
+		</script>
 	}
 }

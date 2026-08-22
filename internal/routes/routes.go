@@ -112,27 +112,26 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/profile", h.Profile)
 	e.POST("/profile", h.UpdateProfile)
 
-	// Data Export page: single home for the bulk data-portability
-	// downloads (weight ZIP incl. photos; exercise entries ZIP).
+	// Feedback (user-facing form; submissions land in the admin
+	// feedback inbox). The dashboard's iOS banner links here.
+	e.GET("/feedback", h.FeedbackForm)
+	e.POST("/feedback", h.SubmitFeedback)
+
+	// Data Export page and its bulk data-portability downloads
+	// (weight ZIP incl. photos; exercise entries ZIP), all grouped
+	// under the /export prefix.
 	e.GET("/export", h.DataExportPage)
+	e.GET("/export/weight", h.ExportWeightZip)
+	e.GET("/export/exercises", h.ExportExerciseEntriesZip)
 
 	// Exercise history (read-only on the web — set logging lives in
 	// the iOS client via /api/v1/exercise-entries)
 	e.GET("/exercises", h.ListExercisesUI)
-	// Exercise entries export (streaming zip download). Registered
-	// beside the other /exercises routes; Echo prefers the static
-	// segment over /exercises/:id.
-	e.GET("/exercises/export", h.ExportExerciseEntriesZip)
 	e.GET("/exercises/:id", h.ExerciseHistory)
 
 	// Exercise chart views
 	e.GET("/exercises/:id/chart", h.ExerciseChart)
 	e.GET("/exercises/:id/chart/advanced", h.ExerciseChartAdvanced)
-
-	// Weight export (streaming zip download). The weight CRUD pages
-	// moved to the iOS client; the bulk export stays a web utility,
-	// linked from the Data Export page.
-	e.GET("/weight/export", h.ExportWeightZip)
 
 	// Admin routes
 	admin := e.Group("/admin", AdminMiddleware())

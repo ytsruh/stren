@@ -16,10 +16,11 @@ import (
 // drives the per-row "Weight" column and the "Total Volume" stat.
 templ Dashboard(exerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		if len(exerciseEntries) == 0 {
-			@views.EmptyState()
-		} else {
-			<section class="flex flex-col gap-y-4">
+		<section class="flex flex-col gap-y-4">
+			@iosAppBanner()
+			if len(exerciseEntries) == 0 {
+				@views.EmptyState()
+			} else {
 				<div class="flex justify-between items-center">
 					@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "7 Day History"})
 				</div>
@@ -27,9 +28,25 @@ templ Dashboard(exerciseEntries []models.ExerciseEntry, userName string, isAuthe
 					@components.DonutChart(popularExercisesChartProps(exerciseEntries))
 				</div>
 				@ExerciseEntryList(exerciseEntries, weightUnit)
-			</section>
-		}
+			}
+		</section>
 	}
+}
+
+// iosAppBanner renders the "Stren is on iPhone" promo banner at
+// the top of the dashboard (both the empty and populated states).
+// Exercise logging happens in the iOS client — the web is a
+// read-only companion — so the banner invites web users to get
+// in touch via the feedback form to be set up with iOS access.
+// Submissions land in the admin feedback inbox.
+templ iosAppBanner() {
+	@components.Banner(components.BannerProps{
+		Title:       "Stren is on iPhone",
+		Description: "Logging your sets happens in the Stren iOS app. Want access? Get in touch and we'll set you up.",
+		LinkHref:    "/feedback",
+		LinkLabel:   "Get in touch",
+		IconName:    "smartphone",
+	})
 }
 
 // ExerciseEntryList renders a table of exercise entries.

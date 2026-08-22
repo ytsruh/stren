@@ -1759,7 +1759,7 @@ func (s *stubPhotoGetter) Get(_ context.Context, key string) (io.ReadCloser, err
 	return nil, errors.New("stub: not found: " + key)
 }
 
-// TestExportWeightZip_StreamsZip confirms GET /weight/export responds
+// TestExportWeightZip_StreamsZip confirms GET /export/weight responds
 // with a valid zip containing the user's entries. The route runs the
 // export in a background goroutine, so we have to read the whole body
 // before asserting on the zip — the in-memory httptest.ResponseRecorder
@@ -1780,7 +1780,7 @@ func TestExportWeightZip_StreamsZip(t *testing.T) {
 	}
 	h.weightCtrl = controllers.NewWeightController(mockWeight, stub)
 
-	req := httptest.NewRequest(http.MethodGet, "/weight/export", nil)
+	req := httptest.NewRequest(http.MethodGet, "/export/weight", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "u1", "test@example.com", "Test User", false)
@@ -1831,7 +1831,7 @@ func keys(m map[string]bool) []string {
 // production middleware layer would have already gated this).
 func TestExportWeightZip_RequiresAuthContext(t *testing.T) {
 	h, _, _, e := setupHandler(t)
-	req := httptest.NewRequest(http.MethodGet, "/weight/export", nil)
+	req := httptest.NewRequest(http.MethodGet, "/export/weight", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -1848,7 +1848,7 @@ func TestExportWeightZip_RequiresAuthContext(t *testing.T) {
 	_ = h.ExportWeightZip(c)
 }
 
-// TestExportExerciseEntriesZip_StreamsZip confirms GET /exercises/export
+// TestExportExerciseEntriesZip_StreamsZip confirms GET /export/exercises
 // responds with a valid zip containing the user's exercise entries.
 // Mirrors TestExportWeightZip_StreamsZip; exercise entries carry no
 // photos so the archive must contain only exercise_entries.csv and
@@ -1910,7 +1910,7 @@ func TestExportExerciseEntriesZip_StreamsZip(t *testing.T) {
 // gated this).
 func TestExportExerciseEntriesZip_RequiresAuthContext(t *testing.T) {
 	h, _, _, e := setupHandler(t)
-	req := httptest.NewRequest(http.MethodGet, "/exercises/export", nil)
+	req := httptest.NewRequest(http.MethodGet, "/export/exercises", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -1944,7 +1944,7 @@ func TestDataExportPage(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Data Export", `href="/weight/export"`, `href="/exercises/export"`} {
+	for _, want := range []string{"Data Export", `href="/export/weight"`, `href="/export/exercises"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("expected page body to contain %q", want)
 		}

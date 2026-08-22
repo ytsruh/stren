@@ -29,7 +29,7 @@ func TestIsPublicRoute(t *testing.T) {
 		{"/", false},
 		{"/profile", false},
 		{"/exercises/Squat", false},
-		{"/weight/export", false},
+		{"/export/weight", false},
 		{"/admin/users", false},
 	}
 

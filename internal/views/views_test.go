@@ -51,3 +51,41 @@ func TestEmptyState(t *testing.T) {
 		t.Error("empty state should not link to the removed set-logging form")
 	}
 }
+
+func TestLayout_AuthenticatedSidebarLinks(t *testing.T) {
+	html := renderToString(t, Layout(PageData{
+		Title:           "Dashboard",
+		UserName:        "Test User",
+		IsAuthenticated: true,
+	}))
+
+	for _, want := range []string{
+		`href="/profile"`,
+		`href="/feedback"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("expected authenticated sidebar to contain %q", want)
+		}
+	}
+}
+
+func TestLayout_FeedbackNavMarksCurrentPage(t *testing.T) {
+	// The sidebar marks the active page with aria-current="page"
+	// so screen readers and styling can highlight it.
+	html := renderToString(t, Layout(PageData{
+		Title:           "Submit Feedback",
+		UserName:        "Test User",
+		IsAuthenticated: true,
+		CurrentPath:     "/feedback",
+	}))
+	if !strings.Contains(html, `aria-current="page"`) {
+		t.Error("expected aria-current on the active nav item")
+	}
+}
+
+func TestLayout_UnauthenticatedHidesSidebar(t *testing.T) {
+	html := renderToString(t, Layout(PageData{Title: "Login"}))
+	if strings.Contains(html, `href="/feedback"`) || strings.Contains(html, `href="/profile"`) {
+		t.Error("expected no sidebar links for unauthenticated visitors")
+	}
+}
