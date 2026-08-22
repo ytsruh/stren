@@ -12,6 +12,10 @@ type PageData struct {
 	IsAuthenticated bool
 	IsAdmin         bool
 	CurrentPath     string
+	// Wide relaxes the layout's default max-w-3xl reading width
+	// to max-w-5xl. Only the marketing landing page uses it —
+	// app pages (tables, forms, charts) stay narrow on purpose.
+	Wide bool
 }
 
 // Layout is the base layout for all pages
@@ -84,8 +88,8 @@ templ Layout(data PageData) {
 								<ul>
 									<li>
 										<a
-											href="/"
-											if data.CurrentPath == "/" {
+											href="/dashboard"
+											if data.CurrentPath == "/dashboard" {
 												aria-current="page"
 											}
 										>
@@ -217,26 +221,27 @@ templ Layout(data PageData) {
 											@components.Icon(components.IconProps{Name: "menu", Size: 20})
 										</button>
 									</li>
-									<a href="/"><li class="flex lg:hidden text-primary">Stren</li></a>
+									<a href="/dashboard"><li class="flex lg:hidden text-primary">Stren</li></a>
 								</div>
 							} else {
 								<div class="w-full flex items-center justify-between">
-									<div class="flex items-center px-2 gap-2">
+									<a class="flex items-center px-2 gap-2" href="/">
 										<div class="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg font-bold">S</div>
 										<span class="font-bold text-sidebar-foreground truncate">Stren</span>
-									</div>
+									</a>
 									<div class="flex gap-1">
-										<a href="/login" class="btn-ghost">Login</a>
-										<a href="/register" class="btn-ghost">Register</a>
+										<a href="/" class="btn-ghost">Home</a>
+										<a href="/register" class="btn-ghost">Sign Up</a>
+										<a href="/login" class="btn-sm">Login</a>
 									</div>
 								</div>
 							}
 						</ul>
 					</nav>
 				</header>
-			<div class="container mx-auto max-w-3xl px-4 py-4 md:py-8">
-				{ children... }
-			</div>
+				<div class={ "container", "mx-auto", templ.KV("max-w-3xl", !data.Wide), templ.KV("max-w-5xl", data.Wide), "px-4 py-4 md:py-8" }>
+					{ children... }
+				</div>
 			</main>
 			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
 				<form method="dialog">
@@ -286,6 +291,20 @@ templ Layout(data PageData) {
 					if (dialog.open) {
 						dialog.close();
 					}
+				});
+				// Server handlers that respond to an htmx call with a
+				// redirect (login, register, logout, admin save) send
+				// the response as a toast fragment plus an HX-Trigger
+				// header shaped {"triggerRedirect": "/target"}. htmx
+				// turns that header into a browser event named
+				// triggerRedirect carrying the URL in detail.value —
+				// this listener is what actually navigates. The short
+				// delay lets the success toast render and be seen
+				// before the page changes.
+				document.body.addEventListener('triggerRedirect', function(evt) {
+					var target = evt.detail && evt.detail.value;
+					if (!target) return;
+					setTimeout(function() { window.location.href = target; }, 600);
 				});
 				// showToast clones the hidden <template> rendered
 				// above (toastTemplate) for the given category, fills

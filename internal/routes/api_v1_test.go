@@ -684,10 +684,16 @@ func TestAPIErrorBodyShape(t *testing.T) {
 
 // --- The web app's redirect-to-login is preserved for HTML routes ---
 
+// TestHTMLLogin_StillRedirectsOnMissingToken guards the HTML
+// surface's auth behaviour: a request without a token for a
+// protected web page must be a 303 to /login, never the JSON 401
+// shape API clients get. It targets /dashboard (the signed-in app's
+// landing page) — "/" is now the public marketing page, which is
+// intentionally reachable without a session.
 func TestHTMLLogin_StillRedirectsOnMissingToken(t *testing.T) {
 	_, _, _, e := setupHandler(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 

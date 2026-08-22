@@ -1,0 +1,144 @@
+package views
+
+import "stren/internal/views/components"
+
+// Landing renders the public marketing page at "/". Copy comes
+// from MARKETING.md in the repo root (kept in sync by hand) —
+// sections map one-to-one: Hero, Intro, Features, Privacy, and
+// the closing Call to action. It is the only page anonymous
+// visitors see before signing up, so it funnels into /register
+// and /login; the Home route handler redirects anyone with a
+// valid session cookie to /dashboard, so this page only ever
+// renders for logged-out visitors.
+templ Landing() {
+	@Layout(PageData{Title: "A free fitness training tracker for iPhone", Wide: true}) {
+		// Hero
+		<section class="flex flex-col items-center gap-6 py-10 text-center sm:py-14">
+			<h1 class="text-4xl font-bold tracking-tight sm:text-5xl">Track your fitness. See your progress. Own your data.</h1>
+			<p class="text-muted-foreground max-w-xl">
+				Stren is a free fitness training tracker for iPhone that keeps
+				logging simple and your data private.
+			</p>
+			<div class="flex flex-wrap items-center justify-center gap-3">
+				<a href="/register" class="btn">
+					@components.Icon(components.IconProps{Name: "plus", Size: 18})
+					Sign up for the Stren beta for iPhone — free
+				</a>
+				<a href="/login" class="btn-outline">
+					Log in
+				</a>
+			</div>
+			<p class="text-muted-foreground text-sm">
+				Logging happens in the Stren iOS app — the web keeps your history
+				readable from anywhere.
+			</p>
+		</section>
+
+		// Intro
+		<section class="flex flex-col gap-2 border-t py-8 text-center">
+			<p class="text-lg font-medium">Getting stronger & fitter takes time. Seeing that you're improving shouldn't.</p>
+			<p class="text-muted-foreground max-w-xl mx-auto">
+				Stren makes it effortless to log every set, then turns your training
+				into clear, encouraging progress you can actually see. No clutter,
+				no noise — just you, your workouts, and the numbers moving in the
+				right direction.
+			</p>
+		</section>
+
+		// Features
+		<section class="grid gap-4 sm:grid-cols-2">
+			<div class="card flex flex-col gap-3 p-6">
+				<div class="bg-muted text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg">
+					@components.Icon(components.IconProps{Name: "dumbbell", Size: 20})
+				</div>
+				<h2 class="font-semibold">Log every set in seconds</h2>
+				<p class="text-muted-foreground text-sm">
+					Reps, weight, rest time, notes. Add a whole set of sets in one go,
+					right between exercises. Logging shouldn't get in the way of your
+					workout — with Stren, it doesn't.
+				</p>
+			</div>
+			<div class="card flex flex-col gap-3 p-6">
+				<div class="bg-muted text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg">
+					@components.Icon(components.IconProps{Name: "trending-up", Size: 20})
+				</div>
+				<h2 class="font-semibold">Watch your progress happen</h2>
+				<p class="text-muted-foreground text-sm">
+					Every exercise you log builds your story. Personal bests are
+					spotted automatically, progression charts show your heaviest
+					lifts climbing over time, and each exercise gets its own history
+					page so you always know where you stand.
+				</p>
+			</div>
+			<div class="card flex flex-col gap-3 p-6">
+				<div class="bg-muted text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg">
+					@components.Icon(components.IconProps{Name: "scale", Size: 20})
+				</div>
+				<h2 class="font-semibold">Track your weight journey</h2>
+				<p class="text-muted-foreground text-sm">
+					Log weigh-ins with optional progress photos, set a target weight,
+					and compare before and after whenever you like. Optional email
+					reminders keep you consistent — daily, weekly, or fortnightly,
+					on your schedule.
+				</p>
+			</div>
+			<div class="card flex flex-col gap-3 p-6">
+				<div class="bg-muted text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg">
+					@components.Icon(components.IconProps{Name: "target", Size: 20})
+				</div>
+				<h2 class="font-semibold">Set goals. Smash them.</h2>
+				<p class="text-muted-foreground text-sm">
+					Whether it's hitting a new bench press PR or sticking to a
+					routine, set goals with target dates and tick them off as you
+					go. Built-in countdown and EMOM timers keep your rest periods
+					honest, too.
+				</p>
+			</div>
+		</section>
+
+		// Privacy
+		<section class="card mt-4 flex flex-col gap-4 p-6 sm:p-8">
+			<div class="flex flex-col gap-2">
+				<h2 class="text-xl font-semibold">Your data stays yours</h2>
+				<p class="text-muted-foreground text-sm">
+					Privacy isn't a feature we bolted on. It's how Stren is built.
+				</p>
+			</div>
+			<ul class="flex flex-col gap-3">
+				<li class="flex items-start gap-3">
+					@components.Icon(components.IconProps{Name: "check", Size: 18})
+					<span><strong>No ads. No trackers.</strong> We don't follow you around the internet, because we're not anywhere else on the internet.</span>
+				</li>
+				<li class="flex items-start gap-3">
+					@components.Icon(components.IconProps{Name: "check", Size: 18})
+					<span><strong>Your data is never sold or shared.</strong> It's used for exactly one thing: showing you your progress.</span>
+				</li>
+				<li class="flex items-start gap-3">
+					@components.Icon(components.IconProps{Name: "download", Size: 18})
+					<span><strong>Take it with you anytime.</strong> Export everything — every set, every weigh-in, every photo — in a single download, whenever you want.</span>
+				</li>
+				<li class="flex items-start gap-3">
+					@components.Icon(components.IconProps{Name: "check", Size: 18})
+					<span><strong>Anonymous analytics only.</strong> We only collect anonymous usage data to improve your experience and we're transparent about what we collect.</span>
+				</li>
+			</ul>
+		</section>
+
+		// Closing call to action
+		<section class="flex flex-col items-center gap-4 py-10 text-center">
+			<h2 class="text-2xl font-bold tracking-tight">Ready to see what you're capable of?</h2>
+			<p class="text-muted-foreground max-w-xl">
+				Stren is free. Sign up for the beta for iPhone today, or explore
+				your dashboard on the web.
+			</p>
+			<div class="flex flex-wrap items-center justify-center gap-3">
+				<a href="/register" class="btn">
+					Get Stren for iPhone
+				</a>
+				<a href="/login" class="btn-outline">
+					Log in
+				</a>
+			</div>
+		</section>
+	}
+}

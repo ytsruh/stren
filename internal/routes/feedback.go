@@ -44,7 +44,7 @@ func (h *Handler) SubmitFeedback(c echo.Context) error {
 		return render(c, feedback.FeedbackFormSuccess("Thanks for your feedback"))
 	}
 
-	return c.Redirect(http.StatusSeeOther, "/")
+	return c.Redirect(http.StatusSeeOther, dashboardPath)
 }
 
 // feedbackValidationError maps FeedbackController validation

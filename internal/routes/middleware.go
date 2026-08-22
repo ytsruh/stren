@@ -98,25 +98,43 @@ func isAPIPath(path string) bool {
 	return strings.HasPrefix(path, apiV1Prefix)
 }
 
+// publicFS is the filesystem backing the catch-all static handler
+// (e.Static("/", "public") in RegisterRoutes). isPublicRoute uses it
+// to recognise asset requests — anything that resolves to a real file
+// inside the directory is treated as public.
+var publicFS = http.Dir("public")
+
 // isPublicRoute returns true for routes that don't require authentication.
-// /forgot and /reset are public so a user who has been logged out (or
-// never had an account) can still request a reset link and follow it.
-// The /reset POST handler additionally checks the token before
-// mutating anything, so the public accessibility is not a security hole.
-// The /api/v1/auth/login and /api/v1/auth/register routes are public
-// for the same reason; the /api/v1/auth/logout endpoint is stateless
-// (the client just discards its token) so it's safe to expose too.
+//
+// Two kinds of paths are public:
+//
+//   - Named routes: "/" (the marketing landing page; the Home handler
+//     redirects anyone carrying a valid session cookie to the dashboard),
+//     the auth pages (/login, /register, /forgot, /reset) and their
+//     JSON API mirrors. /forgot and /reset must be reachable logged-out
+//     so a user can still request a reset link and follow it; the
+//     /reset POST handler additionally checks the token before mutating
+//     anything, so this is not a security hole. The /api/v1/auth/logout
+//     endpoint is stateless (the client just discards its token).
+//   - Static assets: any path resolving to a file inside public/ (css,
+//     icons, img, js, manifest.json, favicon, …). These are loaded by
+//     pages anonymous visitors see — e.g. the auth pages' full-bleed
+//     photos live under /img/ and /js/basecoat.js backs every layout
+//     page — and exempting the whole directory means new assets work
+//     without middleware changes. Directory paths themselves don't
+//     count, so this never opens up an HTML route.
 func isPublicRoute(path string) bool {
+	// Exact match only: "/" is also the prefix of every path, so it
+	// must not go through the prefix list below — that would make
+	// every route on the site public.
+	if path == "/" {
+		return true
+	}
 	public := []string{
 		"/login",
 		"/register",
 		"/forgot",
 		"/reset",
-		"/css/",
-		"/icons/",
-		"/manifest.json",
-		"/sw.js",
-		"/favicon.ico",
 		"/api/v1/auth/login",
 		"/api/v1/auth/register",
 		"/api/v1/auth/password-reset/request",
@@ -127,7 +145,25 @@ func isPublicRoute(path string) bool {
 			return true
 		}
 	}
-	return false
+	return isPublicAsset(path)
+}
+
+// isPublicAsset reports whether the URL path maps to a regular file
+// inside the public/ static directory. http.Dir sanitises the path
+// before opening, so traversal attempts ("../../secrets") resolve
+// outside the directory and fail the lookup. Only files count —
+// directories are rejected so "/" and folder listings stay gated.
+func isPublicAsset(path string) bool {
+	f, err := publicFS.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	stat, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return !stat.IsDir()
 }
 
 func redirectToLogin(c echo.Context) error {

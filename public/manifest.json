@@ -2,7 +2,7 @@
 	"name": "Stren",
 	"short_name": "Stren",
 	"description": "A simple strength training tracker",
-	"start_url": "/",
+	"start_url": "/dashboard",
 	"display": "standalone",
 	"background_color": "#ffffff",
 	"theme_color": "#f54900",

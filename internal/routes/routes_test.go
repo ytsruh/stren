@@ -868,7 +868,7 @@ func TestDashboard(t *testing.T) {
 		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, dashboardPath, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
@@ -888,7 +888,7 @@ func TestDashboard_RepositoryError(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
 	mock.errListExerciseEntries = errors.New("db error")
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, dashboardPath, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
@@ -1527,8 +1527,8 @@ func TestRegisterAndLogin(t *testing.T) {
 		t.Fatalf("expected redirect after register, got %d", rec.Code)
 	}
 	loc := rec.Header().Get("Location")
-	if loc != "/" {
-		t.Fatalf("expected redirect to '/', got %q", loc)
+	if loc != dashboardPath {
+		t.Fatalf("expected redirect to %s, got %q", dashboardPath, loc)
 	}
 
 	cookies := rec.Result().Cookies()

@@ -81,6 +81,12 @@ func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controll
 	}
 }
 
+// dashboardPath is the URL of the signed-in web app's landing
+// page (the dashboard). The root "/" serves the public marketing
+// page instead, so every "go to your app" redirect — login,
+// registration, feedback submissions — points here.
+const dashboardPath = "/dashboard"
+
 // RegisterRoutes registers all routes with the Echo instance.
 func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	// Middleware
@@ -106,7 +112,12 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.POST("/reset", h.ResetPassword)
 
 	// Routes
-	e.GET("/", h.Dashboard)
+	//
+	// The root serves the public marketing landing page; the
+	// signed-in web app lives under /dashboard. dashboardPath is
+	// the single source of truth for that URL across handlers.
+	e.GET("/", h.Home)
+	e.GET("/dashboard", h.Dashboard)
 
 	// User profile
 	e.GET("/profile", h.Profile)

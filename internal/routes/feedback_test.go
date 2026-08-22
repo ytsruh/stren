@@ -161,8 +161,8 @@ func TestSubmitFeedback_NonHtmxRedirectsToDashboard(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("expected 303 redirect, got %d", rec.Code)
 	}
-	if loc := rec.Header().Get("Location"); loc != "/" {
-		t.Errorf("expected redirect to /, got %q", loc)
+	if loc := rec.Header().Get("Location"); loc != dashboardPath {
+		t.Errorf("expected redirect to %s, got %q", dashboardPath, loc)
 	}
 
 	mockFeedback.mu.Lock()
@@ -178,7 +178,7 @@ func TestDashboard_ShowsIOSBanner(t *testing.T) {
 		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, dashboardPath, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
@@ -197,7 +197,7 @@ func TestDashboard_ShowsIOSBanner(t *testing.T) {
 func TestDashboard_EmptyState_ShowsIOSBanner(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, dashboardPath, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)

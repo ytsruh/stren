@@ -46,10 +46,10 @@ func (h *Handler) Login(c echo.Context) error {
 	setAuthCookie(c, token)
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "`+dashboardPath+`"}`)
 		return render(c, auth.LoginSuccessToast())
 	}
-	return c.Redirect(http.StatusSeeOther, "/")
+	return c.Redirect(http.StatusSeeOther, dashboardPath)
 }
 
 // RegisterForm renders the registration page.
@@ -84,10 +84,10 @@ func (h *Handler) Register(c echo.Context) error {
 	setAuthCookie(c, token)
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "`+dashboardPath+`"}`)
 		return render(c, auth.RegisterSuccessToast())
 	}
-	return c.Redirect(http.StatusSeeOther, "/")
+	return c.Redirect(http.StatusSeeOther, dashboardPath)
 }
 
 // Logout clears the auth cookie and redirects to login.
