@@ -1,0 +1,61 @@
+package export
+
+import (
+	"stren/internal/views"
+	"stren/internal/views/components"
+)
+
+// DataExportPage renders the "Data Export" page: a small data-
+// portability utility listing every bulk download the web app
+// offers (the workout-logging surfaces live in the iOS client).
+//
+// Each download is a plain <a download> navigation rather than an
+// htmx request — htmx-swapped binary content doesn't trigger a
+// browser save dialog, so anchors are the right tool here.
+templ DataExportPage(userName string, isAdmin bool) {
+	@views.Layout(views.PageData{Title: "Data Export", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/export"}) {
+		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Data Export"})
+		<div class="w-full flex flex-col gap-5 my-5">
+			// Weight entries ZIP (CSV + photos + manifest), built by
+			// internal/export and streamed from GET /weight/export.
+			<div role="group" class="field" data-orientation="horizontal">
+				<section class="w-1/2">
+					<label for="weight-export">Weight export</label>
+					<p>Download all your weight entries and photos as a ZIP.</p>
+				</section>
+				<div class="w-1/2 flex justify-end">
+					<a
+						href="/weight/export"
+						id="weight-export"
+						download
+						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+						title="Download all weight entries and photos as a ZIP"
+					>
+						@components.Icon(components.IconProps{Name: "download", Size: 16})
+						Download
+					</a>
+				</div>
+			</div>
+			// Exercise entries ZIP (CSV + manifest), built by
+			// internal/export and streamed from GET /exercises/export.
+			<div role="group" class="field" data-orientation="horizontal">
+				<section class="w-1/2">
+					<label for="exercise-entries-export">Exercise entries export</label>
+					<p>Download all your exercise entries as a ZIP.</p>
+				</section>
+				<div class="w-1/2 flex justify-end">
+					<a
+						href="/exercises/export"
+						id="exercise-entries-export"
+						download
+						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+						title="Download all exercise entries as a ZIP"
+					>
+						@components.Icon(components.IconProps{Name: "download", Size: 16})
+						Download
+					</a>
+				</div>
+			</div>
+		</div>
+	}
+}

@@ -11,7 +11,7 @@ This web app is a limited companion surface:
 - Read-only dashboard (recent activity + 7-day stats)
 - Per-exercise history and chart pages
 - Profile settings (name, appearance, target weight & unit, weight-reminder preferences)
-- Weight data export (`/weight/export`, linked from the profile)
+- Data Export page (`GET /export`, sidebar under Account) with weight data export (`/weight/export`) and exercise entries export (`/exercises/export`) ZIP downloads
 - Admin: exercise management (+ image upload), users, feedback inbox
 - Authentication (register / login / password reset)
 
@@ -20,7 +20,7 @@ This web app is a limited companion surface:
 - User based authentication
 - Read-only exercise dashboard & history views
 - Weight reminder notifications (email only, hourly cron)
-- Weight data ZIP export
+- Data Export page: weight & exercise entries ZIP downloads
 
 ## Environment Variables
 

@@ -161,6 +161,17 @@ templ Layout(data PageData) {
 										</a>
 									</li>
 									<li>
+										<a
+											href="/export"
+											if data.CurrentPath == "/export" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "download", Size: 18})
+											<span>Data Export</span>
+										</a>
+									</li>
+									<li>
 										<form
 											hx-post="/logout"
 											hx-target="#toaster"

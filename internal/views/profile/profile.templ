@@ -102,30 +102,9 @@ templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *flo
 					</button>
 				</div>
 			</div>
-			// Weight data export. The weight tracking pages moved to
-			// the iOS client, but the bulk ZIP download (entries +
-			// photos) stays available on the web as a data-portability
-			// utility. A plain <a download> navigation is used rather
-			// than htmx because htmx-swapped binary content doesn't
-			// trigger a browser save.
-			<div role="group" class="field" data-orientation="horizontal">
-				<section class="w-1/2">
-					<label for="weight-export">Weight export</label>
-					<p>Download all your weight entries and photos as a ZIP.</p>
-				</section>
-				<div class="w-1/2 flex justify-end">
-					<a
-						href="/weight/export"
-						id="weight-export"
-						download
-						class="btn-outline px-4 py-2 inline-flex items-center gap-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
-						title="Download all weight entries and photos as a ZIP"
-					>
-						@components.Icon(components.IconProps{Name: "download", Size: 16})
-						Download
-					</a>
-				</div>
-			</div>
+			// The weight-data-export download moved to the dedicated
+			// Data Export page (internal/views/export) along with the
+			// exercise entries export.
 		</div>
 	}
 }

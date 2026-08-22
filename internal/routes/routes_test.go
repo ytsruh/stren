@@ -1847,6 +1847,109 @@ func TestExportWeightZip_RequiresAuthContext(t *testing.T) {
 	}()
 	_ = h.ExportWeightZip(c)
 }
+
+// TestExportExerciseEntriesZip_StreamsZip confirms GET /exercises/export
+// responds with a valid zip containing the user's exercise entries.
+// Mirrors TestExportWeightZip_StreamsZip; exercise entries carry no
+// photos so the archive must contain only exercise_entries.csv and
+// manifest.json.
+func TestExportExerciseEntriesZip_StreamsZip(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+
+	mock.exerciseEntries = []models.ExerciseEntry{
+		{ID: "e1", UserID: "u1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, RestTime: 180, CreatedAt: time.Date(2026, 1, 9, 8, 0, 0, 0, time.UTC)},
+		{ID: "e2", UserID: "u1", ExerciseID: "ex-2", ExerciseName: "Bench Press", Reps: 8, Weight: 60, RestTime: 90, CreatedAt: time.Date(2026, 1, 10, 8, 0, 0, 0, time.UTC)},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/export", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "u1", "test@example.com", "Test User", false)
+
+	if err := h.ExportExerciseEntriesZip(c); err != nil {
+		t.Fatalf("ExportExerciseEntriesZip failed: %v", err)
+	}
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if got := rec.Header().Get(echo.HeaderContentType); got != "application/zip" {
+		t.Errorf("Content-Type = %q, want application/zip", got)
+	}
+	cd := rec.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, "attachment") || !strings.Contains(cd, "stren-exercise-entries-export-") {
+		t.Errorf("Content-Disposition = %q, want attachment with stren-exercise-entries-export-*", cd)
+	}
+
+	// Validate the body is a real zip with exactly the expected files.
+	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatalf("body is not a valid zip: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range zr.File {
+		got[f.Name] = true
+	}
+	for _, want := range []string{"exercise_entries.csv", "manifest.json"} {
+		if !got[want] {
+			t.Errorf("expected %q in zip, got files: %v", want, keys(got))
+		}
+	}
+	for name := range got {
+		if strings.HasPrefix(name, "photos/") {
+			t.Errorf("unexpected photo file %q in exercise entries export", name)
+		}
+	}
+}
+
+// TestExportExerciseEntriesZip_RequiresAuthContext asserts the route
+// requires a valid auth context. Echo's auth middleware is responsible
+// for redirecting unauthenticated requests before they reach the
+// handler, so here we just confirm that the handler relies on
+// GetClaims (the production middleware layer would have already
+// gated this).
+func TestExportExerciseEntriesZip_RequiresAuthContext(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/exercises/export", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// No setAuthContext call. The handler dereferences
+	// claims.UserID, so a missing claim should surface as a panic
+	// — production traffic always has one (the middleware sets
+	// it). This test pins that contract: callers must wire up
+	// auth before invoking the handler.
+	defer func() {
+		if recover() == nil {
+			t.Errorf("expected panic when auth context is missing")
+		}
+	}()
+	_ = h.ExportExerciseEntriesZip(c)
+}
+
+// TestDataExportPage confirms GET /export renders the Data Export
+// page with both download links (weight + exercise entries).
+func TestDataExportPage(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/export", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "u1", "test@example.com", "Test User", false)
+
+	if err := h.DataExportPage(c); err != nil {
+		t.Fatalf("DataExportPage failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"Data Export", `href="/weight/export"`, `href="/exercises/export"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected page body to contain %q", want)
+		}
+	}
+}
 // --- Goals route tests ---
 
 // --- Admin create / update exercise route tests ---

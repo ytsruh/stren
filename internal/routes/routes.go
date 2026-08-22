@@ -112,9 +112,17 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/profile", h.Profile)
 	e.POST("/profile", h.UpdateProfile)
 
+	// Data Export page: single home for the bulk data-portability
+	// downloads (weight ZIP incl. photos; exercise entries ZIP).
+	e.GET("/export", h.DataExportPage)
+
 	// Exercise history (read-only on the web — set logging lives in
 	// the iOS client via /api/v1/exercise-entries)
 	e.GET("/exercises", h.ListExercisesUI)
+	// Exercise entries export (streaming zip download). Registered
+	// beside the other /exercises routes; Echo prefers the static
+	// segment over /exercises/:id.
+	e.GET("/exercises/export", h.ExportExerciseEntriesZip)
 	e.GET("/exercises/:id", h.ExerciseHistory)
 
 	// Exercise chart views
@@ -122,7 +130,8 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/exercises/:id/chart/advanced", h.ExerciseChartAdvanced)
 
 	// Weight export (streaming zip download). The weight CRUD pages
-	// moved to the iOS client; the bulk export stays a web utility.
+	// moved to the iOS client; the bulk export stays a web utility,
+	// linked from the Data Export page.
 	e.GET("/weight/export", h.ExportWeightZip)
 
 	// Admin routes
