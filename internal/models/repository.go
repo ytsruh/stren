@@ -120,22 +120,6 @@ type WeightRepo interface {
 // Compile-time check to ensure WeightRepository implements WeightRepo.
 var _ WeightRepo = (*WeightRepository)(nil)
 
-// PushSubscriptionRepo is the data-access interface used by the push
-// controllers and (via a narrower adapter) by the push.Service
-// fan-out. Declared in models/ to keep all repository interfaces in
-// one place.
-type PushSubscriptionRepo interface {
-	UpsertForUser(ctx context.Context, userID string, sub PushSubscription) (*PushSubscription, error)
-	ListForUser(ctx context.Context, userID string) ([]PushSubscription, error)
-	ListAll(ctx context.Context) ([]PushSubscription, error)
-	DeleteByEndpoint(ctx context.Context, endpoint string) error
-	CountForUser(ctx context.Context, userID string) (int64, error)
-}
-
-// Compile-time check to ensure PushSubscriptionRepository implements
-// PushSubscriptionRepo.
-var _ PushSubscriptionRepo = (*PushSubscriptionRepository)(nil)
-
 // GoalRepo defines the interface for goal data access. The controller
 // depends on this so the route tests can substitute an in-memory fake
 // without touching the real sqlc repository.

@@ -266,26 +266,6 @@ templ Layout(data PageData) {
 					}
 				});
 			</script>
-			<script>
-			if ('serviceWorker' in navigator) {
-				navigator.serviceWorker.register('/sw.js').catch(function(err) {
-					console.error('Service worker registration failed:', err);
-				});
-				// Page-side handler for the service worker's
-				// push-navigate messages. The SW cannot navigate
-				// an existing PWA client reliably on iOS
-				// (client.navigate is a no-op there), so the SW
-				// focuses the client and posts a message; this
-				// listener does the actual window.location.href
-				// change, which works on every platform.
-				navigator.serviceWorker.addEventListener('message', function (event) {
-					if (event.data && event.data.type === 'push-navigate' && typeof event.data.url === 'string') {
-						window.location.href = event.data.url;
-					}
-				});
-			}
-		</script>
-			<script src="/js/push.js" defer></script>
 			<div id="toaster" class="toaster"></div>
 			// Hidden toast templates. Widgets that need to render a
 			// toast from client-side code (e.g. the weight photo

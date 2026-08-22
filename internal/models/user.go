@@ -87,14 +87,6 @@ type User struct {
 	// "HH:00" in 24h UTC. The picker is hour-only by design; minute
 	// precision was explicitly out of scope.
 	ReminderTime string
-	// ReminderEmailEnabled controls whether the per-user email send
-	// runs. Independent of the push channel so a user can mute one
-	// while keeping the other.
-	ReminderEmailEnabled bool
-	// ReminderPushEnabled controls whether the per-user push
-	// broadcast runs. Even when true, push is skipped if the user has
-	// no push_subscriptions row (see the orchestrator's skip rules).
-	ReminderPushEnabled bool
 	// ReminderNextFireAt is the next time the periodic tick should
 	// fire this user's reminder. Set by ComputeNextFire on every
 	// preference change and on every successful fire. nil means

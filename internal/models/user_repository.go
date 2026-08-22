@@ -139,13 +139,16 @@ func (r *UserRepository) UpdateUserReminder(userID string, prefs ReminderPrefere
 	if prefs.DayOfWeek != nil {
 		dayOfWeek = sql.NullInt64{Int64: int64(*prefs.DayOfWeek), Valid: true}
 	}
+	// The email channel mirrors the master switch: reminders are
+	// email-only, so enabling reminders IS opting into the email.
+	// Writing Enabled here also self-heals any legacy
+	// reminder_email_enabled=false rows on the next save.
 	err := r.queries.UpdateUserReminder(ctx, db.UpdateUserReminderParams{
 		ReminderEnabled:      boolToInt(prefs.Enabled),
 		ReminderFrequency:    string(prefs.Frequency),
 		ReminderDayOfWeek:    dayOfWeek,
 		ReminderTime:         prefs.Time,
-		ReminderEmailEnabled: boolToInt(prefs.EmailEnabled),
-		ReminderPushEnabled:  boolToInt(prefs.PushEnabled),
+		ReminderEmailEnabled: boolToInt(prefs.Enabled),
 		ReminderNextFireAt:   nextFire,
 		ID:                   userID,
 	})
@@ -222,12 +225,6 @@ type ReminderPreferences struct {
 	// Time is "HH:00" in 24h UTC. The picker is hour-only by
 	// design.
 	Time string
-	// EmailEnabled toggles the per-user email send.
-	EmailEnabled bool
-	// PushEnabled toggles the per-user push broadcast. Even
-	// when true, push is skipped if the user has no push
-	// subscriptions.
-	PushEnabled bool
 	// NextFireAt is the next fire time the controller computed
 	// from the user's preferences via User.ComputeNextFire.
 	// Written verbatim to the row so the tick picks it up
@@ -249,8 +246,6 @@ func mapUser(row db.User) *User {
 		ReminderFrequency:    ReminderFrequency(row.ReminderFrequency),
 		ReminderDayOfWeek:    nullInt64ToIntPtr(row.ReminderDayOfWeek),
 		ReminderTime:         row.ReminderTime,
-		ReminderEmailEnabled: row.ReminderEmailEnabled == 1,
-		ReminderPushEnabled:  row.ReminderPushEnabled == 1,
 		ReminderNextFireAt:   nullTimeToTimePtr(row.ReminderNextFireAt),
 		ReminderLastFiredAt:  nullTimeToTimePtr(row.ReminderLastFiredAt),
 		CreatedAt:            nullTimeToTime(row.CreatedAt),

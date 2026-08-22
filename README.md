@@ -10,7 +10,7 @@ goals, timers, and feedback all happen there over the `/api/v1` JSON namespace.
 This web app is a limited companion surface:
 - Read-only dashboard (recent activity + 7-day stats)
 - Per-exercise history and chart pages
-- Profile settings (name, appearance, target weight & unit, push toggle, weight-reminder preferences)
+- Profile settings (name, appearance, target weight & unit, weight-reminder preferences)
 - Weight data export (`/weight/export`, linked from the profile)
 - Admin: exercise management (+ image upload), users, feedback inbox
 - Authentication (register / login / password reset)
@@ -19,9 +19,8 @@ This web app is a limited companion surface:
 
 - User based authentication
 - Read-only exercise dashboard & history views
-- Weight reminder notifications (email & push, hourly cron)
+- Weight reminder notifications (email only, hourly cron)
 - Weight data ZIP export
-- Installable PWA (used for push notifications)
 
 ## Environment Variables
 

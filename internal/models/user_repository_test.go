@@ -207,8 +207,6 @@ func TestUserRepository_UpdateUserReminder_RoundTrips(t *testing.T) {
 		Frequency:    ReminderBiweekly,
 		DayOfWeek:    &day,
 		Time:         "18:00",
-		EmailEnabled: true,
-		PushEnabled:  false,
 		NextFireAt:   &next,
 	}
 	if err := repo.UpdateUserReminder(created.ID, prefs); err != nil {
@@ -230,12 +228,6 @@ func TestUserRepository_UpdateUserReminder_RoundTrips(t *testing.T) {
 	}
 	if got.ReminderTime != "18:00" {
 		t.Errorf("ReminderTime = %q, want %q", got.ReminderTime, "18:00")
-	}
-	if !got.ReminderEmailEnabled {
-		t.Error("ReminderEmailEnabled = false, want true")
-	}
-	if got.ReminderPushEnabled {
-		t.Error("ReminderPushEnabled = true, want false")
 	}
 	if got.ReminderNextFireAt == nil || !got.ReminderNextFireAt.Equal(next) {
 		t.Errorf("ReminderNextFireAt = %v, want %v", got.ReminderNextFireAt, next)
@@ -280,7 +272,6 @@ func TestUserRepository_UpdateUserReminder_DayOfWeekNullable(t *testing.T) {
 		Enabled:      true,
 		Frequency:    ReminderDaily,
 		Time:         "07:00",
-		EmailEnabled: true,
 	}); err != nil {
 		t.Fatalf("UpdateUserReminder: %v", err)
 	}
@@ -318,11 +309,11 @@ func TestUserRepository_ListUsersDueForReminder(t *testing.T) {
 	}
 	dueID := mk("Due", "due@example.com", ReminderPreferences{
 		Enabled: true, Frequency: ReminderWeekly, DayOfWeek: &day,
-		Time: "10:00", EmailEnabled: true, NextFireAt: &past,
+		Time: "10:00", NextFireAt: &past,
 	})
 	_ = mk("Future", "future@example.com", ReminderPreferences{
 		Enabled: true, Frequency: ReminderWeekly, DayOfWeek: &day,
-		Time: "10:00", EmailEnabled: true, NextFireAt: &future,
+		Time: "10:00", NextFireAt: &future,
 	})
 	_ = mk("Off", "off@example.com", ReminderPreferences{
 		Enabled: false, Frequency: ReminderOff, Time: "10:00",
@@ -355,7 +346,7 @@ func TestUserRepository_MarkUserReminderFired_AdvancesNextFire(t *testing.T) {
 	first := time.Date(2026, 8, 9, 9, 0, 0, 0, time.UTC)
 	if err := repo.UpdateUserReminder(created.ID, ReminderPreferences{
 		Enabled: true, Frequency: ReminderWeekly, DayOfWeek: &day,
-		Time: "09:00", EmailEnabled: true, NextFireAt: &first,
+		Time: "09:00", NextFireAt: &first,
 	}); err != nil {
 		t.Fatalf("UpdateUserReminder: %v", err)
 	}

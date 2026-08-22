@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 	"stren/internal/export"
 	"stren/internal/imaging"
 	"stren/internal/models"
-	"stren/internal/push"
 	"stren/internal/reminders"
 	"stren/internal/routes"
 	"stren/internal/utils"
@@ -64,31 +62,11 @@ func main() {
 	userRepo := models.NewUserRepository(database)
 	adminUserRepo := models.NewUserAdminRepository(database)
 	weightRepo := models.NewWeightRepository(database)
-	pushRepo := models.NewPushSubscriptionRepository(database)
 	authTokenRepo := models.NewAuthTokenRepository(database)
 	goalsRepo := models.NewGoalRepository(database)
 
 	// Initialize auth service
 	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
-
-	// Load or generate the VAPID keypair. Keys live alongside the
-	// SQLite file in the same persistent directory so subscriptions
-	// survive restarts. If the directory is wiped (e.g. a fresh
-	// container) a new keypair is generated and existing
-	// subscriptions become invalid until the user re-enables them.
-	vapidDataDir := filepath.Dir(cfg.DB_PATH)
-	keys, err := push.LoadOrGenerate(vapidDataDir)
-	if err != nil {
-		log.Fatalf("Failed to load or generate VAPID keys: %v", err)
-	}
-	vapidPublicKey := keys.PublicKeyString()
-	log.Printf("vapid: loaded keypair from %s", vapidDataDir)
-
-	// Wire the push client + fan-out service. A bounded HTTP client
-	// timeout (30s) is applied via the package default; no need to
-	// expose it.
-	pushClient := push.NewClient(keys, push.ClientConfig{})
-	pushService := push.NewService(pushClient, push.NewStoreAdapter(pushRepo), push.ServiceConfig{})
 
 	// Wire the email service. The SMTP client targets Cloudflare's
 	// implicit-TLS endpoint (smtp.mx.cloudflare.net:465); the
@@ -116,19 +94,17 @@ func main() {
 	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
 	weightCtrl := controllers.NewWeightController(weightRepo, r2PhotoGetter{})
-	pushCtrl := controllers.NewPushController(pushRepo)
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(userRepo, authTokenRepo, emailService)
 	goalsCtrl := controllers.NewGoalsController(goalsRepo)
 
 	// Initialize the per-user weight-reminder orchestrator here so
 	// the hourly cron scheduler below can drive it. The orchestrator
-	// fires each due user's chosen channels (email and/or push) on
+	// fires each due user's email reminder on
 	// every tick; there is no admin UI for it any more — the hourly
 	// schedule is the only trigger.
 	weightReminder, err := reminders.NewUserReminder(
 		userRepo,
 		emailService,
-		pushService,
 		reminders.UserReminderConfig{},
 	)
 	if err != nil {
@@ -145,11 +121,7 @@ func main() {
 		adminUserCtrl,
 		feedbackCtrl,
 		weightCtrl,
-		pushCtrl,
 		goalsCtrl,
-		pushRepo,
-		vapidPublicKey,
-		true, // pushConfigured — keys are always present after LoadOrGenerate
 		userRepo,
 		jwtService,
 		validator,

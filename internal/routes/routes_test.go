@@ -440,8 +440,6 @@ func (m *mockUserRepository) UpdateUserReminder(userID string, prefs models.Remi
 			m.users[i].ReminderFrequency = prefs.Frequency
 			m.users[i].ReminderDayOfWeek = prefs.DayOfWeek
 			m.users[i].ReminderTime = prefs.Time
-			m.users[i].ReminderEmailEnabled = prefs.EmailEnabled
-			m.users[i].ReminderPushEnabled = prefs.PushEnabled
 			m.users[i].ReminderNextFireAt = prefs.NextFireAt
 			return nil
 		}
@@ -659,81 +657,6 @@ func (m *mockWeightRepository) GetByIDs(idA, idB, userID string) ([]models.Weigh
 	return result, nil
 }
 
-// mockPushSubscriptionRepository satisfies the models.PushSubscriptionRepo
-// interface for the route tests. The push routes only use a subset of
-// the methods, but every method on the interface is implemented so
-// the compile-time check holds.
-type mockPushSubscriptionRepository struct {
-	mu    sync.Mutex
-	rows  map[string]models.PushSubscription
-	errOp error
-}
-
-func newMockPushSubscriptionRepository() *mockPushSubscriptionRepository {
-	return &mockPushSubscriptionRepository{rows: map[string]models.PushSubscription{}}
-}
-
-func (m *mockPushSubscriptionRepository) UpsertForUser(_ context.Context, userID string, sub models.PushSubscription) (*models.PushSubscription, error) {
-	if m.errOp != nil {
-		return nil, m.errOp
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if existing, ok := m.rows[sub.Endpoint]; ok {
-		existing.P256dh = sub.P256dh
-		existing.Auth = sub.Auth
-		m.rows[sub.Endpoint] = existing
-		out := existing
-		return &out, nil
-	}
-	row := sub
-	row.UserID = userID
-	m.rows[sub.Endpoint] = row
-	out := row
-	return &out, nil
-}
-
-func (m *mockPushSubscriptionRepository) ListForUser(_ context.Context, userID string) ([]models.PushSubscription, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := []models.PushSubscription{}
-	for _, r := range m.rows {
-		if r.UserID == userID {
-			out = append(out, r)
-		}
-	}
-	return out, nil
-}
-
-func (m *mockPushSubscriptionRepository) ListAll(_ context.Context) ([]models.PushSubscription, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]models.PushSubscription, 0, len(m.rows))
-	for _, r := range m.rows {
-		out = append(out, r)
-	}
-	return out, nil
-}
-
-func (m *mockPushSubscriptionRepository) DeleteByEndpoint(_ context.Context, endpoint string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.rows, endpoint)
-	return nil
-}
-
-func (m *mockPushSubscriptionRepository) CountForUser(_ context.Context, userID string) (int64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var n int64
-	for _, r := range m.rows {
-		if r.UserID == userID {
-			n++
-		}
-	}
-	return n, nil
-}
-
 // mockGoalRepository satisfies the models.GoalRepo interface for the
 // route tests. It tracks goals per user and supports per-method
 // error injection so handler-level error paths can be exercised
@@ -880,7 +803,6 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	mockFeedback := newMockFeedbackRepository()
 	mockWeight := newMockWeightRepository()
 	mockGoals := newMockGoalRepository()
-	mockPush := newMockPushSubscriptionRepository()
 	jwtService := utils.NewJWTService("test-secret")
 	mock.exercises = []models.Exercise{
 		{ID: "ex-1", Name: "Squat"},
@@ -893,7 +815,6 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	weightCtrl := controllers.NewWeightController(mockWeight, nil)
-	pushCtrl := controllers.NewPushController(mockPush)
 	goalsCtrl := controllers.NewGoalsController(mockGoals)
 	validator := utils.NewValidator()
 	// The default test wiring uses a fake image processor and
@@ -903,8 +824,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	h := NewHandler(
 		authCtrl, authRecoveryCtrl, entryCtrl, adminCtrl, adminUserCtrl,
 		feedbackCtrl, weightCtrl,
-		pushCtrl, goalsCtrl,
-		mockPush, "", false,
+		goalsCtrl,
 		mockUser, jwtService, validator,
 		proc, upl, DefaultExerciseImageConfig,
 	)

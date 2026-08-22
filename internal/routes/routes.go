@@ -27,11 +27,7 @@ type Handler struct {
 	adminUserCtrl     *controllers.AdminUserController
 	feedbackCtrl      *controllers.FeedbackController
 	weightCtrl        *controllers.WeightController
-	pushCtrl          *controllers.PushController
 	goalsCtrl         *controllers.GoalsController
-	pushRepo          models.PushSubscriptionRepo
-	vapidPublicKey    string
-	pushConfigured    bool
 	userRepo          models.UserRepo
 	jwtService        *utils.JWTService
 	validator         utils.Validator
@@ -65,7 +61,7 @@ type RealClock struct{}
 func (RealClock) Now() time.Time { return time.Now() }
 
 // NewHandler creates a new route handler instance.
-func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controllers.AuthRecoveryController, exerciseEntryCtrl *controllers.ExerciseEntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, weightCtrl *controllers.WeightController, pushCtrl *controllers.PushController, goalsCtrl *controllers.GoalsController, pushRepo models.PushSubscriptionRepo, vapidPublicKey string, pushConfigured bool, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator, imageProcessor exerciseImageProcessor, imageUploader exerciseImageUploader, imageConfig ExerciseImageConfig) *Handler {
+func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controllers.AuthRecoveryController, exerciseEntryCtrl *controllers.ExerciseEntryController, adminCtrl *controllers.AdminController, adminUserCtrl *controllers.AdminUserController, feedbackCtrl *controllers.FeedbackController, weightCtrl *controllers.WeightController, goalsCtrl *controllers.GoalsController, userRepo models.UserRepo, jwtService *utils.JWTService, validator utils.Validator, imageProcessor exerciseImageProcessor, imageUploader exerciseImageUploader, imageConfig ExerciseImageConfig) *Handler {
 	return &Handler{
 		authCtrl:          authCtrl,
 		authRecoveryCtrl:  authRecoveryCtrl,
@@ -74,11 +70,7 @@ func NewHandler(authCtrl *controllers.AuthController, authRecoveryCtrl *controll
 		adminUserCtrl:     adminUserCtrl,
 		feedbackCtrl:      feedbackCtrl,
 		weightCtrl:        weightCtrl,
-		pushCtrl:          pushCtrl,
 		goalsCtrl:         goalsCtrl,
-		pushRepo:          pushRepo,
-		vapidPublicKey:    vapidPublicKey,
-		pushConfigured:    pushConfigured,
 		userRepo:          userRepo,
 		jwtService:        jwtService,
 		validator:         validator,
@@ -132,10 +124,6 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	// Weight export (streaming zip download). The weight CRUD pages
 	// moved to the iOS client; the bulk export stays a web utility.
 	e.GET("/weight/export", h.ExportWeightZip)
-
-	// Push subscription endpoints (authenticated)
-	e.POST("/api/push/subscribe", h.PushSubscribe)
-	e.DELETE("/api/push/unsubscribe", h.PushUnsubscribe)
 
 	// Admin routes
 	admin := e.Group("/admin", AdminMiddleware())

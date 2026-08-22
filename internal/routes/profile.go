@@ -35,12 +35,6 @@ type profileInput struct {
 	// typed; the controller normalises to "HH:00" before
 	// persistence).
 	ReminderTime string
-	// ReminderEmailEnabled and ReminderPushEnabled are
-	// the two channel checkboxes. The form posts value="1"
-	// when checked and omits the field when not, so an
-	// absent field reads as "off".
-	ReminderEmailEnabled bool
-	ReminderPushEnabled  bool
 }
 
 // defaultWeightUnit is used when the form omits the weight_unit field entirely
@@ -56,22 +50,6 @@ const defaultReminderTime = "09:00"
 func (h *Handler) Profile(c echo.Context) error {
 	claims := GetClaims(c)
 
-	// The push banner needs two pieces of information:
-	//   1. Has the user already subscribed? Used for first-paint
-	//      state; the JS will reconcile with the browser on load.
-	//   2. The VAPID public key. Server-rendered into a data
-	//      attribute the JS can call pushManager.subscribe without
-	//      a separate round trip.
-	hasSubscription, err := h.pushCtrl.HasSubscription(c.Request().Context(), claims.UserID)
-	if err != nil {
-		// A failed DB read shouldn't take the profile page down.
-		// We log via the Echo logger and fall through with the
-		// "disabled" first-paint state — the JS will correct it
-		// on load if the user is actually subscribed.
-		c.Logger().Errorf("push subscription count failed: %v", err)
-		hasSubscription = false
-	}
-
 	// GetUser caches the user on the request context, so this is a
 	// single DB read. A missing user (shouldn't happen — claims came
 	// from a verified JWT) is treated as a user with no goal, the
@@ -80,11 +58,8 @@ func (h *Handler) Profile(c echo.Context) error {
 	var target *float64
 	unit := defaultWeightUnit
 	reminderState := profile.ReminderFormState{
-		Frequency:           models.ReminderWeekly,
-		Time:                defaultReminderTime,
-		EmailEnabled:        true,
-		PushEnabled:         true,
-		PushHasSubscription: hasSubscription,
+		Frequency: models.ReminderWeekly,
+		Time:      defaultReminderTime,
 	}
 	if user != nil {
 		target = user.TargetWeight
@@ -102,8 +77,6 @@ func (h *Handler) Profile(c echo.Context) error {
 		if user.ReminderTime != "" {
 			reminderState.Time = user.ReminderTime
 		}
-		reminderState.EmailEnabled = user.ReminderEmailEnabled
-		reminderState.PushEnabled = user.ReminderPushEnabled
 	}
 
 	return render(c, profile.ProfilePage(
@@ -112,9 +85,6 @@ func (h *Handler) Profile(c echo.Context) error {
 		claims.IsAdmin,
 		target,
 		unit,
-		h.pushConfigured,
-		hasSubscription,
-		h.vapidPublicKey,
 		reminderState,
 	))
 }
@@ -134,13 +104,11 @@ func (h *Handler) UpdateProfile(c echo.Context) error {
 	claims := GetClaims(c)
 
 	input := profileInput{
-		Name:                 c.FormValue("name"),
-		WeightUnit:           c.FormValue("weight_unit"),
-		ReminderEnabled:      c.FormValue("reminder_enabled") == "1",
-		ReminderFrequency:    c.FormValue("reminder_frequency"),
-		ReminderTime:         c.FormValue("reminder_time"),
-		ReminderEmailEnabled: c.FormValue("reminder_email_enabled") == "1",
-		ReminderPushEnabled:  c.FormValue("reminder_push_enabled") == "1",
+		Name:              c.FormValue("name"),
+		WeightUnit:        c.FormValue("weight_unit"),
+		ReminderEnabled:   c.FormValue("reminder_enabled") == "1",
+		ReminderFrequency: c.FormValue("reminder_frequency"),
+		ReminderTime:      c.FormValue("reminder_time"),
 	}
 	if input.WeightUnit == "" {
 		input.WeightUnit = defaultWeightUnit
@@ -218,12 +186,10 @@ func (h *Handler) UpdateProfile(c echo.Context) error {
 		dayOfWeek = input.ReminderDayOfWeek
 	}
 	prefs := models.ReminderPreferences{
-		Enabled:      input.ReminderEnabled,
-		Frequency:    freq,
-		DayOfWeek:    dayOfWeek,
-		Time:         input.ReminderTime,
-		EmailEnabled: input.ReminderEmailEnabled,
-		PushEnabled:  input.ReminderPushEnabled,
+		Enabled:   input.ReminderEnabled,
+		Frequency: freq,
+		DayOfWeek: dayOfWeek,
+		Time:      input.ReminderTime,
 	}
 
 	// Compute the next fire time so the hourly tick picks
@@ -239,8 +205,6 @@ func (h *Handler) UpdateProfile(c echo.Context) error {
 		cached.ReminderFrequency = prefs.Frequency
 		cached.ReminderDayOfWeek = prefs.DayOfWeek
 		cached.ReminderTime = prefs.Time
-		cached.ReminderEmailEnabled = prefs.EmailEnabled
-		cached.ReminderPushEnabled = prefs.PushEnabled
 		if t, ok := cached.ComputeNextFire(now); ok {
 			nextFire = &t
 		}
@@ -251,41 +215,11 @@ func (h *Handler) UpdateProfile(c echo.Context) error {
 		return render(c, profile.ProfileUpdateError("Failed to update reminder preferences"))
 	}
 
-	// Surface a one-time warning when the user just enabled
-	// push in their reminder preferences but has no
-	// push_subscriptions row. The orchestrator will save
-	// the pref and silently skip the push channel at fire
-	// time (per UserReminderResult.PushSkipped), but a
-	// visible heads-up here is friendlier than a quiet
-	// "the next reminder email landed but no push did".
-	// The check is re-done here (rather than threaded
-	// through UpdateUserReminder) because the route already
-	// has the HasSubscription result from the GET path
-	// cached on the request context — and re-running it
-	// would not pick up a subscription the user just
-	// enabled in this request anyway, since push
-	// subscription is a separate flow.
-	warning := ""
-	if prefs.PushEnabled {
-		hasSub, subErr := h.pushCtrl.HasSubscription(c.Request().Context(), claims.UserID)
-		if subErr != nil {
-			// A failed DB read is logged but does not
-			// fail the save — the user has just updated
-			// their preferences successfully, and the
-			// orchestrator will surface the missing
-			// subscription at fire time.
-			c.Logger().Errorf("push subscription count failed on reminder save: %v", subErr)
-		}
-		if !hasSub {
-			warning = "Push is enabled in your preferences, but you don't have push notifications turned on for this device. Turn on \"Notifications\" below to actually receive push reminders."
-		}
-	}
-
 	token, err := h.jwtService.GenerateToken(user.ID, user.Email, user.Name, user.IsAdmin)
 	if err != nil {
 		return render(c, profile.ProfileUpdateError("Failed to generate token"))
 	}
 	setAuthCookie(c, token)
 
-	return render(c, profile.ProfileUpdateSuccess(warning))
+	return render(c, profile.ProfileUpdateSuccess())
 }
