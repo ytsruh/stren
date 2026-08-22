@@ -75,44 +75,52 @@ templ LoginPageError(message string) {
 // ForgotPasswordPage renders the "forgot password" form. The
 // same page is rendered for both GET (initial visit) and POST
 // (after submission) so the user sees a single, stable surface;
-// errorMsg and submitted control the post-submit state.
+// errorMsg and submitted control the post-submit state. Uses the
+// split photo/form card layout described on LoginPage.
 templ ForgotPasswordPage(errorMsg string, submitted bool) {
 	@views.Layout(views.PageData{Title: "Forgot password", UserName: "", IsAuthenticated: false}) {
-		@components.Card(components.CardProps{Class: "w-full max-w-[400px] mx-auto mt-8"}) {
-			@components.CardHeader(components.CardHeaderProps{}) {
-				<h2>Forgot password</h2>
-			}
-			@components.CardSection(components.CardSectionProps{}) {
-				if submitted {
-					<p class="text-sm">If an account exists for the email you entered, we've sent a reset link. Check your inbox (and spam folder, just in case).</p>
-				} else {
-					if errorMsg != "" {
-						@views.Toast("error", "Error", errorMsg)
-					}
-					<form
-						hx-post="/forgot"
-						hx-target="#toaster"
-						hx-swap="beforeend"
-						class="form grid gap-4"
-					>
-						<fieldset class="grid gap-3">
-							<div class="grid gap-2">
-								<label for="forgot-email">Email</label>
-								<input class="input" type="email" id="forgot-email" name="email" placeholder="you@example.com" required/>
-							</div>
-						</fieldset>
-						<button type="submit" hx-indicator="#forgot-spinner" class="btn relative inline-flex">
-							<span class="btn-text">Send reset link</span>
-							<span id="forgot-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
-								@components.Icon(components.IconProps{Name: "loader", Size: 18})
-							</span>
-						</button>
-					</form>
+		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-[url('/img/password.jpg')] bg-cover bg-center md:hidden"></div>
+		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-black/50 md:hidden"></div>
+		@components.Card(components.CardProps{Class: "w-full max-w-[420px] mx-auto mt-8 p-0 gap-0 md:max-w-full md:flex-row"}) {
+			<div class="relative hidden min-h-[520px] md:w-1/2 md:block">
+				<img src="/img/password.jpg" alt="" class="absolute inset-0 size-full object-cover"/>
+			</div>
+			<div class="flex flex-col justify-center gap-6 px-6 py-6 md:w-1/2">
+				@components.CardHeader(components.CardHeaderProps{}) {
+					<h2 class="text-2xl font-medium text-center">Forgot password</h2>
 				}
-			}
-			<footer class="text-center text-sm mx-auto">
-				<p><a href="/login" class="underline-offset-4 hover:underline">Back to login</a></p>
-			</footer>
+				@components.CardSection(components.CardSectionProps{}) {
+					if submitted {
+						<p class="text-sm">If an account exists for the email you entered, we've sent a reset link. Check your inbox (and spam folder, just in case).</p>
+					} else {
+						if errorMsg != "" {
+							@views.Toast("error", "Error", errorMsg)
+						}
+						<form
+							hx-post="/forgot"
+							hx-target="#toaster"
+							hx-swap="beforeend"
+							class="form grid gap-4"
+						>
+							<fieldset class="grid gap-3">
+								<div class="grid gap-2">
+									<label for="forgot-email">Email</label>
+									<input class="input" type="email" id="forgot-email" name="email" placeholder="you@example.com" required/>
+								</div>
+							</fieldset>
+							<button type="submit" hx-indicator="#forgot-spinner" class="btn relative inline-flex">
+								<span class="btn-text">Send reset link</span>
+								<span id="forgot-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+									@components.Icon(components.IconProps{Name: "loader", Size: 18})
+								</span>
+							</button>
+						</form>
+					}
+				}
+				<footer class="text-center text-sm mx-auto">
+					<p><a href="/login" class="underline-offset-4 hover:underline">Back to login</a></p>
+				</footer>
+			</div>
 		}
 	}
 }
@@ -124,42 +132,49 @@ templ ForgotPasswordPage(errorMsg string, submitted bool) {
 // to /reset with the same token).
 templ ResetPasswordPage(token string, errorMsg string) {
 	@views.Layout(views.PageData{Title: "Reset password", UserName: "", IsAuthenticated: false}) {
-		@components.Card(components.CardProps{Class: "w-full max-w-[400px] mx-auto mt-8"}) {
-			@components.CardHeader(components.CardHeaderProps{}) {
-				<h2>Reset your password</h2>
-			}
-			@components.CardSection(components.CardSectionProps{}) {
-				if errorMsg != "" {
-					@views.Toast("error", "Error", errorMsg)
+		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-[url('/img/reset.jpg')] bg-cover bg-center md:hidden"></div>
+		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-black/50 md:hidden"></div>
+		@components.Card(components.CardProps{Class: "w-full max-w-[420px] mx-auto mt-8 p-0 gap-0 md:max-w-full md:flex-row"}) {
+			<div class="relative hidden min-h-[520px] md:w-1/2 md:block">
+				<img src="/img/reset.jpg" alt="" class="absolute inset-0 size-full object-cover"/>
+			</div>
+			<div class="flex flex-col justify-center gap-6 px-6 py-6 md:w-1/2">
+				@components.CardHeader(components.CardHeaderProps{}) {
+					<h2 class="text-2xl font-medium text-center">Reset your password</h2>
 				}
-				<form
-					hx-post="/reset"
-					hx-target="#toaster"
-					hx-swap="beforeend"
-					class="form grid gap-4"
-				>
-					<input type="hidden" name="token" value={ token }/>
-					<fieldset class="grid gap-3">
-						<div class="grid gap-2">
-							<label for="reset-password">New password</label>
-							<input class="input" type="password" id="reset-password" name="password" placeholder="Min 6 characters" required minlength="6"/>
-						</div>
-						<div class="grid gap-2">
-							<label for="reset-confirm">Confirm new password</label>
-							<input class="input" type="password" id="reset-confirm" name="confirm" placeholder="Re-enter password" required minlength="6"/>
-						</div>
-					</fieldset>
-					<button type="submit" hx-indicator="#reset-spinner" class="btn relative inline-flex">
-						<span class="btn-text">Set new password</span>
-						<span id="reset-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
-							@components.Icon(components.IconProps{Name: "loader", Size: 18})
-						</span>
-					</button>
-				</form>
-			}
-			<footer class="text-center text-sm mx-auto">
-				<p><a href="/login" class="underline-offset-4 hover:underline">Back to login</a></p>
-			</footer>
+				@components.CardSection(components.CardSectionProps{}) {
+					if errorMsg != "" {
+						@views.Toast("error", "Error", errorMsg)
+					}
+					<form
+						hx-post="/reset"
+						hx-target="#toaster"
+						hx-swap="beforeend"
+						class="form grid gap-4"
+					>
+						<input type="hidden" name="token" value={ token }/>
+						<fieldset class="grid gap-3">
+							<div class="grid gap-2">
+								<label for="reset-password">New password</label>
+								<input class="input" type="password" id="reset-password" name="password" placeholder="Min 6 characters" required minlength="6"/>
+							</div>
+							<div class="grid gap-2">
+								<label for="reset-confirm">Confirm new password</label>
+								<input class="input" type="password" id="reset-confirm" name="confirm" placeholder="Re-enter password" required minlength="6"/>
+							</div>
+						</fieldset>
+						<button type="submit" hx-indicator="#reset-spinner" class="btn relative inline-flex">
+							<span class="btn-text">Set new password</span>
+							<span id="reset-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+								@components.Icon(components.IconProps{Name: "loader", Size: 18})
+							</span>
+						</button>
+					</form>
+				}
+				<footer class="text-center text-sm mx-auto">
+					<p><a href="/login" class="underline-offset-4 hover:underline">Back to login</a></p>
+				</footer>
+			</div>
 		}
 	}
 }
@@ -171,45 +186,53 @@ templ ResetPasswordSuccessToast() {
 	@views.Toast("success", "Password reset", "Sign in with your new password.")
 }
 
-// RegisterPage renders the registration form.
+// RegisterPage renders the registration form. Uses the split
+// photo/form card layout described on LoginPage.
 templ RegisterPage(errorMsg string) {
 	@views.Layout(views.PageData{Title: "Register", UserName: "", IsAuthenticated: false}) {
-		@components.Card(components.CardProps{Class: "w-full max-w-[400px] mx-auto mt-8"}) {
-			@components.CardHeader(components.CardHeaderProps{}) {
-				<h2>Register</h2>
-			}
-			@components.CardSection(components.CardSectionProps{}) {
-				<form
-					hx-post="/register"
-					hx-target="#toaster"
-					hx-swap="beforeend"
-					class="form grid gap-4"
-				>
-					<fieldset class="grid gap-3">
-						<div class="grid gap-2">
-							<label for="register-name">Name</label>
-							<input class="input" type="text" id="register-name" name="name" placeholder="Your name" required/>
-						</div>
-						<div class="grid gap-2">
-							<label for="register-email">Email</label>
-							<input class="input" type="email" id="register-email" name="email" placeholder="you@example.com" required/>
-						</div>
-						<div class="grid gap-2">
-							<label for="register-password">Password</label>
-							<input class="input" type="password" id="register-password" name="password" placeholder="Min 6 characters" required/>
-						</div>
-					</fieldset>
-					<button type="submit" hx-indicator="#register-spinner" class="btn relative inline-flex">
-						<span class="btn-text">Create Account</span>
-						<span id="register-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
-							@components.Icon(components.IconProps{Name: "loader", Size: 18})
-						</span>
-					</button>
-				</form>
-			}
-			<footer class="text-center text-sm">
-				<p>Already have an account? <a href="/login" class="underline-offset-4 hover:underline">Login</a></p>
-			</footer>
+		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-[url('/img/register.jpg')] bg-cover bg-center md:hidden"></div>
+		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-black/50 md:hidden"></div>
+		@components.Card(components.CardProps{Class: "w-full max-w-[420px] mx-auto mt-8 p-0 gap-0 md:max-w-full md:flex-row"}) {
+			<div class="relative hidden min-h-[520px] md:w-1/2 md:block">
+				<img src="/img/register.jpg" alt="" class="absolute inset-0 size-full object-cover"/>
+			</div>
+			<div class="flex flex-col justify-center gap-6 px-6 py-6 md:w-1/2">
+				@components.CardHeader(components.CardHeaderProps{}) {
+					<h2 class="text-2xl font-medium text-center">Sign up for a free <span class="text-primary">Stren</span> account</h2>
+				}
+				@components.CardSection(components.CardSectionProps{}) {
+					<form
+						hx-post="/register"
+						hx-target="#toaster"
+						hx-swap="beforeend"
+						class="form grid gap-4"
+					>
+						<fieldset class="grid gap-3">
+							<div class="grid gap-2">
+								<label for="register-name">Name</label>
+								<input class="input" type="text" id="register-name" name="name" placeholder="Your name" required/>
+							</div>
+							<div class="grid gap-2">
+								<label for="register-email">Email</label>
+								<input class="input" type="email" id="register-email" name="email" placeholder="you@example.com" required/>
+							</div>
+							<div class="grid gap-2">
+								<label for="register-password">Password</label>
+								<input class="input" type="password" id="register-password" name="password" placeholder="Min 6 characters" required/>
+							</div>
+						</fieldset>
+						<button type="submit" hx-indicator="#register-spinner" class="btn relative inline-flex">
+							<span class="btn-text">Create Account</span>
+							<span id="register-spinner" class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+								@components.Icon(components.IconProps{Name: "loader", Size: 18})
+							</span>
+						</button>
+					</form>
+				}
+				<footer class="text-center text-sm">
+					<p>Already have an account? <a href="/login" class="underline-offset-4 hover:underline">Login</a></p>
+				</footer>
+			</div>
 		}
 	}
 }
