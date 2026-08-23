@@ -1,0 +1,30 @@
+package components
+
+import (
+	"strings"
+)
+
+// ExerciseTypeBadge renders an exercise's type as a badge. Cardio
+// exercises use the secondary badge variant so they read distinctly
+// from strength/other at a glance; every other type keeps the default
+// primary badge styling. The label is capitalized by the badge's own
+// classes ("cardio" → "Cardio").
+//
+// extraClass entries are appended verbatim after the base classes so
+// callers can add layout utilities (e.g. "hidden sm:flex") without
+// duplicating the variant logic.
+templ ExerciseTypeBadge(exerciseType string, extraClass ...string) {
+	<span
+		class={ exerciseTypeBadgeClasses(extraClass) }
+		if exerciseType == "cardio" {
+			data-variant="secondary"
+		}
+	>{ exerciseType }</span>
+}
+
+// exerciseTypeBadgeClasses joins the shared badge classes with any
+// caller-supplied extras into a single class attribute value.
+func exerciseTypeBadgeClasses(extraClasses []string) string {
+	classes := append([]string{"badge", "capitalize"}, extraClasses...)
+	return strings.Join(classes, " ")
+}

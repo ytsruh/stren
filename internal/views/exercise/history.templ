@@ -37,7 +37,7 @@ templ ExerciseHistory(exercise *models.Exercise, page *models.ExerciseHistoryPag
 			<div class="flex items-center justify-between mb-2 gap-4">
 				<div class="flex items-center gap-2">
 					@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: exercise.Name})
-					<span class="badge capitalize hidden sm:flex">{ string(exercise.Type) }</span>
+					@components.ExerciseTypeBadge(string(exercise.Type), "hidden sm:flex")
 				</div>
 				<div class="flex items-center gap-2">
 					<a

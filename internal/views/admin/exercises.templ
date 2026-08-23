@@ -46,7 +46,7 @@ templ AdminExerciseList(exercises []models.Exercise, userName string, isAuthenti
 						<tr class="exercise-row" data-name={ strings.ToLower(e.Name) }>
 							<td>{ e.Name }</td>
 							<td>
-								<span class="badge capitalize">{ string(e.Type) }</span>
+								@components.ExerciseTypeBadge(string(e.Type))
 							</td>
 							<td>
 								<div class="flex gap-2">

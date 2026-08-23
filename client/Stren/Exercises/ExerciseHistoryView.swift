@@ -78,7 +78,7 @@ struct ExerciseHistoryView: View {
                 .environmentObject(authStore)
             }
             .alert(
-                "Delete this set?",
+                isCardio ? "Delete this session?" : "Delete this set?",
                 isPresented: $showingDeleteConfirm,
                 presenting: entryPendingDelete
             ) { entry in
@@ -87,7 +87,9 @@ struct ExerciseHistoryView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
-                Text("This will permanently remove the set from your history.")
+                Text(isCardio
+                     ? "This will permanently remove the session from your history."
+                     : "This will permanently remove the set from your history.")
             }
             .task(id: currentPage) { await load(refresh: false) }
     }
@@ -678,16 +680,18 @@ struct ExerciseHistoryView: View {
             Image(systemName: Icons.chartEmpty)
                 .font(.system(size: 48))
                 .foregroundStyle(DSColors.textSecondary)
-            Text("No sets yet")
+            Text(isCardio ? "No sessions yet" : "No sets yet")
                 .font(.title3.weight(.semibold))
-            Text("Log a set from the Today tab to start tracking \(exercise.name).")
+            Text(isCardio
+                 ? "Log a session from the Today tab to start tracking \(exercise.name)."
+                 : "Log a set from the Today tab to start tracking \(exercise.name).")
                 .font(.body)
                 .foregroundStyle(DSColors.textSecondary)
                 .multilineTextAlignment(.center)
             Button {
                 isPresentingNewSet = true
             } label: {
-                Label("Log First Set", systemImage: Icons.addSet)
+                Label(isCardio ? "Log First Session" : "Log First Set", systemImage: Icons.addSet)
                     .font(.headline)
             }
             .buttonStyle(.dsPrimary)

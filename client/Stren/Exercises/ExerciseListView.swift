@@ -151,22 +151,23 @@ struct ExerciseRow: View {
     }
 }
 
-/// Pill-shaped badge showing the exercise type. Mirrors the
-/// web's `<span class="badge capitalize">` in
-/// `internal/views/exercise/list.templ:51`. The badge
-/// background adapts to the exercise type so the row
-/// scans at a glance:
+/// Pill-shaped badge showing the exercise type. Mirrors the web's
+/// `ExerciseTypeBadge` in
+/// `internal/views/components/exercise_type_badge.templ`. The badge
+/// background adapts to the exercise type so the row scans at a glance:
 ///   - **Strength** → brand orange (`DSColors.accent`).
-///   - **Cardio**   → system background, white in dark mode
-///                    and black in light mode.
+///   - **Cardio**   → inverted chip fill (`DSColors.secondary`): dark
+///                    pill in light mode, light pill in dark mode — the
+///                    same foreground/background swap the web theme uses,
+///                    so cardio reads distinctly from both the row and
+///                    the strength chips in either appearance.
 ///   - **Other**    → a neutral grey.
 ///
 /// The text colour is picked per type for contrast:
 /// strength uses the brand-aware `DSColors.onPrimary`
 /// (white in both modes — the orange is dark enough that
-/// black text fails contrast), while cardio and other use
-/// `DSColors.text` (white in dark mode, black in light
-/// mode) so it flips with the system appearance.
+/// black text fails contrast), cardio uses `DSColors.onSecondary`
+/// (flips with the fill), and other uses `DSColors.text`.
 struct ExerciseTypeChip: View {
     let type: String
 
@@ -200,19 +201,19 @@ struct ExerciseTypeChip: View {
     private var backgroundColor: Color {
         switch type.lowercased() {
         case "strength": return DSColors.accent
-        case "cardio":   return DSColors.background
+        case "cardio":   return DSColors.secondary
         default:         return Color(.systemGray4)
         }
     }
 
     /// Per-type text colour. Strength always uses the
     /// brand-on-primary (white) for contrast against the
-    /// orange; cardio and other use the adaptive label
-    /// colour so the text inverts with the system
-    /// appearance.
+    /// orange; cardio rides on the inverted secondary pairing;
+    /// other uses the adaptive label colour.
     private var foregroundStyle: Color {
         switch type.lowercased() {
         case "strength": return DSColors.onPrimary
+        case "cardio":   return DSColors.onSecondary
         default:         return DSColors.text
         }
     }

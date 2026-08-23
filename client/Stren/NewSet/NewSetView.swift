@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// The "log a set" sheet. Picker for the exercise, a list
-/// of entry rows (reps/weight/rest for strength, duration/
-/// distance/HR/calories for cardio), a notes field, and an
-/// optional timestamp. Tapping save POSTs the whole batch
-/// in one request so all entries share the same exercise,
-/// notes, and timestamp.
+/// The "log an entry" sheet. Picker for the exercise, then
+/// type-appropriate entry rows — strength mode offers a repeatable
+/// list of set rows (reps/weight/rest); cardio mode shows exactly one
+/// fixed session row (duration/distance + optional HR/calories),
+/// because a cardio workout is logged as a single session rather than
+/// broken into sets. A notes field and optional timestamp round out
+/// the form. Tapping save POSTs the batch in one request so all
+/// entries share the same exercise, notes, and timestamp.
 ///
 /// The row editor branches on the selected exercise's type:
 /// a cardio exercise swaps the strength fields for duration +
@@ -79,7 +81,7 @@ struct NewSetView: View {
                     }
                 }
             }
-            .navigationTitle("New set")
+            .navigationTitle(isCardioMode ? "New Session" : "New Set")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -98,7 +100,12 @@ struct NewSetView: View {
                     .disabled(isSaving || !canSave)
                 }
             }
-            .onChange(of: selectedExerciseID) { _ in resetSetsForMode() }
+            // Crossing the strength/cardio boundary replaces the draft
+            // rows: cardio logs exactly one session (multi-set doesn't
+            // apply), and stale strength values must not leak into a
+            // cardio row or vice versa. Switching between two exercises
+            // of the SAME mode keeps whatever rows are already typed.
+            .onChange(of: isCardioMode) { _ in resetSetsForMode() }
         }
         .task { await loadExercises() }
     }
@@ -132,30 +139,43 @@ struct NewSetView: View {
 
     private var setsSection: some View {
         Section {
-            ForEach($sets) { $set in
-                SetRowEditor(
-                    set: $set,
-                    weightUnit: authStore.currentUser?.weightUnit ?? "kg",
-                    distanceUnit: distanceUnit,
-                    isCardioMode: isCardioMode
-                )
-            }
-            .onDelete { indexSet in
-                sets.remove(atOffsets: indexSet)
-                if sets.isEmpty {
+            if isCardioMode {
+                // Cardio is a one-shot session, not repeated sets:
+                // exactly one fixed row, no add/remove affordances.
+                if !sets.isEmpty {
+                    SetRowEditor(
+                        set: $sets[0],
+                        weightUnit: authStore.currentUser?.weightUnit ?? "kg",
+                        distanceUnit: distanceUnit,
+                        isCardioMode: true
+                    )
+                }
+            } else {
+                ForEach($sets) { $set in
+                    SetRowEditor(
+                        set: $set,
+                        weightUnit: authStore.currentUser?.weightUnit ?? "kg",
+                        distanceUnit: distanceUnit,
+                        isCardioMode: false
+                    )
+                }
+                .onDelete { indexSet in
+                    sets.remove(atOffsets: indexSet)
+                    if sets.isEmpty {
+                        sets.append(SetDraft(distanceUnit: distanceUnit))
+                    }
+                }
+                Button {
                     sets.append(SetDraft(distanceUnit: distanceUnit))
+                } label: {
+                    Label("Add set", systemImage: "plus.circle")
                 }
             }
-            Button {
-                sets.append(SetDraft(distanceUnit: distanceUnit))
-            } label: {
-                Label("Add set", systemImage: "plus.circle")
-            }
         } header: {
-            Text(isCardioMode ? "Sessions" : "Sets")
+            Text(isCardioMode ? "Session" : "Sets")
         } footer: {
             Text(isCardioMode
-                 ? "Swipe a row to remove it. Each session is saved separately but shares this exercise, notes, and timestamp."
+                 ? "A cardio entry is a single session. Duration and distance are required; heart rate and calories are optional."
                  : "Swipe a row to remove it. Each set is saved separately but shares this exercise, notes, and timestamp.")
         }
     }
@@ -193,10 +213,12 @@ struct NewSetView: View {
 
     // MARK: - Data
 
-    /// Replaces the draft rows whenever the selected exercise changes
-    /// so the fields on screen always match the new exercise's type
-    /// (a stale half-typed weight shouldn't leak into a cardio row
-    /// and vice versa). Keeps one empty row ready to fill.
+    /// Replaces the draft rows whenever the form crosses the
+    /// strength/cardio boundary so the fields on screen always match
+    /// the new mode — a half-typed weight must not leak into a cardio
+    /// session row and vice versa. Cardio always lands on exactly one
+    /// fresh row; strength starts from one empty row. Keeps one draft
+    /// ready to fill.
     private func resetSetsForMode() {
         sets = [SetDraft(distanceUnit: distanceUnit)]
     }
