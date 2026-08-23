@@ -17,7 +17,7 @@ import (
 // no photos).
 func TestBuildExerciseEntriesZip_EmptyInput(t *testing.T) {
 	var buf bytes.Buffer
-	res, err := BuildExerciseEntriesZip(context.Background(), &buf, nil, "user-1", "kg")
+	res, err := BuildExerciseEntriesZip(context.Background(), &buf, nil, "user-1", "kg", "km")
 	if err != nil {
 		t.Fatalf("BuildExerciseEntriesZip: %v", err)
 	}
@@ -51,8 +51,10 @@ func TestBuildExerciseEntriesZip_EmptyInput(t *testing.T) {
 		t.Fatalf("expected 1 CSV row (header only), got %d", len(rows))
 	}
 	wantHeader := []string{
-		"id", "created_at", "date", "exercise_id", "exercise_name",
-		"reps", "weight", "weight_unit", "rest_time_seconds", "notes",
+		"id", "created_at", "date", "exercise_id", "exercise_name", "exercise_type",
+		"reps", "weight", "weight_unit", "rest_time_seconds",
+		"duration_seconds", "distance_km", "avg_heart_rate_bpm", "calories_burned", "pace_sec_per_km",
+		"notes",
 	}
 	if !equalRow(rows[0], wantHeader) {
 		t.Errorf("csv header = %v, want %v", rows[0], wantHeader)
@@ -68,12 +70,12 @@ func TestBuildExerciseEntriesZip_MultipleEntries(t *testing.T) {
 	day2 := time.Date(2026, 1, 10, 18, 30, 0, 0, time.UTC)
 
 	entries := []models.ExerciseEntry{
-		{ID: "e2", UserID: "u1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100.5, RestTime: 180, Notes: "second", CreatedAt: day2},
-		{ID: "e1", UserID: "u1", ExerciseID: "ex-2", ExerciseName: "Bench Press", Reps: 8, Weight: 60, RestTime: 90, Notes: "first", CreatedAt: day1},
+		{ID: "e2", UserID: "u1", ExerciseID: "ex-1", ExerciseName: "Squat", ExerciseType: models.ExerciseTypeStrength, Reps: 5, Weight: 100.5, RestTime: 180, Notes: "second", CreatedAt: day2},
+		{ID: "e1", UserID: "u1", ExerciseID: "ex-2", ExerciseName: "Bench Press", ExerciseType: models.ExerciseTypeStrength, Reps: 8, Weight: 60, RestTime: 90, Notes: "first", CreatedAt: day1},
 	}
 
 	var buf bytes.Buffer
-	res, err := BuildExerciseEntriesZip(context.Background(), &buf, entries, "u1", "kg")
+	res, err := BuildExerciseEntriesZip(context.Background(), &buf, entries, "u1", "kg", "km")
 	if err != nil {
 		t.Fatalf("BuildExerciseEntriesZip: %v", err)
 	}
@@ -103,10 +105,16 @@ func TestBuildExerciseEntriesZip_MultipleEntries(t *testing.T) {
 		"2026-01-09",           // date
 		"ex-2",                 // exercise_id
 		"Bench Press",          // exercise_name
+		"strength",             // exercise_type
 		"8",                    // reps
 		"60.0",                 // weight
 		"kg",                   // weight_unit
 		"90",                   // rest_time_seconds
+		"0",                    // duration_seconds (cardio metrics zeroed)
+		"0.000",                // distance_km
+		"0",                    // avg_heart_rate_bpm
+		"0.0",                  // calories_burned
+		"",                     // pace_sec_per_km (empty when not derivable)
 		"first",                // notes
 	}
 	if !equalRow(first, wantRow) {
@@ -115,8 +123,8 @@ func TestBuildExerciseEntriesZip_MultipleEntries(t *testing.T) {
 
 	// weight_unit column is filled on every row with the value passed in.
 	for i := 1; i < len(rows); i++ {
-		if rows[i][7] != "kg" {
-			t.Errorf("row %d weight_unit = %q, want kg", i, rows[i][7])
+		if rows[i][8] != "kg" {
+			t.Errorf("row %d weight_unit = %q, want kg", i, rows[i][8])
 		}
 	}
 
@@ -146,11 +154,11 @@ func TestBuildExerciseEntriesZip_MultipleEntries(t *testing.T) {
 func TestBuildExerciseEntriesZip_CSVEscaping(t *testing.T) {
 	day := time.Date(2026, 1, 9, 8, 0, 0, 0, time.UTC)
 	entries := []models.ExerciseEntry{
-		{ID: "e1", UserID: "u1", ExerciseName: "Squat", Reps: 5, Weight: 100, Notes: `has, comma and "quote" and` + "\nnewline", CreatedAt: day},
+		{ID: "e1", UserID: "u1", ExerciseName: "Squat", ExerciseType: models.ExerciseTypeStrength, Reps: 5, Weight: 100, Notes: `has, comma and "quote" and` + "\nnewline", CreatedAt: day},
 	}
 
 	var buf bytes.Buffer
-	if _, err := BuildExerciseEntriesZip(context.Background(), &buf, entries, "u1", "kg"); err != nil {
+	if _, err := BuildExerciseEntriesZip(context.Background(), &buf, entries, "u1", "kg", "km"); err != nil {
 		t.Fatalf("BuildExerciseEntriesZip: %v", err)
 	}
 
@@ -160,7 +168,49 @@ func TestBuildExerciseEntriesZip_CSVEscaping(t *testing.T) {
 		t.Fatalf("expected header + 1 row, got %d", len(rows))
 	}
 	want := `has, comma and "quote" and` + "\nnewline"
-	if rows[1][9] != want {
-		t.Errorf("csv notes = %q, want %q", rows[1][9], want)
+	if rows[1][15] != want {
+		t.Errorf("csv notes = %q, want %q", rows[1][15], want)
+	}
+}
+
+// TestBuildExerciseEntriesZip_CardioRow ensures a cardio exercise entry
+// exports its duration/distance metrics with the derived pace column,
+// while the strength-only columns stay zeroed — mirroring the server's
+// normalization on write.
+func TestBuildExerciseEntriesZip_CardioRow(t *testing.T) {
+	// 25 minutes for 5 km → 300s pace (5:00/km).
+	day := time.Date(2026, 1, 9, 8, 0, 0, 0, time.UTC)
+	entries := []models.ExerciseEntry{
+		{ID: "e1", UserID: "u1", ExerciseName: "Run", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1500, DistanceMeters: 5000, AvgHeartRate: 152, CaloriesBurned: 320, Notes: "easy pace", CreatedAt: day},
+	}
+
+	var buf bytes.Buffer
+	if _, err := BuildExerciseEntriesZip(context.Background(), &buf, entries, "u1", "kg", "km"); err != nil {
+		t.Fatalf("BuildExerciseEntriesZip: %v", err)
+	}
+
+	files := readZip(t, buf.Bytes())
+	rows := mustReadCSV(t, files["exercise_entries.csv"])
+	if len(rows) != 2 {
+		t.Fatalf("expected header + 1 row, got %d", len(rows))
+	}
+	row := rows[1]
+	if row[5] != "cardio" {
+		t.Errorf("exercise_type = %q, want cardio", row[5])
+	}
+	if row[10] != "1500" {
+		t.Errorf("duration_seconds = %q, want 1500", row[10])
+	}
+	if row[11] != "5.000" {
+		t.Errorf("distance_km = %q, want 5.000", row[11])
+	}
+	if row[12] != "152" {
+		t.Errorf("avg_heart_rate_bpm = %q, want 152", row[12])
+	}
+	if row[13] != "320.0" {
+		t.Errorf("calories_burned = %q, want 320.0", row[13])
+	}
+	if row[14] != "300.00" {
+		t.Errorf("pace_sec_per_km = %q, want 300.00 (5:00/km)", row[14])
 	}
 }

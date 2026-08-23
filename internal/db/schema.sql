@@ -16,6 +16,7 @@ CREATE TABLE users (
     is_admin INTEGER NOT NULL DEFAULT 0,
     target_weight REAL,
     weight_unit TEXT NOT NULL DEFAULT 'kg',
+    distance_unit TEXT NOT NULL DEFAULT 'km',
     reminder_enabled        INTEGER NOT NULL DEFAULT 0,
     reminder_frequency      TEXT    NOT NULL DEFAULT 'weekly',
     reminder_day_of_week    INTEGER,
@@ -36,6 +37,13 @@ CREATE TABLE exercise_entries (
     weight REAL NOT NULL,
     notes TEXT,
     rest_time INTEGER NOT NULL DEFAULT 0,
+    -- Cardio metrics (0 = not recorded). Which metric pair applies is decided
+    -- by the linked exercise's type: strength entries use reps/weight/rest_time,
+    -- cardio entries use duration_seconds/distance_meters (+ optional HR/kcal).
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    distance_meters REAL NOT NULL DEFAULT 0,
+    avg_heart_rate INTEGER NOT NULL DEFAULT 0,
+    calories_burned REAL NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id)
 );

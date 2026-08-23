@@ -139,6 +139,11 @@ func (h *Handler) APIUpdateMe(c echo.Context) error {
 		// HTML form's empty-input behavior.
 		in.WeightUnit = "kg"
 	}
+	if in.DistanceUnit == "" {
+		// Same empty-input rule as WeightUnit: the column
+		// default is "km", so an omitted field means "km".
+		in.DistanceUnit = models.DistanceUnitKm
+	}
 
 	claims := GetClaims(c)
 	user := &models.User{
@@ -148,6 +153,7 @@ func (h *Handler) APIUpdateMe(c echo.Context) error {
 		IsAdmin:      claims.IsAdmin,
 		TargetWeight: in.TargetWeight,
 		WeightUnit:   in.WeightUnit,
+		DistanceUnit: in.DistanceUnit,
 	}
 	if err := h.userRepo.UpdateUser(user); err != nil {
 		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to update profile"})
@@ -239,11 +245,28 @@ func (h *Handler) APIGetExerciseEntry(c echo.Context) error {
 	return c.JSON(http.StatusOK, ExerciseEntryFromModel(*entry))
 }
 
+// exerciseEntryValidationError reports whether err is one of the
+// controller's per-type validation sentinels and returns its
+// human-readable message. These are client mistakes (e.g. a cardio
+// set without a duration) so they map to 400 rather than 500.
+func exerciseEntryValidationError(err error) (string, bool) {
+	switch {
+	case errors.Is(err, controllers.ErrRepsRequired),
+		errors.Is(err, controllers.ErrDurationRequired),
+		errors.Is(err, controllers.ErrDistanceRequired):
+		return err.Error(), true
+	}
+	return "", false
+}
+
 // APICreateExerciseEntries handles POST /api/v1/exercise-entries.
 // Mirrors the web form's "create one or more sets at once"
 // behavior: the body contains an array of sets, and a single
 // exercise entry is created per set, all sharing the same
-// exercise, notes, and createdAt timestamp.
+// exercise, notes, and createdAt timestamp. Validation is keyed off
+// the linked exercise's type: strength sets need reps >= 1, cardio
+// sets need duration_seconds > 0 and distance_meters > 0; the server
+// zeroes whichever metric pair does not apply.
 func (h *Handler) APICreateExerciseEntries(c echo.Context) error {
 	var in CreateExerciseEntriesRequest
 	if err := c.Bind(&in); err != nil {
@@ -276,21 +299,31 @@ func (h *Handler) APICreateExerciseEntries(c echo.Context) error {
 	sets := make([]controllers.ExerciseSetInput, 0, len(in.Sets))
 	for _, s := range in.Sets {
 		sets = append(sets, controllers.ExerciseSetInput{
-			Reps:     s.Reps,
-			Weight:   s.Weight,
-			RestTime: s.RestTime,
+			Reps:            s.Reps,
+			Weight:          s.Weight,
+			RestTime:        s.RestTime,
+			DurationSeconds: s.DurationSeconds,
+			DistanceMeters:  s.DistanceMeters,
+			AvgHeartRate:    s.AvgHeartRate,
+			CaloriesBurned:  s.CaloriesBurned,
 		})
 	}
 
-	created, err := h.exerciseEntryCtrl.CreateExerciseEntries(claims.UserID, in.ExerciseID, in.Notes, createdAt, sets)
+	created, err := h.exerciseEntryCtrl.CreateExerciseEntries(claims.UserID, in.ExerciseID, exercise.Type, in.Notes, createdAt, sets)
 	if err != nil {
+		if msg, ok := exerciseEntryValidationError(err); ok {
+			return c.JSON(http.StatusBadRequest, APIError{Error: msg})
+		}
 		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to save exercise entry"})
 	}
 	return c.JSON(http.StatusCreated, ExerciseEntriesFromModels(created))
 }
 
 // APIUpdateExerciseEntry handles PUT /api/v1/exercise-entries/:id.
-// Single-set update, matching the existing HTML PUT handler.
+// Single-set update. The exercise is loaded from the request's
+// exercise_id so validation uses the linked exercise's type (and a
+// non-existent exercise id is rejected instead of silently orphaning
+// the row), then the controller applies the same type rules as create.
 func (h *Handler) APIUpdateExerciseEntry(c echo.Context) error {
 	var in UpdateExerciseEntryRequest
 	if err := c.Bind(&in); err != nil {
@@ -311,13 +344,32 @@ func (h *Handler) APIUpdateExerciseEntry(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, APIError{Error: "exercise entry not found"})
 	}
 
+	exercise, err := h.exerciseEntryCtrl.GetExerciseByID(in.ExerciseID, claims.UserID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to load exercise"})
+	}
+	if exercise == nil {
+		return c.JSON(http.StatusBadRequest, APIError{Error: "exercise not found"})
+	}
+
 	createdAt := existing.CreatedAt
 	if in.CreatedAt != nil {
 		createdAt = *in.CreatedAt
 	}
 
-	updated, err := h.exerciseEntryCtrl.UpdateExerciseEntry(id, claims.UserID, in.ExerciseID, in.Notes, in.Reps, in.Weight, in.RestTime, createdAt)
+	updated, err := h.exerciseEntryCtrl.UpdateExerciseEntry(id, claims.UserID, in.ExerciseID, exercise.Type, in.Notes, controllers.ExerciseSetInput{
+		Reps:            in.Reps,
+		Weight:          in.Weight,
+		RestTime:        in.RestTime,
+		DurationSeconds: in.DurationSeconds,
+		DistanceMeters:  in.DistanceMeters,
+		AvgHeartRate:    in.AvgHeartRate,
+		CaloriesBurned:  in.CaloriesBurned,
+	}, createdAt)
 	if err != nil {
+		if msg, ok := exerciseEntryValidationError(err); ok {
+			return c.JSON(http.StatusBadRequest, APIError{Error: msg})
+		}
 		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to update exercise entry"})
 	}
 	return c.JSON(http.StatusOK, ExerciseEntryFromModel(*updated))

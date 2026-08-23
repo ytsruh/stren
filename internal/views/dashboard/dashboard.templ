@@ -12,9 +12,10 @@ import (
 // read-only surface for exercise entries — logging happens in the
 // iOS client — so it shows recent activity, stats, and links into
 // the per-exercise history pages only.
-// weightUnit is the user's preferred unit ("kg" / "lbs") and
-// drives the per-row "Weight" column and the "Total Volume" stat.
-templ Dashboard(exerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
+// weightUnit is the user's preferred weight unit ("kg" / "lbs") and
+// distanceUnit the preferred cardio distance unit ("km" / "mi");
+// together they drive the per-row "Details" column.
+templ Dashboard(exerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string, distanceUnit string) {
 	@views.Layout(views.PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<section class="flex flex-col gap-y-4">
 			@iosAppBanner()
@@ -27,7 +28,7 @@ templ Dashboard(exerciseEntries []models.ExerciseEntry, userName string, isAuthe
 				<div class="card p-4 h-72 sm:h-80">
 					@components.DonutChart(popularExercisesChartProps(exerciseEntries))
 				</div>
-				@ExerciseEntryList(exerciseEntries, weightUnit)
+				@ExerciseEntryList(exerciseEntries, weightUnit, distanceUnit)
 			}
 		</section>
 	}
@@ -49,32 +50,32 @@ templ iosAppBanner() {
 	})
 }
 
-// ExerciseEntryList renders a table of exercise entries.
-// weightUnit is forwarded to ExerciseEntryRow so the "Weight" column is
-// labelled with whatever unit the user prefers.
-templ ExerciseEntryList(exerciseEntries []models.ExerciseEntry, weightUnit string) {
+// ExerciseEntryList renders a table of exercise entries. The metric
+// columns are collapsed into a single type-aware "Details" column so
+// strength rows ("5 × 100.0 kg") and cardio rows ("25:00 · 5.20 km")
+// can share one timeline without rendering meaningless zeros.
+templ ExerciseEntryList(exerciseEntries []models.ExerciseEntry, weightUnit string, distanceUnit string) {
 	<table class="table w-full">
 		<thead>
 			<tr>
 				<th>Date</th>
 				<th>Exercise</th>
-				<th class="hidden sm:table-cell">Reps</th>
-				<th class="hidden sm:table-cell">Weight</th>
+				<th class="hidden sm:table-cell">Details</th>
 				<th class="hidden lg:table-cell">Notes</th>
 			</tr>
 		</thead>
 		<tbody id="exercise-entries-table">
 			for _, exerciseEntry := range exerciseEntries {
-				@ExerciseEntryRow(exerciseEntry, weightUnit)
+				@ExerciseEntryRow(exerciseEntry, weightUnit, distanceUnit)
 			}
 		</tbody>
 	</table>
 }
 
 // ExerciseEntryRow renders a single exercise entry row (used for htmx swaps).
-// weightUnit is passed to exerciseEntry.FormattedWeight so the cell shows
-// the user's preferred unit instead of always "kg".
-templ ExerciseEntryRow(exerciseEntry models.ExerciseEntry, weightUnit string) {
+// weightUnit and distanceUnit are forwarded to the entry's Summary so each
+// cell is labelled with the user's preferred units.
+templ ExerciseEntryRow(exerciseEntry models.ExerciseEntry, weightUnit string, distanceUnit string) {
 	<tr id={ fmt.Sprintf("exercise-entry-%s", exerciseEntry.ID) }>
 		<td>{ exerciseEntry.FormattedDate() }</td>
 		<td>
@@ -83,8 +84,7 @@ templ ExerciseEntryRow(exerciseEntry models.ExerciseEntry, weightUnit string) {
 				{ exerciseEntry.ExerciseName }
 			</a>
 		</td>
-		<td class="hidden sm:table-cell">{ fmt.Sprintf("%d", exerciseEntry.Reps) }</td>
-		<td class="hidden sm:table-cell">{ exerciseEntry.FormattedWeight(weightUnit) }</td>
+		<td class="hidden sm:table-cell">{ exerciseEntry.Summary(weightUnit, distanceUnit) }</td>
 		<td class="hidden lg:table-cell">{ exerciseEntry.Notes }</td>
 	</tr>
 }

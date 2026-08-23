@@ -38,7 +38,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (string,
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, distance_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 WHERE email = ?
 `
@@ -54,6 +54,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.IsAdmin,
 		&i.TargetWeight,
 		&i.WeightUnit,
+		&i.DistanceUnit,
 		&i.ReminderEnabled,
 		&i.ReminderFrequency,
 		&i.ReminderDayOfWeek,
@@ -69,7 +70,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, distance_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 WHERE id = ?
 `
@@ -85,6 +86,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 		&i.IsAdmin,
 		&i.TargetWeight,
 		&i.WeightUnit,
+		&i.DistanceUnit,
 		&i.ReminderEnabled,
 		&i.ReminderFrequency,
 		&i.ReminderDayOfWeek,
@@ -100,7 +102,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, distance_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 ORDER BY created_at DESC
 `
@@ -122,6 +124,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.IsAdmin,
 			&i.TargetWeight,
 			&i.WeightUnit,
+			&i.DistanceUnit,
 			&i.ReminderEnabled,
 			&i.ReminderFrequency,
 			&i.ReminderDayOfWeek,
@@ -147,7 +150,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 }
 
 const listUsersDueForReminder = `-- name: ListUsersDueForReminder :many
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, distance_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 WHERE reminder_enabled = 1
   AND reminder_next_fire_at IS NOT NULL
@@ -176,6 +179,7 @@ func (q *Queries) ListUsersDueForReminder(ctx context.Context, reminderNextFireA
 			&i.IsAdmin,
 			&i.TargetWeight,
 			&i.WeightUnit,
+			&i.DistanceUnit,
 			&i.ReminderEnabled,
 			&i.ReminderFrequency,
 			&i.ReminderDayOfWeek,
@@ -229,6 +233,7 @@ UPDATE users
 SET name = ?,
     target_weight = ?,
     weight_unit = ?,
+    distance_unit = ?,
     updated_at = ?
 WHERE id = ?
 `
@@ -237,6 +242,7 @@ type UpdateUserParams struct {
 	Name         string
 	TargetWeight sql.NullFloat64
 	WeightUnit   string
+	DistanceUnit string
 	UpdatedAt    sql.NullTime
 	ID           string
 }
@@ -246,6 +252,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
 		arg.Name,
 		arg.TargetWeight,
 		arg.WeightUnit,
+		arg.DistanceUnit,
 		arg.UpdatedAt,
 		arg.ID,
 	)

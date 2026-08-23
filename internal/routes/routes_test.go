@@ -48,6 +48,8 @@ type mockRepository struct {
 	errGetExerciseEntriesByDateRange        error
 	errGetExerciseByID              error
 	errGetMaxWeightByExercise       error
+	errGetBestPaceByExercise        error
+	errGetLongestDistanceByExercise error
 	errGetLastSetByExercise         error
 }
 
@@ -182,6 +184,15 @@ func (m *mockRepository) CreateExerciseEntry(entry *models.ExerciseEntry) error 
 		exerciseID = "ex-" + entry.ExerciseName
 		m.exercises = append(m.exercises, models.Exercise{ID: exerciseID, Name: entry.ExerciseName})
 	}
+	// Mirror the real repository's JOIN: the persisted row carries the
+	// linked exercise's name and type so responses can branch on type.
+	for _, e := range m.exercises {
+		if e.ID == entry.ExerciseID {
+			entry.ExerciseName = e.Name
+			entry.ExerciseType = e.Type
+			break
+		}
+	}
 	entry.ExerciseID = exerciseID
 	entry.ID = "entry-" + entry.ExerciseName
 	m.exerciseEntries = append(m.exerciseEntries, *entry)
@@ -301,6 +312,39 @@ func (m *mockRepository) GetMaxWeightByExercise(exerciseID string, userID string
 		}
 	}
 	return max, nil
+}
+
+func (m *mockRepository) GetBestPaceByExercise(exerciseID string, userID string) (float64, error) {
+	if m.errGetBestPaceByExercise != nil {
+		return 0, m.errGetBestPaceByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	best := 0.0
+	for _, e := range m.exerciseEntries {
+		if e.ExerciseID != exerciseID || e.UserID != userID {
+			continue
+		}
+		if pace := e.PaceSecPerKm(); pace > 0 && (best == 0 || pace < best) {
+			best = pace
+		}
+	}
+	return best, nil
+}
+
+func (m *mockRepository) GetLongestDistanceByExercise(exerciseID string, userID string) (float64, error) {
+	if m.errGetLongestDistanceByExercise != nil {
+		return 0, m.errGetLongestDistanceByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var longest float64
+	for _, e := range m.exerciseEntries {
+		if e.ExerciseID == exerciseID && e.UserID == userID && e.DistanceMeters > longest {
+			longest = e.DistanceMeters
+		}
+	}
+	return longest, nil
 }
 
 func (m *mockRepository) GetLastSetByExercise(exerciseID string, userID string) (*models.ExerciseEntry, error) {

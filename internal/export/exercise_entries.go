@@ -30,16 +30,18 @@ import (
 // the resulting files are deterministic regardless of repository
 // order, mirroring BuildWeightZip.
 //
-// weightUnit is the user's preferred display unit ("kg" or "lbs").
-// The DB stores weights as a unit-agnostic number, so the CSV's
-// `weight` column is written verbatim and `weight_unit` records the
-// passed value on every row so the file is self-describing when
-// opened in a spreadsheet.
+// weightUnit and distanceUnit are the user's preferred display units
+// ("kg"/"lbs" and "km"/"mi"). The DB stores weights as a unit-agnostic
+// number and distances in metres, so the CSV's `weight` column is
+// written verbatim with `weight_unit` recording the passed value, while
+// `distance_km` converts metres to kilometres for readability. Cardio
+// metric columns are 0 on strength rows and vice versa, matching the
+// server-side normalization; `exercise_type` tells the two apart.
 //
 // ctx is unused today but is kept first in the signature for parity
 // with BuildWeightZip (whose photo fetches take it) so callers can
 // treat both builders identically.
-func BuildExerciseEntriesZip(ctx context.Context, w io.Writer, entries []models.ExerciseEntry, userID string, weightUnit string) (Result, error) {
+func BuildExerciseEntriesZip(ctx context.Context, w io.Writer, entries []models.ExerciseEntry, userID string, weightUnit string, distanceUnit string) (Result, error) {
 	// Sort a copy so the caller's slice is untouched.
 	sorted := make([]models.ExerciseEntry, len(entries))
 	copy(sorted, entries)
@@ -62,23 +64,35 @@ func BuildExerciseEntriesZip(ctx context.Context, w io.Writer, entries []models.
 	}
 	cw := csv.NewWriter(csvBody)
 	if err := cw.Write([]string{
-		"id", "created_at", "date", "exercise_id", "exercise_name",
-		"reps", "weight", "weight_unit", "rest_time_seconds", "notes",
+		"id", "created_at", "date", "exercise_id", "exercise_name", "exercise_type",
+		"reps", "weight", "weight_unit", "rest_time_seconds",
+		"duration_seconds", "distance_km", "avg_heart_rate_bpm", "calories_burned", "pace_sec_per_km",
+		"notes",
 	}); err != nil {
 		_ = zw.Close()
 		return result, fmt.Errorf("export: write csv header: %w", err)
 	}
 	for _, e := range sorted {
+		pace := ""
+		if p := e.PaceSecPerKm(); p > 0 {
+			pace = strconv.FormatFloat(p, 'f', 2, 64)
+		}
 		if err := cw.Write([]string{
 			e.ID,
 			e.CreatedAt.UTC().Format(time.RFC3339),
 			e.CreatedAt.UTC().Format("2006-01-02"),
 			e.ExerciseID,
 			e.ExerciseName,
+			string(e.ExerciseType),
 			strconv.Itoa(e.Reps),
 			fmt.Sprintf("%.1f", e.Weight),
 			weightUnit,
 			strconv.Itoa(e.RestTime),
+			strconv.Itoa(e.DurationSeconds),
+			fmt.Sprintf("%.3f", e.DistanceMeters/1000.0),
+			strconv.Itoa(e.AvgHeartRate),
+			fmt.Sprintf("%.1f", e.CaloriesBurned),
+			pace,
 			e.Notes,
 		}); err != nil {
 			_ = zw.Close()

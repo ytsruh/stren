@@ -11,20 +11,24 @@ import (
 )
 
 const createExerciseEntry = `-- name: CreateExerciseEntry :one
-INSERT INTO exercise_entries (id, exercise_id, user_id, reps, weight, notes, rest_time, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO exercise_entries (id, exercise_id, user_id, reps, weight, notes, rest_time, duration_seconds, distance_meters, avg_heart_rate, calories_burned, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type CreateExerciseEntryParams struct {
-	ID         string
-	ExerciseID string
-	UserID     sql.NullString
-	Reps       int64
-	Weight     float64
-	Notes      sql.NullString
-	RestTime   int64
-	CreatedAt  sql.NullTime
+	ID              string
+	ExerciseID      string
+	UserID          sql.NullString
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
 }
 
 func (q *Queries) CreateExerciseEntry(ctx context.Context, arg CreateExerciseEntryParams) (string, error) {
@@ -36,6 +40,10 @@ func (q *Queries) CreateExerciseEntry(ctx context.Context, arg CreateExerciseEnt
 		arg.Weight,
 		arg.Notes,
 		arg.RestTime,
+		arg.DurationSeconds,
+		arg.DistanceMeters,
+		arg.AvgHeartRate,
+		arg.CaloriesBurned,
 		arg.CreatedAt,
 	)
 	var id string
@@ -57,8 +65,28 @@ func (q *Queries) DeleteExerciseEntry(ctx context.Context, arg DeleteExerciseEnt
 	return err
 }
 
+const getBestPaceByExercise = `-- name: GetBestPaceByExercise :one
+SELECT CAST(COALESCE(MIN(duration_seconds * 1000.0 / distance_meters), 0) AS REAL) FROM exercise_entries
+WHERE exercise_id = ? AND user_id = ? AND distance_meters > 0 AND duration_seconds > 0
+`
+
+type GetBestPaceByExerciseParams struct {
+	ExerciseID string
+	UserID     sql.NullString
+}
+
+// Fastest pace in seconds per kilometre across a user's cardio exercise entries
+// (duration divided by distance). Entries without distance are excluded;
+// returns 0 when no qualifying exercise entries exist.
+func (q *Queries) GetBestPaceByExercise(ctx context.Context, arg GetBestPaceByExerciseParams) (float64, error) {
+	row := q.db.QueryRowContext(ctx, getBestPaceByExercise, arg.ExerciseID, arg.UserID)
+	var column_1 float64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getExerciseEntriesByDateRange = `-- name: GetExerciseEntriesByDateRange :many
-SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
+SELECT e.id, e.exercise_id, t.name as exercise_name, t.type as exercise_type, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.duration_seconds, e.distance_meters, e.avg_heart_rate, e.calories_burned, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.created_at BETWEEN ? AND ? AND e.user_id = ?
@@ -72,15 +100,20 @@ type GetExerciseEntriesByDateRangeParams struct {
 }
 
 type GetExerciseEntriesByDateRangeRow struct {
-	ID           string
-	ExerciseID   string
-	ExerciseName string
-	UserID       sql.NullString
-	Reps         int64
-	Weight       float64
-	Notes        sql.NullString
-	RestTime     int64
-	CreatedAt    sql.NullTime
+	ID              string
+	ExerciseID      string
+	ExerciseName    string
+	ExerciseType    string
+	UserID          sql.NullString
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
 }
 
 func (q *Queries) GetExerciseEntriesByDateRange(ctx context.Context, arg GetExerciseEntriesByDateRangeParams) ([]GetExerciseEntriesByDateRangeRow, error) {
@@ -96,11 +129,16 @@ func (q *Queries) GetExerciseEntriesByDateRange(ctx context.Context, arg GetExer
 			&i.ID,
 			&i.ExerciseID,
 			&i.ExerciseName,
+			&i.ExerciseType,
 			&i.UserID,
 			&i.Reps,
 			&i.Weight,
 			&i.Notes,
 			&i.RestTime,
+			&i.DurationSeconds,
+			&i.DistanceMeters,
+			&i.AvgHeartRate,
+			&i.CaloriesBurned,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -117,7 +155,7 @@ func (q *Queries) GetExerciseEntriesByDateRange(ctx context.Context, arg GetExer
 }
 
 const getExerciseEntriesByExercisePaginated = `-- name: GetExerciseEntriesByExercisePaginated :many
-SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
+SELECT e.id, e.exercise_id, t.name as exercise_name, t.type as exercise_type, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.duration_seconds, e.distance_meters, e.avg_heart_rate, e.calories_burned, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.exercise_id = ? AND e.user_id = ?
@@ -133,15 +171,20 @@ type GetExerciseEntriesByExercisePaginatedParams struct {
 }
 
 type GetExerciseEntriesByExercisePaginatedRow struct {
-	ID           string
-	ExerciseID   string
-	ExerciseName string
-	UserID       sql.NullString
-	Reps         int64
-	Weight       float64
-	Notes        sql.NullString
-	RestTime     int64
-	CreatedAt    sql.NullTime
+	ID              string
+	ExerciseID      string
+	ExerciseName    string
+	ExerciseType    string
+	UserID          sql.NullString
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
 }
 
 func (q *Queries) GetExerciseEntriesByExercisePaginated(ctx context.Context, arg GetExerciseEntriesByExercisePaginatedParams) ([]GetExerciseEntriesByExercisePaginatedRow, error) {
@@ -162,11 +205,16 @@ func (q *Queries) GetExerciseEntriesByExercisePaginated(ctx context.Context, arg
 			&i.ID,
 			&i.ExerciseID,
 			&i.ExerciseName,
+			&i.ExerciseType,
 			&i.UserID,
 			&i.Reps,
 			&i.Weight,
 			&i.Notes,
 			&i.RestTime,
+			&i.DurationSeconds,
+			&i.DistanceMeters,
+			&i.AvgHeartRate,
+			&i.CaloriesBurned,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -183,7 +231,7 @@ func (q *Queries) GetExerciseEntriesByExercisePaginated(ctx context.Context, arg
 }
 
 const getExerciseEntry = `-- name: GetExerciseEntry :one
-SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
+SELECT e.id, e.exercise_id, t.name as exercise_name, t.type as exercise_type, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.duration_seconds, e.distance_meters, e.avg_heart_rate, e.calories_burned, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.id = ? AND e.user_id = ?
@@ -195,15 +243,20 @@ type GetExerciseEntryParams struct {
 }
 
 type GetExerciseEntryRow struct {
-	ID           string
-	ExerciseID   string
-	ExerciseName string
-	UserID       sql.NullString
-	Reps         int64
-	Weight       float64
-	Notes        sql.NullString
-	RestTime     int64
-	CreatedAt    sql.NullTime
+	ID              string
+	ExerciseID      string
+	ExerciseName    string
+	ExerciseType    string
+	UserID          sql.NullString
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
 }
 
 func (q *Queries) GetExerciseEntry(ctx context.Context, arg GetExerciseEntryParams) (GetExerciseEntryRow, error) {
@@ -213,18 +266,23 @@ func (q *Queries) GetExerciseEntry(ctx context.Context, arg GetExerciseEntryPara
 		&i.ID,
 		&i.ExerciseID,
 		&i.ExerciseName,
+		&i.ExerciseType,
 		&i.UserID,
 		&i.Reps,
 		&i.Weight,
 		&i.Notes,
 		&i.RestTime,
+		&i.DurationSeconds,
+		&i.DistanceMeters,
+		&i.AvgHeartRate,
+		&i.CaloriesBurned,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getLastSetByExercise = `-- name: GetLastSetByExercise :one
-SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
+SELECT e.id, e.exercise_id, t.name as exercise_name, t.type as exercise_type, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.duration_seconds, e.distance_meters, e.avg_heart_rate, e.calories_burned, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.exercise_id = ? AND e.user_id = ?
@@ -238,15 +296,20 @@ type GetLastSetByExerciseParams struct {
 }
 
 type GetLastSetByExerciseRow struct {
-	ID           string
-	ExerciseID   string
-	ExerciseName string
-	UserID       sql.NullString
-	Reps         int64
-	Weight       float64
-	Notes        sql.NullString
-	RestTime     int64
-	CreatedAt    sql.NullTime
+	ID              string
+	ExerciseID      string
+	ExerciseName    string
+	ExerciseType    string
+	UserID          sql.NullString
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
 }
 
 func (q *Queries) GetLastSetByExercise(ctx context.Context, arg GetLastSetByExerciseParams) (GetLastSetByExerciseRow, error) {
@@ -256,14 +319,37 @@ func (q *Queries) GetLastSetByExercise(ctx context.Context, arg GetLastSetByExer
 		&i.ID,
 		&i.ExerciseID,
 		&i.ExerciseName,
+		&i.ExerciseType,
 		&i.UserID,
 		&i.Reps,
 		&i.Weight,
 		&i.Notes,
 		&i.RestTime,
+		&i.DurationSeconds,
+		&i.DistanceMeters,
+		&i.AvgHeartRate,
+		&i.CaloriesBurned,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getLongestDistanceByExercise = `-- name: GetLongestDistanceByExercise :one
+SELECT CAST(COALESCE(MAX(distance_meters), 0) AS REAL) FROM exercise_entries
+WHERE exercise_id = ? AND user_id = ?
+`
+
+type GetLongestDistanceByExerciseParams struct {
+	ExerciseID string
+	UserID     sql.NullString
+}
+
+// Longest distance in metres logged for an exercise. Returns 0 when no exercise entries exist.
+func (q *Queries) GetLongestDistanceByExercise(ctx context.Context, arg GetLongestDistanceByExerciseParams) (float64, error) {
+	row := q.db.QueryRowContext(ctx, getLongestDistanceByExercise, arg.ExerciseID, arg.UserID)
+	var column_1 float64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getMaxWeightByExercise = `-- name: GetMaxWeightByExercise :one
@@ -276,6 +362,7 @@ type GetMaxWeightByExerciseParams struct {
 	UserID     sql.NullString
 }
 
+// Heaviest weight logged for a strength exercise. Returns 0 when no exercise entries exist.
 func (q *Queries) GetMaxWeightByExercise(ctx context.Context, arg GetMaxWeightByExerciseParams) (float64, error) {
 	row := q.db.QueryRowContext(ctx, getMaxWeightByExercise, arg.ExerciseID, arg.UserID)
 	var column_1 float64
@@ -284,7 +371,7 @@ func (q *Queries) GetMaxWeightByExercise(ctx context.Context, arg GetMaxWeightBy
 }
 
 const listExerciseEntries = `-- name: ListExerciseEntries :many
-SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
+SELECT e.id, e.exercise_id, t.name as exercise_name, t.type as exercise_type, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.duration_seconds, e.distance_meters, e.avg_heart_rate, e.calories_burned, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.user_id = ?
@@ -292,15 +379,20 @@ ORDER BY e.created_at DESC
 `
 
 type ListExerciseEntriesRow struct {
-	ID           string
-	ExerciseID   string
-	ExerciseName string
-	UserID       sql.NullString
-	Reps         int64
-	Weight       float64
-	Notes        sql.NullString
-	RestTime     int64
-	CreatedAt    sql.NullTime
+	ID              string
+	ExerciseID      string
+	ExerciseName    string
+	ExerciseType    string
+	UserID          sql.NullString
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
 }
 
 func (q *Queries) ListExerciseEntries(ctx context.Context, userID sql.NullString) ([]ListExerciseEntriesRow, error) {
@@ -316,11 +408,16 @@ func (q *Queries) ListExerciseEntries(ctx context.Context, userID sql.NullString
 			&i.ID,
 			&i.ExerciseID,
 			&i.ExerciseName,
+			&i.ExerciseType,
 			&i.UserID,
 			&i.Reps,
 			&i.Weight,
 			&i.Notes,
 			&i.RestTime,
+			&i.DurationSeconds,
+			&i.DistanceMeters,
+			&i.AvgHeartRate,
+			&i.CaloriesBurned,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -337,7 +434,7 @@ func (q *Queries) ListExerciseEntries(ctx context.Context, userID sql.NullString
 }
 
 const listExerciseEntriesLast7Days = `-- name: ListExerciseEntriesLast7Days :many
-SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
+SELECT e.id, e.exercise_id, t.name as exercise_name, t.type as exercise_type, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.duration_seconds, e.distance_meters, e.avg_heart_rate, e.calories_burned, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.created_at >= datetime('now', '-7 days') AND e.user_id = ?
@@ -345,15 +442,20 @@ ORDER BY e.created_at DESC
 `
 
 type ListExerciseEntriesLast7DaysRow struct {
-	ID           string
-	ExerciseID   string
-	ExerciseName string
-	UserID       sql.NullString
-	Reps         int64
-	Weight       float64
-	Notes        sql.NullString
-	RestTime     int64
-	CreatedAt    sql.NullTime
+	ID              string
+	ExerciseID      string
+	ExerciseName    string
+	ExerciseType    string
+	UserID          sql.NullString
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
 }
 
 func (q *Queries) ListExerciseEntriesLast7Days(ctx context.Context, userID sql.NullString) ([]ListExerciseEntriesLast7DaysRow, error) {
@@ -369,11 +471,16 @@ func (q *Queries) ListExerciseEntriesLast7Days(ctx context.Context, userID sql.N
 			&i.ID,
 			&i.ExerciseID,
 			&i.ExerciseName,
+			&i.ExerciseType,
 			&i.UserID,
 			&i.Reps,
 			&i.Weight,
 			&i.Notes,
 			&i.RestTime,
+			&i.DurationSeconds,
+			&i.DistanceMeters,
+			&i.AvgHeartRate,
+			&i.CaloriesBurned,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -390,7 +497,7 @@ func (q *Queries) ListExerciseEntriesLast7Days(ctx context.Context, userID sql.N
 }
 
 const listExerciseEntriesWithLimit = `-- name: ListExerciseEntriesWithLimit :many
-SELECT e.id, e.exercise_id, t.name as exercise_name, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.created_at
+SELECT e.id, e.exercise_id, t.name as exercise_name, t.type as exercise_type, e.user_id, e.reps, e.weight, e.notes, e.rest_time, e.duration_seconds, e.distance_meters, e.avg_heart_rate, e.calories_burned, e.created_at
 FROM exercise_entries e
 JOIN exercises t ON e.exercise_id = t.id
 WHERE e.user_id = ?
@@ -404,15 +511,20 @@ type ListExerciseEntriesWithLimitParams struct {
 }
 
 type ListExerciseEntriesWithLimitRow struct {
-	ID           string
-	ExerciseID   string
-	ExerciseName string
-	UserID       sql.NullString
-	Reps         int64
-	Weight       float64
-	Notes        sql.NullString
-	RestTime     int64
-	CreatedAt    sql.NullTime
+	ID              string
+	ExerciseID      string
+	ExerciseName    string
+	ExerciseType    string
+	UserID          sql.NullString
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
 }
 
 func (q *Queries) ListExerciseEntriesWithLimit(ctx context.Context, arg ListExerciseEntriesWithLimitParams) ([]ListExerciseEntriesWithLimitRow, error) {
@@ -428,11 +540,16 @@ func (q *Queries) ListExerciseEntriesWithLimit(ctx context.Context, arg ListExer
 			&i.ID,
 			&i.ExerciseID,
 			&i.ExerciseName,
+			&i.ExerciseType,
 			&i.UserID,
 			&i.Reps,
 			&i.Weight,
 			&i.Notes,
 			&i.RestTime,
+			&i.DurationSeconds,
+			&i.DistanceMeters,
+			&i.AvgHeartRate,
+			&i.CaloriesBurned,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -450,18 +567,22 @@ func (q *Queries) ListExerciseEntriesWithLimit(ctx context.Context, arg ListExer
 
 const updateExerciseEntry = `-- name: UpdateExerciseEntry :exec
 UPDATE exercise_entries
-SET exercise_id = ?, reps = ?, weight = ?, notes = ?, rest_time = ?
+SET exercise_id = ?, reps = ?, weight = ?, notes = ?, rest_time = ?, duration_seconds = ?, distance_meters = ?, avg_heart_rate = ?, calories_burned = ?
 WHERE id = ? AND user_id = ?
 `
 
 type UpdateExerciseEntryParams struct {
-	ExerciseID string
-	Reps       int64
-	Weight     float64
-	Notes      sql.NullString
-	RestTime   int64
-	ID         string
-	UserID     sql.NullString
+	ExerciseID      string
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	ID              string
+	UserID          sql.NullString
 }
 
 func (q *Queries) UpdateExerciseEntry(ctx context.Context, arg UpdateExerciseEntryParams) error {
@@ -471,6 +592,10 @@ func (q *Queries) UpdateExerciseEntry(ctx context.Context, arg UpdateExerciseEnt
 		arg.Weight,
 		arg.Notes,
 		arg.RestTime,
+		arg.DurationSeconds,
+		arg.DistanceMeters,
+		arg.AvgHeartRate,
+		arg.CaloriesBurned,
 		arg.ID,
 		arg.UserID,
 	)
@@ -479,19 +604,23 @@ func (q *Queries) UpdateExerciseEntry(ctx context.Context, arg UpdateExerciseEnt
 
 const updateExerciseEntryWithDate = `-- name: UpdateExerciseEntryWithDate :exec
 UPDATE exercise_entries
-SET exercise_id = ?, reps = ?, weight = ?, notes = ?, rest_time = ?, created_at = ?
+SET exercise_id = ?, reps = ?, weight = ?, notes = ?, rest_time = ?, duration_seconds = ?, distance_meters = ?, avg_heart_rate = ?, calories_burned = ?, created_at = ?
 WHERE id = ? AND user_id = ?
 `
 
 type UpdateExerciseEntryWithDateParams struct {
-	ExerciseID string
-	Reps       int64
-	Weight     float64
-	Notes      sql.NullString
-	RestTime   int64
-	CreatedAt  sql.NullTime
-	ID         string
-	UserID     sql.NullString
+	ExerciseID      string
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
+	ID              string
+	UserID          sql.NullString
 }
 
 func (q *Queries) UpdateExerciseEntryWithDate(ctx context.Context, arg UpdateExerciseEntryWithDateParams) error {
@@ -501,6 +630,10 @@ func (q *Queries) UpdateExerciseEntryWithDate(ctx context.Context, arg UpdateExe
 		arg.Weight,
 		arg.Notes,
 		arg.RestTime,
+		arg.DurationSeconds,
+		arg.DistanceMeters,
+		arg.AvgHeartRate,
+		arg.CaloriesBurned,
 		arg.CreatedAt,
 		arg.ID,
 		arg.UserID,

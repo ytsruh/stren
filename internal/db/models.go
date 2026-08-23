@@ -30,14 +30,18 @@ type Exercise struct {
 }
 
 type ExerciseEntry struct {
-	ID         string
-	ExerciseID string
-	UserID     sql.NullString
-	Reps       int64
-	Weight     float64
-	Notes      sql.NullString
-	RestTime   int64
-	CreatedAt  sql.NullTime
+	ID              string
+	ExerciseID      string
+	UserID          sql.NullString
+	Reps            int64
+	Weight          float64
+	Notes           sql.NullString
+	RestTime        int64
+	DurationSeconds int64
+	DistanceMeters  float64
+	AvgHeartRate    int64
+	CaloriesBurned  float64
+	CreatedAt       sql.NullTime
 }
 
 type Feedback struct {
@@ -81,6 +85,7 @@ type User struct {
 	IsAdmin              int64
 	TargetWeight         sql.NullFloat64
 	WeightUnit           string
+	DistanceUnit         string
 	ReminderEnabled      int64
 	ReminderFrequency    string
 	ReminderDayOfWeek    sql.NullInt64

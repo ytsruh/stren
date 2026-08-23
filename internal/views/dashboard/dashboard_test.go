@@ -190,7 +190,7 @@ func TestDashboard_WithEntries(t *testing.T) {
 	entries := []models.ExerciseEntry{
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 	}
-	html := renderToString(t, Dashboard(entries, "Test User", true, false, "kg"))
+	html := renderToString(t, Dashboard(entries, "Test User", true, false, "kg", "km"))
 	if !strings.Contains(html, "7 Day History") {
 		t.Error("expected page title")
 	}
@@ -211,7 +211,7 @@ func TestDashboard_WithEntries(t *testing.T) {
 }
 
 func TestDashboard_Empty(t *testing.T) {
-	html := renderToString(t, Dashboard([]models.ExerciseEntry{}, "Test User", true, false, "kg"))
+	html := renderToString(t, Dashboard([]models.ExerciseEntry{}, "Test User", true, false, "kg", "km"))
 	if !strings.Contains(html, "No workouts in the last 7 days") {
 		t.Error("expected empty state when no entries")
 	}
@@ -227,7 +227,7 @@ func TestEntryList(t *testing.T) {
 		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 		{ID: "entry-2", ExerciseName: "Bench Press", Reps: 8, Weight: 80},
 	}
-	html := renderToString(t, ExerciseEntryList(entries, "kg"))
+	html := renderToString(t, ExerciseEntryList(entries, "kg", "km"))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected Squat in output")
 	}
@@ -248,7 +248,7 @@ func TestEntryRow(t *testing.T) {
 		Notes:        "PR",
 		CreatedAt:    time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
 	}
-	html := renderToString(t, ExerciseEntryRow(entry, "kg"))
+	html := renderToString(t, ExerciseEntryRow(entry, "kg", "km"))
 	if !strings.Contains(html, "Deadlift") {
 		t.Error("expected exercise name")
 	}
@@ -285,4 +285,21 @@ func TestStatCard(t *testing.T) {
 // already promises.
 func floatSliceEqual(a, b []float64) bool {
 	return reflect.DeepEqual(a, b)
+}
+
+// TestDashboard_CardioRow verifies cardio entries render a
+// duration · distance summary in the Details column instead of the
+// strength "reps × weight" pair.
+func TestDashboard_CardioRow(t *testing.T) {
+	entries := []models.ExerciseEntry{
+		{ID: "entry-1", ExerciseName: "Run", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1500, DistanceMeters: 5000, CreatedAt: time.Now()},
+		{ID: "entry-2", ExerciseName: "Squat", ExerciseType: models.ExerciseTypeStrength, Reps: 5, Weight: 100, CreatedAt: time.Now()},
+	}
+	html := renderToString(t, Dashboard(entries, "Test User", true, false, "kg", "mi"))
+	if !strings.Contains(html, "25:00 · 3.11 mi") {
+		t.Error("expected cardio row summary '25:00 · 3.11 mi' (user prefers miles)")
+	}
+	if !strings.Contains(html, "5 × 100.0 kg") {
+		t.Error("expected strength row summary '5 × 100.0 kg'")
+	}
 }

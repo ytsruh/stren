@@ -27,7 +27,10 @@ const exerciseNavActiveAdvanced = "advanced"
 // aria-current="page" (mirroring the convention used by Layout's sidebar
 // nav and HistoryTable's page indicator) so screen readers and styling
 // hooks have a consistent way to identify the current sub-view.
-templ ExerciseNav(exerciseID string, active string) {
+//
+// The Advanced (reps-vs-weight scatter) link is only rendered for
+// non-cardio exercises — the scatter's axes are strength-specific.
+templ ExerciseNav(exerciseID string, exerciseType models.ExerciseType, active string) {
 	<div class="flex justify-center mb-6">
 		<div role="group" class="button-group" aria-label="Exercise views">
 			<a
@@ -53,17 +56,19 @@ templ ExerciseNav(exerciseID string, active string) {
 			>
 				Chart
 			</a>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/chart/advanced", exerciseID)) }
-				if active == exerciseNavActiveAdvanced {
-					class="btn"
-					aria-current="page"
-				} else {
-					class="btn-outline"
-				}
-			>
-				Advanced
-			</a>
+			if exerciseType != models.ExerciseTypeCardio {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/exercises/%s/chart/advanced", exerciseID)) }
+					if active == exerciseNavActiveAdvanced {
+						class="btn"
+						aria-current="page"
+					} else {
+						class="btn-outline"
+					}
+				>
+					Advanced
+				</a>
+			}
 		</div>
 	</div>
 }
@@ -71,26 +76,33 @@ templ ExerciseNav(exerciseID string, active string) {
 // ExerciseChart renders the dedicated chart view for a single exercise:
 // a full-width line chart of the user's full workout history for that
 // exercise. The view uses the shared Layout and the centered ExerciseNav
-// so the user can switch to the History or Advanced sub-views.
+// so the user can switch to the History sub-view (and Advanced, for
+// strength exercises).
 //
 // chartExerciseEntries is the user's full set of exercise entries for the
 // exercise, fed by ExerciseEntryController.GetAllExerciseEntriesForChart.
-// The view aggregates to "heaviest weight per calendar day" and plots it
-// as a single line. When there are fewer than 2 unique days, a friendly
-// empty-state message is rendered in place of the chart.
+// The view aggregates to one point per calendar day — heaviest weight for
+// strength, fastest pace for cardio — before plotting. When there are
+// fewer than 2 unique days, a friendly empty-state message is rendered in
+// place of the chart.
 //
-// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
-// dataset label so the chart legend matches the user's setting.
-templ ExerciseChart(exercise *models.Exercise, chartExerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
+// weightUnit and distanceUnit drive the dataset label so the legend
+// matches the user's settings; the exercise's type decides which metric
+// is plotted.
+templ ExerciseChart(exercise *models.Exercise, chartExerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string, distanceUnit string) {
 	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		@ExerciseNav(exercise.ID, exerciseNavActiveChart)
+		@ExerciseNav(exercise.ID, exercise.Type, exerciseNavActiveChart)
 		<header class="mb-4">
-			<h1 class="text-xl font-semibold">{ exercise.Name } Progression</h1>
+			if exercise.Type == models.ExerciseTypeCardio {
+				<h1 class="text-xl font-semibold">{ exercise.Name } Pace Progression</h1>
+			} else {
+				<h1 class="text-xl font-semibold">{ exercise.Name } Progression</h1>
+			}
 		</header>
 		<div class="card p-4">
 			if chartHasEnoughData(chartExerciseEntries) {
 				<div class="h-[60vh] min-h-96">
-					@components.Chart(chartDataForExerciseFull(chartExerciseEntries, exercise.Name, "Max weight per training day", weightUnit))
+					@components.Chart(chartDataForExerciseFull(chartExerciseEntries, exercise.Name, exercise.Type, weightUnit, distanceUnit))
 				</div>
 			} else {
 				<p class="text-muted-foreground text-center py-12">
@@ -108,32 +120,38 @@ templ ExerciseChart(exercise *models.Exercise, chartExerciseEntries []models.Exe
 // Layout and the centered ExerciseNav so the user can switch to the
 // History or Chart sub-views.
 //
-// chartExerciseEntries is the user's full set of exercise entries for the
-// exercise, fed by ExerciseEntryController.GetAllExerciseEntriesForChart.
-// Unlike the line chart, this view does not aggregate — overlapping
-// (reps, weight) points are rendered as separate translucent dots so no
-// set is hidden. With fewer than 2 exercise entries the view shows a
-// short empty-state message instead of a chart.
+// Cardio exercises never reach the scatter: their entries carry duration
+// and distance rather than reps and weight, so a cardio visit renders a
+// short explanation in place of the chart. The nav hides the Advanced
+// button for cardio too — this branch only guards direct URL access.
 //
-// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
-// y-axis label.
+// weightUnit drives the strength scatter's y-axis label.
 templ ExerciseChartAdvanced(exercise *models.Exercise, chartExerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: exercise.Name, UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		@ExerciseNav(exercise.ID, exerciseNavActiveAdvanced)
-		<header class="mb-4">
-			<h1 class="text-xl font-semibold">{ exercise.Name } Volume</h1>
-		</header>
-		<div class="card p-4">
-			if chartScatterHasEnoughData(chartExerciseEntries) {
-				<div class="h-[60vh] min-h-96">
-					@components.ScatterChart(chartDataForExerciseScatter(chartExerciseEntries, exercise.Name, "Every set plotted by reps and weight", weightUnit))
-				</div>
-			} else {
-				<p class="text-muted-foreground text-center py-12">
-					Log at least 2 sets to see your volume profile.
-				</p>
-			}
-		</div>
+		@ExerciseNav(exercise.ID, exercise.Type, exerciseNavActiveAdvanced)
+		if exercise.Type == models.ExerciseTypeCardio {
+			<header class="mb-4">
+				<h1 class="text-xl font-semibold">{ exercise.Name }</h1>
+			</header>
+			<p class="text-muted-foreground text-center py-12">
+				The advanced volume view is available for strength exercises only — cardio progress lives on the Chart tab.
+			</p>
+		} else {
+			<header class="mb-4">
+				<h1 class="text-xl font-semibold">{ exercise.Name } Volume</h1>
+			</header>
+			<div class="card p-4">
+				if chartScatterHasEnoughData(chartExerciseEntries) {
+					<div class="h-[60vh] min-h-96">
+						@components.ScatterChart(chartDataForExerciseScatter(chartExerciseEntries, exercise.Name, "Every set plotted by reps and weight", weightUnit))
+					</div>
+				} else {
+					<p class="text-muted-foreground text-center py-12">
+						Log at least 2 sets to see your volume profile.
+					</p>
+				}
+			</div>
+		}
 	}
 }
 
@@ -161,9 +179,10 @@ func chartScatterHasEnoughData(exerciseEntries []models.ExerciseEntry) bool {
 // chartDataForExerciseFull aggregates a user's full exercise entry set for
 // a single exercise into the Chart.js line/area series used by the
 // dedicated /chart view. Exercise entries are grouped by calendar day and
-// reduced to the heaviest weight of that day, so the line reads as a
-// PR-over-time view rather than a noisy per-set series. Days are sorted
-// ascending so the line runs left-to-right.
+// reduced to one point per day — heaviest weight for strength exercises,
+// fastest pace (seconds per kilometre) for cardio exercises — so the line
+// reads as a PR-over-time view rather than a noisy per-set series. Days
+// are sorted ascending so the line runs left-to-right.
 //
 // Unlike the small chart on the History view (see chartDataForExercise
 // in history.templ), this helper:
@@ -174,17 +193,24 @@ func chartScatterHasEnoughData(exerciseEntries []models.ExerciseEntry) bool {
 //   - does NOT hide the axis tick labels — the full-width layout has
 //     room to render them legibly
 //
-// weightUnit is the user's preferred unit ("kg" / "lbs") and drives the
-// dataset label.
-func chartDataForExerciseFull(exerciseEntries []models.ExerciseEntry, exerciseName string, chartTitle string, weightUnit string) components.ChartProps {
-	days := aggregateExerciseEntriesByDay(exerciseEntries)
+// weightUnit and distanceUnit drive the dataset label; exerciseType
+// decides which metric is plotted.
+func chartDataForExerciseFull(exerciseEntries []models.ExerciseEntry, exerciseName string, exerciseType models.ExerciseType, weightUnit string, distanceUnit string) components.ChartProps {
+	var days []chartDay
+	title := "Max weight per training day"
+	if exerciseType == models.ExerciseTypeCardio {
+		days = aggregateExerciseEntriesPaceByDay(exerciseEntries)
+		title = "Fastest pace per training day"
+	} else {
+		days = aggregateExerciseEntriesByDay(exerciseEntries)
+	}
 	labels, values := dayLabelsAndValues(days, "02 Jan")
 	return components.ChartProps{
 		ID:     "exercise-chart",
-		Title:  chartTitle,
+		Title:  title,
 		Labels: labels,
 		Datasets: []components.ChartDataset{
-			{Label: fmt.Sprintf("%s (%s)", exerciseName, weightUnit), Values: values},
+			{Label: chartDatasetLabel(exerciseName, exerciseType, weightUnit, distanceUnit), Values: values},
 		},
 	}
 }

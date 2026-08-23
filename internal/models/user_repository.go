@@ -95,7 +95,8 @@ func (r *UserRepository) GetUserByID(id string) (*User, error) {
 	return mapUser(row), nil
 }
 
-// UpdateUser updates an existing user's name, target weight, and weight unit.
+// UpdateUser updates an existing user's name, target weight, weight unit, and
+// distance unit.
 // The target weight is written as NULL when the user has cleared their goal,
 // so the form can be reset by submitting an empty input.
 func (r *UserRepository) UpdateUser(user *User) error {
@@ -104,6 +105,7 @@ func (r *UserRepository) UpdateUser(user *User) error {
 		Name:         user.Name,
 		TargetWeight: ptrToNullFloat64(user.TargetWeight),
 		WeightUnit:   user.WeightUnit,
+		DistanceUnit: user.DistanceUnit,
 		UpdatedAt:    sql.NullTime{Time: time.Now(), Valid: true},
 		ID:           user.ID,
 	})
@@ -242,6 +244,7 @@ func mapUser(row db.User) *User {
 		IsAdmin:              isAdmin,
 		TargetWeight:         nullFloat64ToPtr(row.TargetWeight),
 		WeightUnit:           row.WeightUnit,
+		DistanceUnit:         row.DistanceUnit,
 		ReminderEnabled:      row.ReminderEnabled == 1,
 		ReminderFrequency:    ReminderFrequency(row.ReminderFrequency),
 		ReminderDayOfWeek:    nullInt64ToIntPtr(row.ReminderDayOfWeek),

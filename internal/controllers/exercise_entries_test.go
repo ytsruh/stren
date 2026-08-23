@@ -29,6 +29,8 @@ type mockRepository struct {
 	errGetExerciseEntriesByDateRange       error
 	errGetExerciseByID                     error
 	errGetMaxWeightByExercise              error
+	errGetBestPaceByExercise               error
+	errGetLongestDistanceByExercise        error
 	errGetLastSetByExercise                error
 }
 
@@ -88,6 +90,7 @@ func (m *mockRepository) CreateExerciseEntry(exerciseEntry *models.ExerciseEntry
 	for _, e := range m.exercises {
 		if e.ID == exerciseEntry.ExerciseID {
 			exerciseEntry.ExerciseName = e.Name
+			exerciseEntry.ExerciseType = e.Type
 			break
 		}
 	}
@@ -211,6 +214,39 @@ func (m *mockRepository) GetMaxWeightByExercise(exerciseID string, userID string
 	return max, nil
 }
 
+func (m *mockRepository) GetBestPaceByExercise(exerciseID string, userID string) (float64, error) {
+	if m.errGetBestPaceByExercise != nil {
+		return 0, m.errGetBestPaceByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	best := 0.0
+	for _, e := range m.exerciseEntries {
+		if e.ExerciseID != exerciseID || e.UserID != userID {
+			continue
+		}
+		if pace := e.PaceSecPerKm(); pace > 0 && (best == 0 || pace < best) {
+			best = pace
+		}
+	}
+	return best, nil
+}
+
+func (m *mockRepository) GetLongestDistanceByExercise(exerciseID string, userID string) (float64, error) {
+	if m.errGetLongestDistanceByExercise != nil {
+		return 0, m.errGetLongestDistanceByExercise
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var longest float64
+	for _, e := range m.exerciseEntries {
+		if e.ExerciseID == exerciseID && e.UserID == userID && e.DistanceMeters > longest {
+			longest = e.DistanceMeters
+		}
+	}
+	return longest, nil
+}
+
 func (m *mockRepository) GetLastSetByExercise(exerciseID string, userID string) (*models.ExerciseEntry, error) {
 	if m.errGetLastSetByExercise != nil {
 		return nil, m.errGetLastSetByExercise
@@ -327,7 +363,7 @@ func TestExerciseEntryController_CreateExerciseEntries_Success(t *testing.T) {
 		{Reps: 5, Weight: 95, RestTime: 90},
 	}
 
-	created, err := ec.CreateExerciseEntries("user-1", "ex-1", "felt good", time.Now(), sets)
+	created, err := ec.CreateExerciseEntries("user-1", "ex-1", models.ExerciseTypeStrength, "felt good", time.Now(), sets)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -364,7 +400,7 @@ func TestExerciseEntryController_CreateExerciseEntries_Success(t *testing.T) {
 func TestExerciseEntryController_CreateExerciseEntries_EmptySets(t *testing.T) {
 	ec, mock := setupExerciseEntryController(t)
 
-	created, err := ec.CreateExerciseEntries("user-1", "ex-1", "", time.Now(), nil)
+	created, err := ec.CreateExerciseEntries("user-1", "ex-1", models.ExerciseTypeStrength, "", time.Now(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -385,7 +421,7 @@ func TestExerciseEntryController_CreateExerciseEntries_RepositoryErrorShortCircu
 		{Reps: 5, Weight: 100, RestTime: 0},
 	}
 
-	_, err := ec.CreateExerciseEntries("user-1", "ex-1", "", time.Now(), sets)
+	_, err := ec.CreateExerciseEntries("user-1", "ex-1", models.ExerciseTypeStrength, "", time.Now(), sets)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -406,7 +442,7 @@ func TestExerciseEntryController_CreateExerciseEntries_PassesCreatedAt(t *testin
 		{Reps: 5, Weight: 95, RestTime: 90},
 	}
 
-	created, err := ec.CreateExerciseEntries("user-1", "ex-1", "back-dated", want, sets)
+	created, err := ec.CreateExerciseEntries("user-1", "ex-1", models.ExerciseTypeStrength, "back-dated", want, sets)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -435,12 +471,172 @@ func TestExerciseEntryController_UpdateExerciseEntry(t *testing.T) {
 		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	exerciseEntry, err := ec.UpdateExerciseEntry("entry-1", "user-1", "ex-1", "even better", 6, 110, 90, time.Now())
+	exerciseEntry, err := ec.UpdateExerciseEntry("entry-1", "user-1", "ex-1", models.ExerciseTypeStrength, "even better", ExerciseSetInput{Reps: 6, Weight: 110, RestTime: 90}, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exerciseEntry.Reps != 6 {
 		t.Errorf("expected 6 reps, got %d", exerciseEntry.Reps)
+	}
+}
+
+// --- Cardio validation & normalization ---
+
+func TestValidateExerciseSetInput(t *testing.T) {
+	tests := []struct {
+		name        string
+		exerciseTyp models.ExerciseType
+		input       ExerciseSetInput
+		wantErr     error
+	}{
+		{
+			name:        "strength with reps passes",
+			exerciseTyp: models.ExerciseTypeStrength,
+			input:       ExerciseSetInput{Reps: 5},
+			wantErr:     nil,
+		},
+		{
+			name:        "strength without reps fails",
+			exerciseTyp: models.ExerciseTypeStrength,
+			input:       ExerciseSetInput{Reps: 0, Weight: 100},
+			wantErr:     ErrRepsRequired,
+		},
+		{
+			name:        "cardio with duration and distance passes",
+			exerciseTyp: models.ExerciseTypeCardio,
+			input:       ExerciseSetInput{DurationSeconds: 1500, DistanceMeters: 5000},
+			wantErr:     nil,
+		},
+		{
+			name:        "cardio without duration fails",
+			exerciseTyp: models.ExerciseTypeCardio,
+			input:       ExerciseSetInput{DistanceMeters: 5000},
+			wantErr:     ErrDurationRequired,
+		},
+		{
+			name:        "cardio without distance fails",
+			exerciseTyp: models.ExerciseTypeCardio,
+			input:       ExerciseSetInput{DurationSeconds: 1500},
+			wantErr:     ErrDistanceRequired,
+		},
+		{
+			name:        "other type follows strength rules",
+			exerciseTyp: models.ExerciseTypeOther,
+			input:       ExerciseSetInput{Reps: 3},
+			wantErr:     nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateExerciseSetInput(tt.exerciseTyp, tt.input)
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected error %v, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestExerciseEntryController_CreateExerciseEntries_CardioNormalizesMetrics
+// verifies that cardio sets keep their duration/distance metrics while the
+// server zeroes reps/weight/rest — a client cannot sneak strength metrics
+// onto a cardio entry.
+func TestExerciseEntryController_CreateExerciseEntries_CardioNormalizesMetrics(t *testing.T) {
+	ec, mock := setupExerciseEntryController(t)
+
+	sets := []ExerciseSetInput{
+		{Reps: 99, Weight: 999, RestTime: 60, DurationSeconds: 1500, DistanceMeters: 5000, AvgHeartRate: 152, CaloriesBurned: 320},
+	}
+
+	created, err := ec.CreateExerciseEntries("user-1", "ex-2", models.ExerciseTypeCardio, "easy run", time.Now(), sets)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := created[0]
+	if got.Reps != 0 || got.Weight != 0 || got.RestTime != 0 {
+		t.Errorf("expected strength metrics zeroed on cardio entry, got %+v", got)
+	}
+	if got.DurationSeconds != 1500 || got.DistanceMeters != 5000 || got.AvgHeartRate != 152 || got.CaloriesBurned != 320 {
+		t.Errorf("expected cardio metrics preserved, got %+v", got)
+	}
+	if len(mock.exerciseEntries) != 1 {
+		t.Fatalf("expected 1 exercise entry in mock, got %d", len(mock.exerciseEntries))
+	}
+}
+
+// TestExerciseEntryController_CreateExerciseEntries_StrengthNormalizesMetrics
+// mirrors the cardio test: strength sets must not carry stray cardio
+// metrics through to persistence.
+func TestExerciseEntryController_CreateExerciseEntries_StrengthNormalizesMetrics(t *testing.T) {
+	ec, _ := setupExerciseEntryController(t)
+
+	sets := []ExerciseSetInput{
+		{Reps: 5, Weight: 100, RestTime: 90, DurationSeconds: 600, DistanceMeters: 2000, AvgHeartRate: 140, CaloriesBurned: 100},
+	}
+
+	created, err := ec.CreateExerciseEntries("user-1", "ex-1", models.ExerciseTypeStrength, "", time.Now(), sets)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := created[0]
+	if got.DurationSeconds != 0 || got.DistanceMeters != 0 || got.AvgHeartRate != 0 || got.CaloriesBurned != 0 {
+		t.Errorf("expected cardio metrics zeroed on strength entry, got %+v", got)
+	}
+	if got.Reps != 5 || got.Weight != 100 || got.RestTime != 90 {
+		t.Errorf("expected strength metrics preserved, got %+v", got)
+	}
+}
+
+// TestExerciseEntryController_CreateExerciseEntries_CardioValidationRejects
+// asserts the whole multi-set submission is rejected (before any row is
+// written) when one cardio set is missing its mandatory metrics.
+func TestExerciseEntryController_CreateExerciseEntries_CardioValidationRejects(t *testing.T) {
+	ec, mock := setupExerciseEntryController(t)
+
+	sets := []ExerciseSetInput{
+		{DurationSeconds: 1500, DistanceMeters: 5000}, // valid
+		{DurationSeconds: 900},                        // missing distance
+	}
+
+	_, err := ec.CreateExerciseEntries("user-1", "ex-2", models.ExerciseTypeCardio, "", time.Now(), sets)
+	if !errors.Is(err, ErrDistanceRequired) {
+		t.Fatalf("expected ErrDistanceRequired, got %v", err)
+	}
+	if len(mock.exerciseEntries) != 0 {
+		t.Errorf("expected no rows persisted on validation failure, got %d", len(mock.exerciseEntries))
+	}
+}
+
+// TestExerciseEntryController_UpdateExerciseEntry_Cardio verifies the
+// update path validates and normalizes cardio edits too.
+func TestExerciseEntryController_UpdateExerciseEntry_Cardio(t *testing.T) {
+	ec, mock := setupExerciseEntryController(t)
+	mock.exerciseEntries = []models.ExerciseEntry{
+		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-2", Reps: 0, Weight: 0, DurationSeconds: 1500, DistanceMeters: 5000},
+	}
+
+	updated, err := ec.UpdateExerciseEntry("entry-1", "user-1", "ex-2", models.ExerciseTypeCardio, "negative split",
+		ExerciseSetInput{Reps: 77, Weight: 77, DurationSeconds: 1440, DistanceMeters: 5000}, time.Now())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if updated.Reps != 0 || updated.Weight != 0 {
+		t.Errorf("expected client-sent strength metrics zeroed on cardio update, got %+v", updated)
+	}
+	if updated.DurationSeconds != 1440 || updated.DistanceMeters != 5000 {
+		t.Errorf("expected cardio metrics updated, got %+v", updated)
+	}
+
+	// Missing distance must reject.
+	_, err = ec.UpdateExerciseEntry("entry-1", "user-1", "ex-2", models.ExerciseTypeCardio, "",
+		ExerciseSetInput{DurationSeconds: 1440}, time.Now())
+	if !errors.Is(err, ErrDistanceRequired) {
+		t.Fatalf("expected ErrDistanceRequired on cardio update, got %v", err)
 	}
 }
 

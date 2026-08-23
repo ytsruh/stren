@@ -87,7 +87,8 @@ struct WeightUnitEditView: View {
             let request = UpdateMeRequest(
                 name: user.name,
                 targetWeight: user.targetWeight,
-                weightUnit: unit
+                weightUnit: unit,
+                distanceUnit: user.distanceUnit
             )
             let updated = try await env.api.updateProfile(request)
             authStore.updateCurrentUser(updated)
@@ -108,6 +109,7 @@ struct WeightUnitEditView: View {
             email: "alice@example.com",
             isAdmin: false,
             weightUnit: "kg",
+            distanceUnit: "km",
             targetWeight: 75.0
         ))
     }

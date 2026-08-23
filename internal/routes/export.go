@@ -31,12 +31,9 @@ func (h *Handler) DataExportPage(c echo.Context) error {
 func (h *Handler) ExportExerciseEntriesZip(c echo.Context) error {
 	claims := GetClaims(c)
 
-	unit := "kg"
-	if user := h.GetUser(c); user != nil {
-		unit = user.WeightUnitDisplay()
-	}
+	weightUnit, distanceUnit := h.displayUnits(c)
 
-	reader, filename, err := h.exerciseEntryCtrl.ExportExerciseEntriesZip(c.Request().Context(), claims.UserID, unit)
+	reader, filename, err := h.exerciseEntryCtrl.ExportExerciseEntriesZip(c.Request().Context(), claims.UserID, weightUnit, distanceUnit)
 	if err != nil {
 		return err
 	}

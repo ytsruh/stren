@@ -13,14 +13,15 @@ import (
 //
 // targetWeight is the user's body-weight goal; nil means no goal has
 // been set, in which case the form input is empty. weightUnit is the
-// user's preferred unit ("kg" / "lbs") and drives the <select>'s
-// initial selection.
+// user's preferred unit ("kg" / "lbs") and drives the weight <select>'s
+// initial selection; distanceUnit is the same for cardio distances
+// ("km" / "mi").
 //
 // The reminder section surfaces the user's per-user weight-reminder
 // preferences: master switch, frequency (off / daily / weekly /
 // biweekly), day-of-week (weekly + biweekly only), time-of-day
 // (hour-only), and the email channel checkbox.
-templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *float64, weightUnit string, reminder ReminderFormState) {
+templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *float64, weightUnit string, distanceUnit string, reminder ReminderFormState) {
 	@views.Layout(views.PageData{Title: "Profile", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/profile"}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Profile"})
 		<form
@@ -50,7 +51,7 @@ templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *flo
 				<label for="name">Name</label>
 				<input class="input" type="text" id="name" name="name" value={ userName } required/>
 			</div>
-			<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
 				<div class="grid gap-2">
 					<label for="target_weight">Target weight</label>
 					<input
@@ -73,6 +74,13 @@ templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *flo
 					<select class="input w-full" id="weight_unit" name="weight_unit">
 						<option value="kg" selected?={ weightUnit == "kg" }>kg</option>
 						<option value="lbs" selected?={ weightUnit == "lbs" }>lbs</option>
+					</select>
+				</div>
+				<div class="grid gap-2">
+					<label for="distance_unit">Preferred distance unit</label>
+					<select class="input w-full" id="distance_unit" name="distance_unit">
+						<option value="km" selected?={ distanceUnit == models.DistanceUnitKm }>km</option>
+						<option value="mi" selected?={ distanceUnit == models.DistanceUnitMi }>mi</option>
 					</select>
 				</div>
 			</div>

@@ -4,17 +4,17 @@ VALUES (?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: GetUserByEmail :one
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, distance_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 WHERE email = ?;
 
 -- name: GetUserByID :one
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, distance_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 WHERE id = ?;
 
 -- name: ListUsers :many
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, distance_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 ORDER BY created_at DESC;
 
@@ -23,6 +23,7 @@ UPDATE users
 SET name = ?,
     target_weight = ?,
     weight_unit = ?,
+    distance_unit = ?,
     updated_at = ?
 WHERE id = ?;
 
@@ -60,7 +61,7 @@ WHERE id = ?;
 -- the indexed next_fire_at column keeps the scan small even when the
 -- users table grows. We pull back the full row so the orchestrator can
 -- build its email payload without an extra round-trip.
-SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
+SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, distance_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 WHERE reminder_enabled = 1
   AND reminder_next_fire_at IS NOT NULL

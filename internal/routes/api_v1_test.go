@@ -317,6 +317,31 @@ func TestAPIUpdateMe_DefaultsWeightUnit(t *testing.T) {
 	if dto.WeightUnit != "kg" {
 		t.Fatalf("weight_unit = %q, want kg (default)", dto.WeightUnit)
 	}
+	if dto.DistanceUnit != "km" {
+		t.Fatalf("distance_unit = %q, want km (default)", dto.DistanceUnit)
+	}
+}
+
+// TestAPIUpdateMe_DistanceUnit verifies the distance-unit preference
+// round-trips through PUT /api/v1/me and normalises like weight_unit.
+func TestAPIUpdateMe_DistanceUnit(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "du@example.com", "DU")
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/me", token, UpdateMeRequest{
+		Name:         "DU",
+		DistanceUnit: "mi",
+	})
+	dto := decodeAPI[UserDTO](t, rec, http.StatusOK)
+	if dto.DistanceUnit != "mi" {
+		t.Fatalf("distance_unit = %q, want mi", dto.DistanceUnit)
+	}
+
+	bad := apiDo(t, e, http.MethodPut, "/api/v1/me", token, UpdateMeRequest{
+		Name:         "DU",
+		DistanceUnit: "nautical-miles",
+	})
+	decodeAPIError(t, bad, http.StatusBadRequest)
 }
 
 func TestAPIUpdateMe_Validation_NameTooShort(t *testing.T) {
@@ -476,6 +501,98 @@ func TestAPICreateExerciseEntries_UnknownExercise(t *testing.T) {
 	}
 }
 
+// --- /exercise-entries (cardio) ---
+
+// seedCardioExercise appends a cardio-typed exercise to the mock's
+// catalogue so the type-driven validation path can be exercised.
+func seedCardioExercise(t *testing.T, mock *mockRepository) {
+	t.Helper()
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	mock.exercises = append(mock.exercises, models.Exercise{
+		ID:   "ex-run",
+		Name: "Run",
+		Type: models.ExerciseTypeCardio,
+	})
+}
+
+func TestAPICreateExerciseEntries_Cardio(t *testing.T) {
+	h, mockRepo, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "run@example.com", "Run")
+	seedCardioExercise(t, mockRepo)
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/exercise-entries", token, CreateExerciseEntriesRequest{
+		ExerciseID: "ex-run",
+		Notes:      "easy effort",
+		Sets: []CreateSetInput{
+			{DurationSeconds: 1500, DistanceMeters: 5000, AvgHeartRate: 152, CaloriesBurned: 320},
+		},
+	})
+	entries := decodeAPI[[]ExerciseEntryDTO](t, rec, http.StatusCreated)
+	if len(entries) != 1 {
+		t.Fatalf("len = %d, want 1", len(entries))
+	}
+	entry := entries[0]
+	if entry.ExerciseType != "cardio" {
+		t.Errorf("exercise_type = %q, want cardio", entry.ExerciseType)
+	}
+	if entry.DurationSeconds != 1500 || entry.DistanceMeters != 5000 || entry.AvgHeartRate != 152 || entry.CaloriesBurned != 320 {
+		t.Errorf("cardio metrics = %+v", entry)
+	}
+	// The server must zero strength metrics on cardio entries even if
+	// a client sends them.
+	if entry.Reps != 0 || entry.Weight != 0 || entry.RestTime != 0 {
+		t.Errorf("expected zeroed strength metrics, got reps=%d weight=%.1f rest=%d", entry.Reps, entry.Weight, entry.RestTime)
+	}
+}
+
+func TestAPICreateExerciseEntries_CardioMissingDistance(t *testing.T) {
+	h, mockRepo, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "run2@example.com", "Run2")
+	seedCardioExercise(t, mockRepo)
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/exercise-entries", token, CreateExerciseEntriesRequest{
+		ExerciseID: "ex-run",
+		Sets:       []CreateSetInput{{DurationSeconds: 1500}},
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if !strings.Contains(apiErr.Error, "distance") {
+		t.Fatalf("error = %q, want it to mention distance", apiErr.Error)
+	}
+}
+
+func TestAPICreateExerciseEntries_CardioMissingDuration(t *testing.T) {
+	h, mockRepo, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "run3@example.com", "Run3")
+	seedCardioExercise(t, mockRepo)
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/exercise-entries", token, CreateExerciseEntriesRequest{
+		ExerciseID: "ex-run",
+		Sets:       []CreateSetInput{{DistanceMeters: 5000}},
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if !strings.Contains(apiErr.Error, "duration") {
+		t.Fatalf("error = %q, want it to mention duration", apiErr.Error)
+	}
+}
+
+// TestAPICreateExerciseEntries_StrengthRejectsRepsOnly verifies a
+// strength exercise still requires reps — cardio fields alone don't
+// satisfy it.
+func TestAPICreateExerciseEntries_StrengthRequiresReps(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "str@example.com", "Str")
+
+	rec := apiDo(t, e, http.MethodPost, "/api/v1/exercise-entries", token, CreateExerciseEntriesRequest{
+		ExerciseID: "ex-1",
+		Sets:       []CreateSetInput{{Weight: 100}}, // no reps
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if !strings.Contains(apiErr.Error, "reps") {
+		t.Fatalf("error = %q, want it to mention reps", apiErr.Error)
+	}
+}
+
 func TestAPIListExerciseEntries_DefaultDays(t *testing.T) {
 	h, mock, mockUser, e := setupHandler(t)
 	token, _ := loginUser(t, h, mockUser, "l@example.com", "L")
@@ -553,6 +670,66 @@ func TestAPIUpdateExerciseEntry(t *testing.T) {
 	}
 }
 
+// TestAPIUpdateExerciseEntry_Cardio verifies the PUT path validates
+// cardio edits against the linked exercise's type and normalizes the
+// non-applicable metric pair to zero.
+func TestAPIUpdateExerciseEntry_Cardio(t *testing.T) {
+	h, mockRepo, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "upc@example.com", "UpC")
+	seedCardioExercise(t, mockRepo)
+
+	mockRepo.exerciseEntries = []models.ExerciseEntry{
+		{ID: "c1", UserID: "user-upc@example.com", ExerciseID: "ex-run", ExerciseName: "Run", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1800, DistanceMeters: 5000, CreatedAt: time.Now()},
+	}
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/exercise-entries/c1", token, UpdateExerciseEntryRequest{
+		ExerciseID:      "ex-run",
+		DurationSeconds: 1500,
+		DistanceMeters:  5000,
+		AvgHeartRate:    148,
+		CaloriesBurned:  300,
+	})
+	entry := decodeAPI[ExerciseEntryDTO](t, rec, http.StatusOK)
+	if entry.DurationSeconds != 1500 || entry.DistanceMeters != 5000 {
+		t.Fatalf("cardio metrics = %+v", entry)
+	}
+	if entry.Reps != 0 || entry.Weight != 0 {
+		t.Errorf("expected zeroed strength metrics, got reps=%d weight=%.1f", entry.Reps, entry.Weight)
+	}
+
+	// Missing distance → 400 mentioning distance.
+	bad := apiDo(t, e, http.MethodPut, "/api/v1/exercise-entries/c1", token, UpdateExerciseEntryRequest{
+		ExerciseID:      "ex-run",
+		DurationSeconds: 1500,
+	})
+	apiErr := decodeAPIError(t, bad, http.StatusBadRequest)
+	if !strings.Contains(apiErr.Error, "distance") {
+		t.Fatalf("error = %q, want it to mention distance", apiErr.Error)
+	}
+}
+
+// TestAPIUpdateExerciseEntry_UnknownExercise locks in the guard that
+// rejects an update pointing at a non-existent exercise instead of
+// silently orphaning the row.
+func TestAPIUpdateExerciseEntry_UnknownExercise(t *testing.T) {
+	h, mockRepo, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "upx@example.com", "UpX")
+
+	mockRepo.exerciseEntries = []models.ExerciseEntry{
+		{ID: "e1", UserID: "user-upx@example.com", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
+	}
+
+	rec := apiDo(t, e, http.MethodPut, "/api/v1/exercise-entries/e1", token, UpdateExerciseEntryRequest{
+		ExerciseID: "does-not-exist",
+		Reps:       8,
+		Weight:     110,
+	})
+	apiErr := decodeAPIError(t, rec, http.StatusBadRequest)
+	if !strings.Contains(apiErr.Error, "exercise") {
+		t.Fatalf("error = %q, want it to mention exercise", apiErr.Error)
+	}
+}
+
 func TestAPIDeleteExerciseEntry(t *testing.T) {
 	h, mock, mockUser, e := setupHandler(t)
 	token, _ := loginUser(t, h, mockUser, "del@example.com", "Del")
@@ -604,6 +781,35 @@ func TestAPIGetExerciseHistory_NotFound(t *testing.T) {
 
 	rec := apiDo(t, e, http.MethodGet, "/api/v1/exercises/does-not-exist/history", token, nil)
 	decodeAPIError(t, rec, http.StatusNotFound)
+}
+
+// TestAPIGetExerciseHistory_CardioStats verifies the history payload for
+// a cardio exercise carries the cardio personal bests (fastest pace,
+// longest distance) plus the exercise type so the client can pick the
+// right stat cards and chart.
+func TestAPIGetExerciseHistory_CardioStats(t *testing.T) {
+	h, mockRepo, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "hc@example.com", "HC")
+	seedCardioExercise(t, mockRepo)
+
+	now := time.Now()
+	mockRepo.exerciseEntries = []models.ExerciseEntry{
+		// 30:00 for 5 km → 360 s/km; 25:00 for 5 km → 300 s/km (best).
+		{ID: "c1", UserID: "user-hc@example.com", ExerciseID: "ex-run", ExerciseName: "Run", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1800, DistanceMeters: 5000, CreatedAt: now},
+		{ID: "c2", UserID: "user-hc@example.com", ExerciseID: "ex-run", ExerciseName: "Run", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1500, DistanceMeters: 5000, CreatedAt: now.AddDate(0, 0, -1)},
+	}
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/exercises/ex-run/history", token, nil)
+	page := decodeAPI[HistoryPageDTO](t, rec, http.StatusOK)
+	if page.ExerciseType != "cardio" {
+		t.Fatalf("exercise_type = %q, want cardio", page.ExerciseType)
+	}
+	if page.Stats.BestPaceSecPerKm != 300 {
+		t.Errorf("best_pace_sec_per_km = %.1f, want 300", page.Stats.BestPaceSecPerKm)
+	}
+	if page.Stats.LongestDistanceMeters != 5000 {
+		t.Errorf("longest_distance_meters = %.1f, want 5000", page.Stats.LongestDistanceMeters)
+	}
 }
 
 // --- /exercises/:id/chart ---

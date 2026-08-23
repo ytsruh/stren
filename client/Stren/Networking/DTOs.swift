@@ -60,6 +60,7 @@ public struct UserDTO: Codable, Equatable, Identifiable {
     public let email: String
     public let isAdmin: Bool
     public let weightUnit: String
+    public let distanceUnit: String
     public let targetWeight: Double?
 
     enum CodingKeys: String, CodingKey {
@@ -68,6 +69,7 @@ public struct UserDTO: Codable, Equatable, Identifiable {
         case email
         case isAdmin = "is_admin"
         case weightUnit = "weight_unit"
+        case distanceUnit = "distance_unit"
         case targetWeight = "target_weight"
     }
 
@@ -77,6 +79,7 @@ public struct UserDTO: Codable, Equatable, Identifiable {
         email: String,
         isAdmin: Bool,
         weightUnit: String,
+        distanceUnit: String,
         targetWeight: Double?
     ) {
         self.id = id
@@ -84,6 +87,7 @@ public struct UserDTO: Codable, Equatable, Identifiable {
         self.email = email
         self.isAdmin = isAdmin
         self.weightUnit = weightUnit
+        self.distanceUnit = distanceUnit
         self.targetWeight = targetWeight
     }
 }
@@ -92,9 +96,9 @@ public struct UserDTO: Codable, Equatable, Identifiable {
 
 /// JSON body for `PUT /api/v1/me`. Mirrors the user-editable
 /// subset of the server's `UpdateMeRequest` (name, target
-/// weight, weight unit). Reminder preferences and notification
-/// settings are deliberately omitted — the iOS app surfaces no
-/// UI for them yet, so the iOS-only DTOs stay slim. When those
+/// weight, weight unit, distance unit). Reminder preferences
+/// are deliberately omitted — the iOS app surfaces no UI for
+/// them yet, so the iOS-only DTOs stay slim. When those
 /// surfaces land on iOS, add the fields here and to `UserDTO`.
 ///
 /// `targetWeight` is an optional pointer so an explicit `nil`
@@ -105,21 +109,25 @@ public struct UpdateMeRequest: Encodable, Equatable {
     public let name: String
     public let targetWeight: Double?
     public let weightUnit: String
+    public let distanceUnit: String
 
     enum CodingKeys: String, CodingKey {
         case name
         case targetWeight = "target_weight"
         case weightUnit = "weight_unit"
+        case distanceUnit = "distance_unit"
     }
 
     public init(
         name: String,
         targetWeight: Double?,
-        weightUnit: String
+        weightUnit: String,
+        distanceUnit: String
     ) {
         self.name = name
         self.targetWeight = targetWeight
         self.weightUnit = weightUnit
+        self.distanceUnit = distanceUnit
     }
 }
 
@@ -206,25 +214,87 @@ private extension String {
 
 // MARK: Exercise entries (sets)
 
+/// Mirrors the server's `ExerciseEntryDTO`. The metric pair that
+/// carries meaning depends on `exerciseType`: strength entries use
+/// reps/weight/restTime, cardio entries use durationSeconds/
+/// distanceMeters (+ optional avgHeartRate/caloriesBurned). The
+/// server always sends every field with 0 for the non-applicable
+/// pair, and `paceSecPerKm`/`isCardio` derive the rest — callers
+/// should branch on `isCardio` rather than probing for zeros.
 public struct ExerciseEntryDTO: Codable, Equatable, Identifiable, Hashable {
     public let id: String
     public let exerciseID: String
     public let exerciseName: String
+    /// `"strength" | "cardio" | "other"`. Optional so a cached entry
+    /// from an older app build still decodes; treat nil as strength.
+    public let exerciseType: String?
     public let reps: Int
     public let weight: Double
     public let notes: String
     public let restTime: Int
+    public let durationSeconds: Int
+    /// Stored in metres (canonical unit); convert for display only.
+    public let distanceMeters: Double
+    public let avgHeartRate: Int
+    public let caloriesBurned: Double
     public let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id
         case exerciseID = "exercise_id"
         case exerciseName = "exercise_name"
+        case exerciseType = "exercise_type"
         case reps
         case weight
         case notes
         case restTime = "rest_time"
+        case durationSeconds = "duration_seconds"
+        case distanceMeters = "distance_meters"
+        case avgHeartRate = "avg_heart_rate"
+        case caloriesBurned = "calories_burned"
         case createdAt = "created_at"
+    }
+
+    public init(
+        id: String,
+        exerciseID: String,
+        exerciseName: String,
+        exerciseType: String? = nil,
+        reps: Int,
+        weight: Double,
+        notes: String,
+        restTime: Int,
+        durationSeconds: Int = 0,
+        distanceMeters: Double = 0,
+        avgHeartRate: Int = 0,
+        caloriesBurned: Double = 0,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.exerciseID = exerciseID
+        self.exerciseName = exerciseName
+        self.exerciseType = exerciseType
+        self.reps = reps
+        self.weight = weight
+        self.notes = notes
+        self.restTime = restTime
+        self.durationSeconds = durationSeconds
+        self.distanceMeters = distanceMeters
+        self.avgHeartRate = avgHeartRate
+        self.caloriesBurned = caloriesBurned
+        self.createdAt = createdAt
+    }
+
+    /// `true` when this entry belongs to a cardio exercise. Nil type
+    /// (legacy cache) renders as strength.
+    public var isCardio: Bool { exerciseType?.lowercased() == "cardio" }
+
+    /// Derived pace in seconds per kilometre, or nil when either
+    /// duration or distance is missing — there is no meaningful pace
+    /// without both.
+    public var paceSecPerKm: Double? {
+        guard durationSeconds > 0, distanceMeters > 0 else { return nil }
+        return Double(durationSeconds) / (distanceMeters / 1000.0)
     }
 }
 
@@ -232,17 +302,37 @@ public struct CreateSetInput: Encodable, Equatable, Hashable {
     public let reps: Int
     public let weight: Double
     public let restTime: Int
+    public var durationSeconds: Int
+    public var distanceMeters: Double
+    public var avgHeartRate: Int
+    public var caloriesBurned: Double
 
     enum CodingKeys: String, CodingKey {
         case reps
         case weight
         case restTime = "rest_time"
+        case durationSeconds = "duration_seconds"
+        case distanceMeters = "distance_meters"
+        case avgHeartRate = "avg_heart_rate"
+        case caloriesBurned = "calories_burned"
     }
 
-    public init(reps: Int, weight: Double, restTime: Int) {
+    public init(
+        reps: Int,
+        weight: Double,
+        restTime: Int,
+        durationSeconds: Int = 0,
+        distanceMeters: Double = 0,
+        avgHeartRate: Int = 0,
+        caloriesBurned: Double = 0
+    ) {
         self.reps = reps
         self.weight = weight
         self.restTime = restTime
+        self.durationSeconds = durationSeconds
+        self.distanceMeters = distanceMeters
+        self.avgHeartRate = avgHeartRate
+        self.caloriesBurned = caloriesBurned
     }
 }
 
@@ -273,6 +363,10 @@ public struct UpdateExerciseEntryRequest: Encodable {
     public let reps: Int
     public let weight: Double
     public let restTime: Int
+    public var durationSeconds: Int
+    public var distanceMeters: Double
+    public var avgHeartRate: Int
+    public var caloriesBurned: Double
     public let createdAt: Date?
 
     enum CodingKeys: String, CodingKey {
@@ -281,6 +375,10 @@ public struct UpdateExerciseEntryRequest: Encodable {
         case reps
         case weight
         case restTime = "rest_time"
+        case durationSeconds = "duration_seconds"
+        case distanceMeters = "distance_meters"
+        case avgHeartRate = "avg_heart_rate"
+        case caloriesBurned = "calories_burned"
         case createdAt = "created_at"
     }
 
@@ -290,6 +388,10 @@ public struct UpdateExerciseEntryRequest: Encodable {
         reps: Int,
         weight: Double,
         restTime: Int,
+        durationSeconds: Int = 0,
+        distanceMeters: Double = 0,
+        avgHeartRate: Int = 0,
+        caloriesBurned: Double = 0,
         createdAt: Date?
     ) {
         self.exerciseID = exerciseID
@@ -297,6 +399,10 @@ public struct UpdateExerciseEntryRequest: Encodable {
         self.reps = reps
         self.weight = weight
         self.restTime = restTime
+        self.durationSeconds = durationSeconds
+        self.distanceMeters = distanceMeters
+        self.avgHeartRate = avgHeartRate
+        self.caloriesBurned = caloriesBurned
         self.createdAt = createdAt
     }
 }
@@ -305,15 +411,24 @@ public struct UpdateExerciseEntryRequest: Encodable {
 
 public struct HistoryStatsDTO: Codable, Equatable {
     public let maxWeight: Double
+    /// Fastest pace ever recorded for the exercise, in seconds per
+    /// kilometre. 0 when no entry has both a duration and a distance.
+    public let bestPaceSecPerKm: Double
+    public let longestDistanceMeters: Double
     public let lastSet: ExerciseEntryDTO?
 
     enum CodingKeys: String, CodingKey {
         case maxWeight = "max_weight"
+        case bestPaceSecPerKm = "best_pace_sec_per_km"
+        case longestDistanceMeters = "longest_distance_meters"
         case lastSet = "last_set"
     }
 }
 
 public struct HistoryPageDTO: Codable, Equatable {
+    /// The exercise's type ("strength" | "cardio" | "other") so the
+    /// history view can pick which stat cards and chart to render.
+    public let exerciseType: String?
     public let entries: [ExerciseEntryDTO]
     public let stats: HistoryStatsDTO
     public let page: Int
@@ -321,12 +436,17 @@ public struct HistoryPageDTO: Codable, Equatable {
     public let hasNext: Bool
 
     enum CodingKeys: String, CodingKey {
+        case exerciseType = "exercise_type"
         case entries
         case stats
         case page
         case hasPrev = "has_prev"
         case hasNext = "has_next"
     }
+
+    /// Convenience mirror of the server's type semantics: nil (legacy
+    /// cache) behaves as strength.
+    public var isCardio: Bool { exerciseType?.lowercased() == "cardio" }
 }
 
 // MARK: Goals

@@ -68,9 +68,12 @@ type User struct {
 	// set a goal; the weight page should hide the progress widget in that case.
 	TargetWeight *float64
 	// WeightUnit is the user's preferred body-weight unit ("kg" or "lbs").
-	// Persisted now so a future per-user unit display can read it; the rest of
-	// the app still renders all weights as "kg" until that wiring is in place.
+	// Labels every weight the app renders; no conversion happens.
 	WeightUnit string
+	// DistanceUnit is the user's preferred cardio distance unit
+	// ("km" or "mi"). Distances are stored in metres; this only
+	// controls rendering of distances and pace labels.
+	DistanceUnit string
 	// ReminderEnabled is the master switch for the user's weight reminder.
 	// When false, the periodic tick ignores the row entirely regardless of
 	// the other fields.
@@ -121,6 +124,21 @@ func (u *User) WeightUnitDisplay() string {
 
 // ValidWeightUnits enumerates the allowed values for User.WeightUnit.
 var ValidWeightUnits = []string{"kg", "lbs"}
+
+// ValidDistanceUnits enumerates the allowed values for User.DistanceUnit.
+var ValidDistanceUnits = []string{DistanceUnitKm, DistanceUnitMi}
+
+// DistanceUnitDisplay returns the user's preferred distance unit,
+// normalised to "km" or "mi". Falls back to "km" when the user is nil
+// or the stored unit is empty or unrecognised. Use this everywhere a
+// cardio distance or pace is shown to the user (display, chart labels,
+// CSV export) so the normalisation happens once, at the boundary.
+func (u *User) DistanceUnitDisplay() string {
+	if u == nil {
+		return DistanceUnitKm
+	}
+	return NormalizeDistanceUnit(u.DistanceUnit)
+}
 
 // RemindersEnabled is a convenience wrapper: the master switch is on
 // AND the frequency is not "off". The tick uses this as the primary
