@@ -6,24 +6,21 @@ import (
 	"stren/internal/models"
 	"stren/internal/views"
 	"stren/internal/views/components"
-	"time"
 )
 
-// Dashboard renders the main dashboard page.
+// Dashboard renders the main dashboard page. The web app is a
+// read-only surface for exercise entries — logging happens in the
+// iOS client — so it shows recent activity, stats, and links into
+// the per-exercise history pages only.
 // weightUnit is the user's preferred unit ("kg" / "lbs") and
 // drives the per-row "Weight" column and the "Total Volume" stat.
 templ Dashboard(exerciseEntries []models.ExerciseEntry, userName string, isAuthenticated bool, isAdmin bool, weightUnit string) {
 	@views.Layout(views.PageData{Title: "Dashboard", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		<section class="mb-8">
-			<div class="grid grid-cols-2 gap-2 sm:gap-4">
-				@components.ActionCard(components.ActionCardProps{Label: "Add Set", Href: "/exercise-entries/new", Icon: "plus"})
-				@components.ActionCard(components.ActionCardProps{Label: "Timer", Href: "/timer", Icon: "timer"})
-			</div>
-		</section>
-		if len(exerciseEntries) == 0 {
-			@views.EmptyState()
-		} else {
-			<section class="flex flex-col gap-y-4">
+		<section class="flex flex-col gap-y-4">
+			@iosAppBanner()
+			if len(exerciseEntries) == 0 {
+				@views.EmptyState()
+			} else {
 				<div class="flex justify-between items-center">
 					@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "7 Day History"})
 				</div>
@@ -31,9 +28,25 @@ templ Dashboard(exerciseEntries []models.ExerciseEntry, userName string, isAuthe
 					@components.DonutChart(popularExercisesChartProps(exerciseEntries))
 				</div>
 				@ExerciseEntryList(exerciseEntries, weightUnit)
-			</section>
-		}
+			}
+		</section>
 	}
+}
+
+// iosAppBanner renders the "Stren is on iPhone" promo banner at
+// the top of the dashboard (both the empty and populated states).
+// Exercise logging happens in the iOS client — the web is a
+// read-only companion — so the banner invites web users to get
+// in touch via the feedback form to be set up with iOS access.
+// Submissions land in the admin feedback inbox.
+templ iosAppBanner() {
+	@components.Banner(components.BannerProps{
+		Title:       "Stren is on iPhone",
+		Description: "Logging your sets happens in the Stren iOS app. Want access? Get in touch and we'll set you up.",
+		LinkHref:    "/feedback",
+		LinkLabel:   "Get in touch",
+		IconName:    "smartphone",
+	})
 }
 
 // ExerciseEntryList renders a table of exercise entries.
@@ -48,7 +61,6 @@ templ ExerciseEntryList(exerciseEntries []models.ExerciseEntry, weightUnit strin
 				<th class="hidden sm:table-cell">Reps</th>
 				<th class="hidden sm:table-cell">Weight</th>
 				<th class="hidden lg:table-cell">Notes</th>
-				<th></th>
 			</tr>
 		</thead>
 		<tbody id="exercise-entries-table">
@@ -74,77 +86,11 @@ templ ExerciseEntryRow(exerciseEntry models.ExerciseEntry, weightUnit string) {
 		<td class="hidden sm:table-cell">{ fmt.Sprintf("%d", exerciseEntry.Reps) }</td>
 		<td class="hidden sm:table-cell">{ exerciseEntry.FormattedWeight(weightUnit) }</td>
 		<td class="hidden lg:table-cell">{ exerciseEntry.Notes }</td>
-		<td>
-			<div class="flex gap-2">
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/exercise-entries/%s/edit", exerciseEntry.ID)) }
-					class="btn-outline p-2"
-					title="Edit"
-				>
-					@components.Icon(components.IconProps{Name: "edit", Size: 16})
-				</a>
-			</div>
-		</td>
 	</tr>
 }
 
-// DeletedRow is returned after deleting an exercise entry (htmx swap)
-templ DeletedRow() {
-	<tr class="fade-out" style="display: none;"></tr>
-}
-
-// RecentExerciseEntries shows the most recent exercise entries on the dashboard
-templ RecentExerciseEntries(exerciseEntries []models.ExerciseEntry, weightUnit string) {
-	<section>
-		<h2 class="mb-4">Recent Workouts</h2>
-		if len(exerciseEntries) == 0 {
-			@views.EmptyState()
-		} else {
-			@ExerciseEntryList(exerciseEntries, weightUnit)
-		}
-	</section>
-}
-
-// QuickStats shows some basic statistics.
-// weightUnit is used for the "Total Volume" stat so the value is
-// labelled with whatever unit the user prefers.
-templ QuickStats(exerciseEntries []models.ExerciseEntry, weightUnit string) {
-	<section class="mt-8">
-		<h3 class="flex items-center gap-2 mb-4">
-			@components.Icon(components.IconProps{Name: "calendar", Size: 20})
-			Last 7 Days
-		</h3>
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-			@components.StatCard(components.StatCardProps{Label: "Total Sets", Value: fmt.Sprintf("%d", len(exerciseEntries))})
-			@components.StatCard(components.StatCardProps{Label: "Unique Exercises", Value: fmt.Sprintf("%d", countUniqueExercises(exerciseEntries))})
-			@components.StatCard(components.StatCardProps{Label: "Total Volume", Value: models.FormatWeight(calculateVolume(exerciseEntries), weightUnit)})
-		</div>
-	</section>
-}
-
 // Helper functions
-func countUniqueExercises(exerciseEntries []models.ExerciseEntry) int {
-	seen := make(map[string]bool)
-	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
-	for _, e := range exerciseEntries {
-		if e.CreatedAt.After(sevenDaysAgo) {
-			seen[e.ExerciseName] = true
-		}
-	}
-	return len(seen)
-}
-
-func calculateVolume(exerciseEntries []models.ExerciseEntry) float64 {
-	var volume float64
-	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
-	for _, e := range exerciseEntries {
-		if e.CreatedAt.After(sevenDaysAgo) {
-			volume += e.Weight
-		}
-	}
-	return volume
-}
-
+//
 // popularExercisesTopN is the maximum number of slices the popular
 // exercises donut renders individually. Anything beyond is collapsed
 // into an "Other" bucket so the chart stays readable on mobile.

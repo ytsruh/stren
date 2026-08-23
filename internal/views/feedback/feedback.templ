@@ -6,11 +6,18 @@ import (
 )
 
 // FeedbackPage renders the user-facing feedback submission form.
+// The web app is otherwise read-only; this page exists so users
+// can get in touch (e.g. to request access to the iOS app) and
+// every submission lands in the admin feedback inbox
+// (/admin/feedback) via FeedbackController.Submit — the same
+// controller the iOS client's POST /api/v1/feedback uses, so
+// both surfaces enforce identical validation rules.
 templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
 	@views.Layout(views.PageData{Title: "Submit Feedback", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Submit Feedback"})
 		<p class="text-muted-foreground mb-6">Have feedback or found a bug? Let us know!</p>
 		<form
+			id="feedback-form"
 			hx-post="/feedback"
 			hx-target="#toaster"
 			hx-swap="beforeend"
@@ -54,6 +61,17 @@ templ FeedbackPage(userName string, isAuthenticated bool, isAdmin bool) {
 				</button>
 			</div>
 		</form>
+		// Page-scoped success handler: the POST response carries an
+		// HX-Trigger for this event, which clears the form so the
+		// user can't accidentally resubmit the same text. Scoped to
+		// this page rather than the global layout because only the
+		// feedback form has a #feedback-form element.
+		<script>
+			document.body.addEventListener('feedbackSubmitted', function() {
+				var form = document.getElementById('feedback-form');
+				if (form) { form.reset(); }
+			});
+		</script>
 	}
 }
 

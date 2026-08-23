@@ -466,10 +466,3 @@ func TestService_SendPasswordReset_ValidatesInputs(t *testing.T) {
 		})
 	}
 }
-
-func TestSenderFunc_AdaptsFunction(t *testing.T) {
-	// Compile-time check that SenderFunc's method receiver
-	// satisfies Sender. If this test ever breaks, the
-	// Service's NewService signature is broken.
-	var _ Sender = SenderFunc(func(ctx context.Context, msg Message) error { return nil })
-}

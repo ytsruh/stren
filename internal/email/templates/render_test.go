@@ -62,7 +62,7 @@ func TestRenderWelcome_UsesProvidedBaseURL(t *testing.T) {
 			html, text := RenderWelcome("Alice", baseURL)
 			// The baseURL must appear in the dashboard
 			// link (HTML + text) and the footer link.
-			dashboardLink := baseURL + "/"
+			dashboardLink := baseURL + "/dashboard"
 			if !strings.Contains(html, dashboardLink) {
 				t.Errorf("HTML missing dashboard link %q", dashboardLink)
 			}

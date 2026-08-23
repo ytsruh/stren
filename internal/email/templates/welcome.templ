@@ -22,7 +22,7 @@ templ WelcomeEmail(name string, baseURL string) {
 			@EmailTitle("Welcome to Stren")
 			@EmailParagraph("Hi " + name + ", thanks for signing up.")
 			@EmailParagraph("Stren helps you log every set, watch your numbers climb, and keep your training consistent. Head to the dashboard any time to log your first set.")
-			@EmailButton(baseURL+"/", "Go to your dashboard")
+			@EmailButton(baseURL+"/dashboard", "Go to your dashboard")
 		</div>
 		@EmailDivider()
 		@EmailFooter(CurrentYear(), baseURL)

@@ -50,7 +50,6 @@ SET reminder_enabled        = ?,
     reminder_day_of_week    = ?,
     reminder_time           = ?,
     reminder_email_enabled  = ?,
-    reminder_push_enabled   = ?,
     reminder_next_fire_at   = ?,
     updated_at              = CURRENT_TIMESTAMP
 WHERE id = ?;
@@ -60,7 +59,7 @@ WHERE id = ?;
 -- supplied reference time. The hourly tick calls this once per hour;
 -- the indexed next_fire_at column keeps the scan small even when the
 -- users table grows. We pull back the full row so the orchestrator can
--- build its push / email payloads without an extra round-trip.
+-- build its email payload without an extra round-trip.
 SELECT id, name, email, password_hash, is_admin, target_weight, weight_unit, reminder_enabled, reminder_frequency, reminder_day_of_week, reminder_time, reminder_email_enabled, reminder_push_enabled, reminder_next_fire_at, reminder_last_fired_at, created_at, updated_at
 FROM users
 WHERE reminder_enabled = 1

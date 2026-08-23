@@ -50,16 +50,6 @@ func (g *Goal) FormattedCompletedDate() string {
 	return g.CompletedAt.Format("02 Jan 2006")
 }
 
-// FormatGoalDate is the long-form goal date helper used by date chips
-// on the goal card. Returns "" for a nil pointer so the caller can
-// render the chip conditionally.
-func FormatGoalDate(t *time.Time) string {
-	if t == nil {
-		return ""
-	}
-	return t.Format("02 Jan 2006")
-}
-
 // DaysUntilTarget returns the number of whole calendar days between
 // the given reference time and the goal's TargetDate. Returns nil
 // when there is no target date, or when the target is at or before

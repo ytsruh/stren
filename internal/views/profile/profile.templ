@@ -9,12 +9,7 @@ import (
 	"stren/internal/views/components"
 )
 
-// ProfilePage renders the user profile page. The push-related
-// parameters drive the @PushBanner child: pushConfigured is true
-// when the server has a VAPID keypair loaded, pushHasSubscription
-// tells the server's best guess at the user's subscription state for
-// first paint (the JS reconciles it on load), and vapidPublicKey is
-// injected into a data attribute the JS reads.
+// ProfilePage renders the user profile page.
 //
 // targetWeight is the user's body-weight goal; nil means no goal has
 // been set, in which case the form input is empty. weightUnit is the
@@ -24,14 +19,8 @@ import (
 // The reminder section surfaces the user's per-user weight-reminder
 // preferences: master switch, frequency (off / daily / weekly /
 // biweekly), day-of-week (weekly + biweekly only), time-of-day
-// (hour-only), and the two channel checkboxes. pushHasSubscription
-// is the same value that drives the @PushBanner so the push
-// checkbox reflects whether the user actually has a subscription on
-// this device; the orchestrator's skip rule still wins in the end
-// (no subscription = push is silently skipped), but the form
-// disables the checkbox so the user is not surprised by a check
-// they tick that does nothing.
-templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *float64, weightUnit string, pushConfigured bool, pushHasSubscription bool, vapidPublicKey string, reminder ReminderFormState) {
+// (hour-only), and the email channel checkbox.
+templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *float64, weightUnit string, reminder ReminderFormState) {
 	@views.Layout(views.PageData{Title: "Profile", UserName: userName, IsAuthenticated: true, IsAdmin: isAdmin, CurrentPath: "/profile"}) {
 		@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Profile"})
 		<form
@@ -87,14 +76,13 @@ templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *flo
 					</select>
 				</div>
 			</div>
-			@ReminderSection(reminder, pushHasSubscription)
+			@ReminderSection(reminder)
 			<button type="submit" class="btn-primary">
 				<span class="btn-spinner hidden absolute animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent"></span>
 				Save
 			</button>
 		</form>
 		<div class="w-full flex flex-col gap-5">
-			@PushBanner(pushHasSubscription, vapidPublicKey, pushConfigured)
 			<div role="group" class="field" data-orientation="horizontal">
 				<section class="w-1/2">
 					<label for="light-dark-mode">Appearance</label>
@@ -114,6 +102,9 @@ templ ProfilePage(userName string, email string, isAdmin bool, targetWeight *flo
 					</button>
 				</div>
 			</div>
+			// The weight-data-export download moved to the dedicated
+			// Data Export page (internal/views/export) along with the
+			// exercise entries export.
 		</div>
 	}
 }
@@ -142,20 +133,6 @@ type ReminderFormState struct {
 	// stored string verbatim so the server can validate
 	// the same shape it wrote.
 	Time string
-	// EmailEnabled is the email channel toggle.
-	EmailEnabled bool
-	// PushEnabled is the push channel toggle. The form
-	// disables the checkbox when the user has no
-	// subscription on this device; the server-side skip
-	// rule is the source of truth either way.
-	PushEnabled bool
-	// PushHasSubscription is true when the user has at
-	// least one push_subscriptions row. Drives the
-	// disabled state of the push checkbox (so the user
-	// cannot tick a checkbox that the orchestrator will
-	// silently skip). Same value the route reads from
-	// pushCtrl.HasSubscription.
-	PushHasSubscription bool
 }
 
 // ReminderSection renders the "Weight reminders" subsection of
@@ -168,21 +145,10 @@ type ReminderFormState struct {
 // frequency <select>. The time-of-day picker is hour-only by
 // design (step="3600").
 //
-// The push checkbox is always interactive, even when the user
-// has no push_subscriptions row. Ticking it is harmless: the
-// per-user orchestrator's skip rule reads the row at fire
-// time and reports "skipped: no active push subscriptions"
-// rather than a failure. Disabling the checkbox on first
-// paint was confusing — users hit a grey control with no
-// obvious way to make it interactive. The save response
-// surfaces a one-time warning toast (see ProfileUpdateSuccess)
-// when the user ticks push but the orchestrator will not be
-// able to deliver, so the missed-channel state is visible
-// without being enforced up-front.
-templ ReminderSection(r ReminderFormState, pushHasSubscription bool) {
+templ ReminderSection(r ReminderFormState) {
 	<fieldset class="grid gap-4 border-t pt-4">
 		<legend class="text-sm font-medium">Weight reminders</legend>
-		<p class="text-sm text-muted-foreground">Get a nudge to log your weight on a schedule that works for you. Pick a frequency, time, and how you want to be reminded.</p>
+		<p class="text-sm text-muted-foreground">Get an email nudge to log your weight on a schedule that works for you.</p>
 		<div class="flex items-center gap-2">
 			<input
 				type="checkbox"
@@ -194,7 +160,7 @@ templ ReminderSection(r ReminderFormState, pushHasSubscription bool) {
 					checked
 				}
 			/>
-			<label for="reminder_enabled">Send me weight reminders</label>
+			<label for="reminder_enabled" class="text-base">Send me weight reminders</label>
 		</div>
 		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
 			<div class="grid gap-2">
@@ -229,35 +195,6 @@ templ ReminderSection(r ReminderFormState, pushHasSubscription bool) {
 					step="3600"
 					value={ r.Time }
 				/>
-			</div>
-		</div>
-		<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-			<div class="flex items-center gap-2">
-				<input
-					type="checkbox"
-					id="reminder_email_enabled"
-					name="reminder_email_enabled"
-					value="1"
-					if r.EmailEnabled {
-						checked
-					}
-				/>
-				<label for="reminder_email_enabled">Email notifications</label>
-			</div>
-			<div class="flex items-center gap-2">
-				<input
-					type="checkbox"
-					id="reminder_push_enabled"
-					name="reminder_push_enabled"
-					value="1"
-					if r.PushEnabled {
-						checked
-					}
-				/>
-				<label for="reminder_push_enabled">Push notifications</label>
-				if !pushHasSubscription {
-					<span class="text-xs text-muted-foreground">Push isn't enabled on this device yet — the reminder will be saved but no push will fire until you turn on "Notifications" below.</span>
-				}
 			</div>
 		</div>
 	</fieldset>
@@ -336,144 +273,12 @@ func roleLabel(isAdmin bool) string {
 	return "User"
 }
 
-// ProfileUpdateSuccess renders a success toast for HTMX
-// responses. The optional warning message (when non-empty)
-// renders a second toast directly after the success one so
-// the user sees both — the save succeeded, but there is a
-// secondary heads-up (e.g. "push is enabled in your
-// preferences but you have no push subscription on this
-// device, so the next reminder will be skipped for push").
-//
-// The two toasts are rendered as siblings (each is its own
-// <div>) so the toaster's "beforeend" swap appends both in
-// one HTMX response, in the order success → warning, so
-// the user sees the success first and the warning below
-// it.
-templ ProfileUpdateSuccess(warning string) {
+// ProfileUpdateSuccess renders a success toast for HTMX responses.
+templ ProfileUpdateSuccess() {
 	@views.Toast("success", "Profile updated", "")
-	if warning != "" {
-		@views.Toast("warning", "Heads up", warning)
-	}
 }
 
 // ProfileUpdateError renders an error toast for HTMX responses.
 templ ProfileUpdateError(message string) {
 	@views.Toast("error", "Error", message)
-}
-
-// PushBanner renders the "Notifications" card on the user's profile
-// page using the Basecoat Field pattern. Behaviour is in /js/push.js;
-// this template just provides the markup and a few data attributes
-// the JS reads to bootstrap itself.
-//
-// Two siblings the JS toggles between (via the `hidden` attribute)
-// using the wrapper's data-state:
-//
-//   - "disabled" | "enabled":  the #push-content row (label + status
-//                             on the left, switch + spinner on the
-//                             right)
-//   - "unsupported":          the #push-unsupported row (reason on
-//                             the left, Re-check button on the right)
-//
-// `configured` is false when the server has no VAPID keypair (which
-// shouldn't happen in production — LoadOrGenerate creates them on
-// first boot — but keeps the UI honest in tests and on a freshly
-// wiped /data volume). When unconfigured the entire card is hidden.
-templ PushBanner(hasSubscription bool, vapidPublicKey string, configured bool) {
-	if configured {
-		<div
-			id="push-banner"
-			data-state={ initialPushState(hasSubscription) }
-			data-vapid-key={ vapidPublicKey }
-		>
-			<div
-				id="push-content"
-				role="group"
-				class="field"
-				data-orientation="horizontal"
-			>
-				<section class="w-3/4">
-					<label for="push-toggle">Notifications</label>
-					<p id="push-description">Get notified when the admin sends an announcement.</p>
-					<p
-						id="push-status"
-						class="text-muted-foreground text-xs"
-					>Status: { pushStatusLabel(hasSubscription) }</p>
-				</section>
-				<div class="w-1/4 flex justify-end">
-					<span
-						id="push-spinner"
-						class=""
-						aria-hidden="true"
-						hidden
-					>
-						@components.Icon(components.IconProps{Name: "loader", Size: 18})
-					</span>
-					<input
-						type="checkbox"
-						id="push-toggle"
-						role="switch"
-						aria-describedby="push-description"
-						if hasSubscription {
-							checked
-						}
-					/>
-				</div>
-			</div>
-			<div
-				id="push-unsupported"
-				role="group"
-				class="field"
-				data-orientation="vertical"
-				hidden
-			>
-				<section>
-					<p class="text-sm font-medium">Push notifications unavailable</p>
-					<p
-						id="push-unsupported-reason"
-						class="text-muted-foreground text-sm"
-					>This browser does not support web push.</p>
-				</section>
-				<button id="push-recheck" type="button" class="btn-outline">Re-check support</button>
-			</div>
-		</div>
-	}
-}
-
-// initialPushState returns the data-state value used for first paint.
-// The server's best guess: at least one stored subscription means
-// "enabled", otherwise "disabled". The JS reconciles with the
-// browser's actual pushManager state on load and updates if needed.
-func initialPushState(hasSubscription bool) string {
-	if hasSubscription {
-		return "enabled"
-	}
-	return "disabled"
-}
-
-// pushStatusLabel returns the human-readable status text shown under
-// the description.
-func pushStatusLabel(hasSubscription bool) string {
-	if hasSubscription {
-		return "Enabled"
-	}
-	return "Disabled"
-}
-
-// PushSubscribeSuccess renders a success toast for HTMX responses
-// after a successful subscription.
-templ PushSubscribeSuccess() {
-	@views.Toast("success", "Notifications enabled", "You'll receive admin messages.")
-}
-
-// PushUnsubscribeSuccess renders a success toast for HTMX responses
-// after a successful unsubscribe.
-templ PushUnsubscribeSuccess() {
-	@views.Toast("success", "Notifications disabled", "")
-}
-
-// PushSubscribeError renders an error toast for HTMX responses
-// related to a subscribe or unsubscribe attempt.
-templ PushSubscribeError(message string) {
-	@views.Toast("error", "Notifications", message)
 }

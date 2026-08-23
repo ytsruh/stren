@@ -11,25 +11,29 @@ import (
 	"stren/internal/utils"
 )
 
-// photoUploadRequest is the JSON body sent by the browser to request a
-// presigned URL for a direct upload to R2.
+// photoUploadRequest is the JSON body sent by the client (iOS app or
+// browser) to request a presigned URL for a direct upload to R2.
 type photoUploadRequest struct {
 	Filename    string `json:"filename"`
 	ContentType string `json:"content_type"`
 }
 
-// photoUploadResponse is returned to the browser with the URL to PUT to and
-// the storage key the server expects to be persisted with the resource.
+// photoUploadResponse is returned to the client with the URL to PUT to
+// and the storage key the server expects to be persisted with the
+// resource.
 type photoUploadResponse struct {
 	URL string `json:"url"`
 	Key string `json:"key"`
 }
 
-// PhotoUploadURL returns a presigned PUT URL for the browser to upload a file
-// directly to R2. The key is generated server-side as `weight/{userID}/{uuid}{ext}`
-// and must be submitted back to the form as the photo_key hidden field.
+// PhotoUploadURL returns a presigned PUT URL for a client to upload a
+// weight-progress photo directly to R2. The key is generated server-side
+// as `weight/{userID}/{uuid}{ext}` and must be sent back when creating or
+// updating the weight entry.
 //
-// Auth: requires a logged-in user.
+// Auth: requires a logged-in user. Reachable via POST /api/v1/weight/
+// photo-upload (JWT — used by the iOS client); there is no standalone web
+// route any more.
 func (h *Handler) PhotoUploadURL(c echo.Context) error {
 	claims := GetClaims(c)
 

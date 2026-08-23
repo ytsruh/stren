@@ -26,7 +26,6 @@ import (
 	"stren/internal/controllers"
 	"stren/internal/models"
 	"stren/internal/utils"
-	"stren/internal/views"
 )
 
 type mockRepository struct {
@@ -441,8 +440,6 @@ func (m *mockUserRepository) UpdateUserReminder(userID string, prefs models.Remi
 			m.users[i].ReminderFrequency = prefs.Frequency
 			m.users[i].ReminderDayOfWeek = prefs.DayOfWeek
 			m.users[i].ReminderTime = prefs.Time
-			m.users[i].ReminderEmailEnabled = prefs.EmailEnabled
-			m.users[i].ReminderPushEnabled = prefs.PushEnabled
 			m.users[i].ReminderNextFireAt = prefs.NextFireAt
 			return nil
 		}
@@ -660,81 +657,6 @@ func (m *mockWeightRepository) GetByIDs(idA, idB, userID string) ([]models.Weigh
 	return result, nil
 }
 
-// mockPushSubscriptionRepository satisfies the models.PushSubscriptionRepo
-// interface for the route tests. The push routes only use a subset of
-// the methods, but every method on the interface is implemented so
-// the compile-time check holds.
-type mockPushSubscriptionRepository struct {
-	mu    sync.Mutex
-	rows  map[string]models.PushSubscription
-	errOp error
-}
-
-func newMockPushSubscriptionRepository() *mockPushSubscriptionRepository {
-	return &mockPushSubscriptionRepository{rows: map[string]models.PushSubscription{}}
-}
-
-func (m *mockPushSubscriptionRepository) UpsertForUser(_ context.Context, userID string, sub models.PushSubscription) (*models.PushSubscription, error) {
-	if m.errOp != nil {
-		return nil, m.errOp
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if existing, ok := m.rows[sub.Endpoint]; ok {
-		existing.P256dh = sub.P256dh
-		existing.Auth = sub.Auth
-		m.rows[sub.Endpoint] = existing
-		out := existing
-		return &out, nil
-	}
-	row := sub
-	row.UserID = userID
-	m.rows[sub.Endpoint] = row
-	out := row
-	return &out, nil
-}
-
-func (m *mockPushSubscriptionRepository) ListForUser(_ context.Context, userID string) ([]models.PushSubscription, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := []models.PushSubscription{}
-	for _, r := range m.rows {
-		if r.UserID == userID {
-			out = append(out, r)
-		}
-	}
-	return out, nil
-}
-
-func (m *mockPushSubscriptionRepository) ListAll(_ context.Context) ([]models.PushSubscription, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]models.PushSubscription, 0, len(m.rows))
-	for _, r := range m.rows {
-		out = append(out, r)
-	}
-	return out, nil
-}
-
-func (m *mockPushSubscriptionRepository) DeleteByEndpoint(_ context.Context, endpoint string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.rows, endpoint)
-	return nil
-}
-
-func (m *mockPushSubscriptionRepository) CountForUser(_ context.Context, userID string) (int64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var n int64
-	for _, r := range m.rows {
-		if r.UserID == userID {
-			n++
-		}
-	}
-	return n, nil
-}
-
 // mockGoalRepository satisfies the models.GoalRepo interface for the
 // route tests. It tracks goals per user and supports per-method
 // error injection so handler-level error paths can be exercised
@@ -881,7 +803,6 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	mockFeedback := newMockFeedbackRepository()
 	mockWeight := newMockWeightRepository()
 	mockGoals := newMockGoalRepository()
-	mockPush := newMockPushSubscriptionRepository()
 	jwtService := utils.NewJWTService("test-secret")
 	mock.exercises = []models.Exercise{
 		{ID: "ex-1", Name: "Squat"},
@@ -893,10 +814,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	adminCtrl := controllers.NewAdminController(mock)
 	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
-	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(mockWeight, nil)
-	pushCtrl := controllers.NewPushController(mockPush)
-	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil, nil)
 	goalsCtrl := controllers.NewGoalsController(mockGoals)
 	validator := utils.NewValidator()
 	// The default test wiring uses a fake image processor and
@@ -905,9 +823,8 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	proc, upl := newFakeImagePipeline()
 	h := NewHandler(
 		authCtrl, authRecoveryCtrl, entryCtrl, adminCtrl, adminUserCtrl,
-		feedbackCtrl, timersCtrl, weightCtrl,
-		pushCtrl, adminNotificationsCtrl, goalsCtrl,
-		mockPush, "", false,
+		feedbackCtrl, weightCtrl,
+		goalsCtrl,
 		mockUser, jwtService, validator,
 		proc, upl, DefaultExerciseImageConfig,
 	)
@@ -917,44 +834,6 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	// middleware runs only through e.ServeHTTP.
 	h.RegisterRoutes(e)
 	return h, mock, mockUser, e
-}
-
-// setupHandlerGoalsFresh constructs a handler with a caller-supplied
-// goals mock so individual tests can seed / inspect state. The
-// other controllers use the same fakes as setupHandler.
-func setupHandlerGoalsFresh(t *testing.T, goalsMock *mockGoalRepository) (*Handler, *echo.Echo) {
-	t.Helper()
-	e := echo.New()
-	mockUser := newMockUserRepository()
-	mockAdminUser := newMockAdminUserRepository()
-	mockFeedback := newMockFeedbackRepository()
-	mockWeight := newMockWeightRepository()
-	mockRepo := newMockRepository()
-	mockPush := newMockPushSubscriptionRepository()
-	jwtService := utils.NewJWTService("test-secret")
-	authCtrl := controllers.NewAuthController(mockUser, jwtService, nil)
-	authRecoveryCtrl := controllers.NewAuthRecoveryController(mockUser, newMockAuthTokenRepo(), nil)
-	entryCtrl := controllers.NewExerciseEntryController(mockRepo)
-	adminCtrl := controllers.NewAdminController(mockRepo)
-	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
-	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
-	timersCtrl := controllers.NewTimersController()
-	weightCtrl := controllers.NewWeightController(mockWeight, nil)
-	pushCtrl := controllers.NewPushController(mockPush)
-	adminNotificationsCtrl := controllers.NewAdminNotificationsController(nil, nil)
-	goalsCtrl := controllers.NewGoalsController(goalsMock)
-	validator := utils.NewValidator()
-	proc, upl := newFakeImagePipeline()
-	h := NewHandler(
-		authCtrl, authRecoveryCtrl, entryCtrl, adminCtrl, adminUserCtrl,
-		feedbackCtrl, timersCtrl, weightCtrl,
-		pushCtrl, adminNotificationsCtrl, goalsCtrl,
-		mockPush, "", false,
-		mockUser, jwtService, validator,
-		proc, upl, DefaultExerciseImageConfig,
-	)
-	h.RegisterRoutes(e)
-	return h, e
 }
 
 func setAuthContext(c echo.Context, userID string, email, name string, isAdmin bool) {
@@ -989,7 +868,7 @@ func TestDashboard(t *testing.T) {
 		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, dashboardPath, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
@@ -1009,7 +888,7 @@ func TestDashboard_RepositoryError(t *testing.T) {
 	h, mock, _, e := setupHandler(t)
 	mock.errListExerciseEntries = errors.New("db error")
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, dashboardPath, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
@@ -1017,638 +896,6 @@ func TestDashboard_RepositoryError(t *testing.T) {
 	err := h.Dashboard(c)
 	if err == nil {
 		t.Fatal("expected error from repository, got nil")
-	}
-}
-
-func TestNewEntryForm(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/new", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.NewExerciseEntryForm(c); err != nil {
-		t.Fatalf("NewEntryForm failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	if rec.Body.String() == "" {
-		t.Fatal("expected non-empty body")
-	}
-}
-
-func TestNewEntryForm_Preselected(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/exercises/ex-1/new", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("ex-1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.NewExerciseEntryForm(c); err != nil {
-		t.Fatalf("NewEntryForm failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `<option value="ex-1" selected>Squat</option>`) {
-		t.Fatalf("expected Squat option to be preselected, got body: %s", body)
-	}
-	if strings.Contains(body, `<option value="ex-2" selected>Bench Press</option>`) {
-		t.Fatalf("expected Bench Press option NOT to be preselected, got body: %s", body)
-	}
-}
-
-func TestNewEntryForm_PreselectedInvalid(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/exercises/non-existent/new", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("non-existent")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.NewExerciseEntryForm(c); err != nil {
-		t.Fatalf("NewEntryForm failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (graceful fallback), got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if strings.Contains(body, `selected>`) {
-		t.Fatalf("expected no preselected option for unknown exercise, got body: %s", body)
-	}
-}
-
-func TestCreateExerciseEntry(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("expected status 303, got %d", rec.Code)
-	}
-	if loc := rec.Header().Get("Location"); loc != "/" {
-		t.Fatalf("expected redirect to /, got %q", loc)
-	}
-}
-
-func TestCreateEntry_HTMX(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	if hxTrigger := rec.Header().Get("HX-Trigger"); hxTrigger != `{"triggerRedirect": "/"}` {
-		t.Fatalf("expected HX-Trigger to be set, got %q", hxTrigger)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Set saved") {
-		t.Fatalf("expected toast with 'Set saved', got body: %s", body)
-	}
-}
-
-func TestCreateEntry_HTMX_MultipleSets(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-	form.Set("sets[1][reps]", "5")
-	form.Set("sets[1][weight]", "100")
-	form.Set("sets[2][reps]", "5")
-	form.Set("sets[2][weight]", "95")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "3 sets saved") {
-		t.Fatalf("expected toast with '3 sets saved', got body: %s", body)
-	}
-}
-
-func TestCreateEntry_InvalidReps(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("sets[0][reps]", "abc")
-	form.Set("sets[0][weight]", "100")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "reps") {
-		t.Fatalf("expected error message containing 'reps', got %q", body)
-	}
-}
-
-func TestCreateEntry_InvalidWeight(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "-10")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Weight") {
-		t.Fatalf("expected error message containing 'Weight', got %q", body)
-	}
-}
-
-func TestCreateEntry_NoSets(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	// sets[0][reps] is intentionally absent — user submitted no valid sets
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "at least one set") {
-		t.Fatalf("expected error message about sets, got %q", body)
-	}
-}
-
-func TestCreateEntry_TooManySets(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	// MaxSetsPerEntry + 1 rows
-	for i := 0; i <= views.MaxSetsPerExerciseEntry; i++ {
-		form.Set(fmt.Sprintf("sets[%d][reps]", i), "5")
-		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Maximum") {
-		t.Fatalf("expected error message about max sets, got %q", body)
-	}
-}
-
-func TestCreateEntry_MissingExercise(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "")
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Exercise") {
-		t.Fatalf("expected error message containing 'Exercise', got %q", body)
-	}
-}
-
-func TestCreateEntry_RepositoryError(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-	mock.errCreateExerciseEntry = errors.New("db error")
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Failed to save") {
-		t.Fatalf("expected error message containing 'Failed to save', got %q", body)
-	}
-}
-
-// TestCreateEntry_HTMX_WithCustomDate verifies that a created_at value
-// submitted via the form is parsed (UTC, matching the edit form) and stored
-// on the persisted row. The test fixes a back-dated timestamp that is far
-// from "now" so the assertion can't accidentally pass via the time.Now()
-// fallback.
-func TestCreateEntry_HTMX_WithCustomDate(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("created_at", "2024-06-15T14:30")
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-	form.Set("sets[1][reps]", "5")
-	form.Set("sets[1][weight]", "95")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-
-	want := time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC)
-	if len(mock.exerciseEntries) != 2 {
-		t.Fatalf("expected 2 entries in mock, got %d", len(mock.exerciseEntries))
-	}
-	for i, got := range mock.exerciseEntries {
-		if !got.CreatedAt.Equal(want) {
-			t.Errorf("entry %d: expected CreatedAt %v, got %v", i, want, got.CreatedAt)
-		}
-	}
-}
-
-// TestCreateEntry_HTMX_EmptyDateFallsBackToNow verifies that an absent
-// created_at field falls back to time.Now() — this is the "default to now"
-// behaviour when a user submits the form without touching the date input.
-func TestCreateEntry_HTMX_EmptyDateFallsBackToNow(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-
-	before := time.Now()
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	// created_at intentionally omitted
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-
-	after := time.Now()
-	if len(mock.exerciseEntries) != 1 {
-		t.Fatalf("expected 1 entry in mock, got %d", len(mock.exerciseEntries))
-	}
-	got := mock.exerciseEntries[0].CreatedAt
-	// Allow a 5-second window for the fallback to be considered "now".
-	if got.Before(before.Add(-5*time.Second)) || got.After(after.Add(5*time.Second)) {
-		t.Errorf("expected CreatedAt near now (%v..%v), got %v", before, after, got)
-	}
-}
-
-// TestCreateEntry_InvalidDateFormat verifies that a malformed created_at
-// value produces a user-visible error rather than silently being ignored.
-func TestCreateEntry_InvalidDateFormat(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("created_at", "not-a-date")
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateExerciseEntry(c); err != nil {
-		t.Fatalf("CreateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Invalid date format") {
-		t.Errorf("expected error message 'Invalid date format', got %q", body)
-	}
-	if len(mock.exerciseEntries) != 0 {
-		t.Errorf("expected no entries persisted on parse error, got %d", len(mock.exerciseEntries))
-	}
-}
-
-func TestEditEntryForm(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-	mock.exerciseEntries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/exercise-entry-1/edit", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("entry-1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.EditExerciseEntryForm(c); err != nil {
-		t.Fatalf("EditEntryForm failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	if rec.Body.String() == "" {
-		t.Fatal("expected non-empty body")
-	}
-}
-
-func TestEditEntryForm_NotFound(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/non-existent/edit", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("non-existent")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	err := h.EditExerciseEntryForm(c)
-	if err == nil {
-		t.Fatal("expected error for missing entry")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusNotFound {
-		t.Fatalf("expected not found error, got %v", err)
-	}
-}
-
-func TestGetEntry(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-	mock.exerciseEntries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/exercise-entry-1", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("entry-1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.GetExerciseEntry(c); err != nil {
-		t.Fatalf("GetEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	if rec.Body.String() == "" {
-		t.Fatal("expected non-empty body")
-	}
-}
-
-func TestGetEntry_NotFound(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/exercise-entries/non-existent", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("non-existent")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	err := h.GetExerciseEntry(c)
-	if err == nil {
-		t.Fatal("expected error for missing entry")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusNotFound {
-		t.Fatalf("expected not found error, got %v", err)
-	}
-}
-
-func TestUpdateEntry(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-	mock.exerciseEntries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
-	}
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "3")
-	form.Set("weight", "120")
-	form.Set("created_at", time.Now().Format("2006-01-02T15:04"))
-
-	req := httptest.NewRequest(http.MethodPut, "/exercise-entries/exercise-entry-1", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("entry-1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.UpdateExerciseEntry(c); err != nil {
-		t.Fatalf("UpdateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "updated") {
-		t.Fatalf("expected success message containing 'updated', got %q", body)
-	}
-}
-
-func TestUpdateEntry_Redirect(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-	mock.exerciseEntries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
-	}
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "3")
-	form.Set("weight", "120")
-
-	req := httptest.NewRequest(http.MethodPut, "/exercise-entries/exercise-entry-1", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("entry-1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.UpdateExerciseEntry(c); err != nil {
-		t.Fatalf("UpdateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("expected status 303, got %d", rec.Code)
-	}
-	loc := rec.Header().Get("Location")
-	if loc != "/" {
-		t.Fatalf("expected redirect to '/', got %q", loc)
-	}
-}
-
-func TestUpdateEntry_InvalidDate(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-	mock.exerciseEntries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
-	}
-
-	form := url.Values{}
-	form.Set("exercise_id", "ex-1")
-	form.Set("reps", "3")
-	form.Set("weight", "120")
-	form.Set("created_at", "not-a-date")
-
-	req := httptest.NewRequest(http.MethodPut, "/exercise-entries/exercise-entry-1", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("entry-1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.UpdateExerciseEntry(c); err != nil {
-		t.Fatalf("UpdateEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Invalid date") {
-		t.Fatalf("expected error message containing 'Invalid date', got %q", body)
-	}
-}
-
-func TestDeleteEntry(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-	mock.exerciseEntries = []models.ExerciseEntry{
-		{ID: "entry-1", UserID: "user-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
-	}
-
-	req := httptest.NewRequest(http.MethodDelete, "/exercise-entries/exercise-entry-1", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("entry-1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.DeleteExerciseEntry(c); err != nil {
-		t.Fatalf("DeleteEntry failed: %v", err)
-	}
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("expected status 303, got %d", rec.Code)
-	}
-	if len(mock.exerciseEntries) != 0 {
-		t.Fatalf("expected entry to be deleted, got %d entries", len(mock.exerciseEntries))
 	}
 }
 
@@ -2200,48 +1447,6 @@ func TestParsePage(t *testing.T) {
 	}
 }
 
-func TestListExercises(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/exercises", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.ListExercisesJSON(c); err != nil {
-		t.Fatalf("ListExercises failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	if ct := rec.Header().Get(echo.HeaderContentType); !strings.Contains(ct, echo.MIMEApplicationJSON) {
-		t.Fatalf("expected JSON content type, got %q", ct)
-	}
-
-	var result []models.Exercise
-	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
-	}
-	if len(result) != 2 {
-		t.Fatalf("expected 2 exercises, got %d", len(result))
-	}
-}
-
-func TestListExercises_RepositoryError(t *testing.T) {
-	h, mock, _, e := setupHandler(t)
-	mock.errList = errors.New("db error")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/exercises", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	err := h.ListExercisesJSON(c)
-	if err == nil {
-		t.Fatal("expected error from repository, got nil")
-	}
-}
-
 func TestServeManifest(t *testing.T) {
 	chdirToProjectRoot(t)
 
@@ -2261,344 +1466,6 @@ func TestServeManifest(t *testing.T) {
 	ct := rec.Header().Get(echo.HeaderContentType)
 	if ct != "application/manifest+json" {
 		t.Fatalf("expected content-type 'application/manifest+json', got %q", ct)
-	}
-}
-
-func newEchoContextWithForm(t *testing.T, form url.Values) echo.Context {
-	t.Helper()
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/exercise-entries", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	return e.NewContext(req, rec)
-}
-
-func TestParseEntryForm_Valid(t *testing.T) {
-	form := url.Values{}
-	form.Set("exercise_name", "Deadlift")
-	form.Set("reps", "5")
-	form.Set("weight", "180.5")
-	form.Set("notes", "PR")
-
-	c := newEchoContextWithForm(t, form)
-	entry, err := parseExerciseEntryForm(c, utils.NewValidator())
-	if err != nil {
-		t.Fatalf("parseExerciseEntryForm failed: %v", err)
-	}
-	if entry.ExerciseName != "" {
-		t.Fatalf("expected exercise name '', got %q", entry.ExerciseName)
-	}
-	if entry.Reps != 5 {
-		t.Fatalf("expected reps 5, got %d", entry.Reps)
-	}
-	if entry.Weight != 180.5 {
-		t.Fatalf("expected weight 180.5, got %f", entry.Weight)
-	}
-	if entry.Notes != "PR" {
-		t.Fatalf("expected notes 'PR', got %q", entry.Notes)
-	}
-}
-
-func TestParseEntryForm_InvalidReps(t *testing.T) {
-	tests := []struct {
-		name string
-		reps string
-	}{
-		{"non-numeric", "abc"},
-		{"zero", "0"},
-		{"negative", "-1"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			form := url.Values{}
-			form.Set("exercise_name", "Squat")
-			form.Set("reps", tt.reps)
-			form.Set("weight", "100")
-
-			c := newEchoContextWithForm(t, form)
-			_, err := parseExerciseEntryForm(c, utils.NewValidator())
-			if err == nil {
-				t.Fatal("expected error for invalid reps")
-			}
-			httpErr, ok := err.(*echo.HTTPError)
-			if !ok || httpErr.Code != http.StatusBadRequest {
-				t.Fatalf("expected bad request error, got %v", err)
-			}
-		})
-	}
-}
-
-func TestParseEntryForm_InvalidWeight(t *testing.T) {
-	tests := []struct {
-		name   string
-		weight string
-	}{
-		{"non-numeric", "abc"},
-		{"negative", "-10"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			form := url.Values{}
-			form.Set("exercise_name", "Squat")
-			form.Set("reps", "5")
-			form.Set("weight", tt.weight)
-
-			c := newEchoContextWithForm(t, form)
-			_, err := parseExerciseEntryForm(c, utils.NewValidator())
-			if err == nil {
-				t.Fatal("expected error for invalid weight")
-			}
-			httpErr, ok := err.(*echo.HTTPError)
-			if !ok || httpErr.Code != http.StatusBadRequest {
-				t.Fatalf("expected bad request error, got %v", err)
-			}
-		})
-	}
-}
-
-func TestParseEntrySets_Single(t *testing.T) {
-	form := url.Values{}
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-	form.Set("sets[0][rest_time]", "90")
-
-	c := newEchoContextWithForm(t, form)
-	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err != nil {
-		t.Fatalf("parseExerciseEntrySets failed: %v", err)
-	}
-	if len(sets) != 1 {
-		t.Fatalf("expected 1 set, got %d", len(sets))
-	}
-	if sets[0].Reps != 5 || sets[0].Weight != 100 || sets[0].RestTime != 90 {
-		t.Errorf("unexpected set: %+v", sets[0])
-	}
-}
-
-func TestParseEntrySets_Multiple(t *testing.T) {
-	form := url.Values{}
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-	form.Set("sets[1][reps]", "5")
-	form.Set("sets[1][weight]", "100")
-	form.Set("sets[2][reps]", "5")
-	form.Set("sets[2][weight]", "95")
-
-	c := newEchoContextWithForm(t, form)
-	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err != nil {
-		t.Fatalf("parseExerciseEntrySets failed: %v", err)
-	}
-	if len(sets) != 3 {
-		t.Fatalf("expected 3 sets, got %d", len(sets))
-	}
-	if sets[2].Weight != 95 {
-		t.Errorf("expected last set weight 95, got %v", sets[2].Weight)
-	}
-}
-
-func TestParseEntrySets_SkipsEmptyRows(t *testing.T) {
-	form := url.Values{}
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-	// sets[1] intentionally empty (no reps)
-	form.Set("sets[2][reps]", "5")
-	form.Set("sets[2][weight]", "100")
-
-	c := newEchoContextWithForm(t, form)
-	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err != nil {
-		t.Fatalf("parseExerciseEntrySets failed: %v", err)
-	}
-	if len(sets) != 2 {
-		t.Fatalf("expected 2 sets (empty row skipped), got %d", len(sets))
-	}
-}
-
-func TestParseEntrySets_PreservesOrder(t *testing.T) {
-	// Submit out of order to verify server sorts by index.
-	form := url.Values{}
-	form.Set("sets[2][reps]", "5")
-	form.Set("sets[2][weight]", "90")
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-	form.Set("sets[1][reps]", "5")
-	form.Set("sets[1][weight]", "95")
-
-	c := newEchoContextWithForm(t, form)
-	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err != nil {
-		t.Fatalf("parseExerciseEntrySets failed: %v", err)
-	}
-	if len(sets) != 3 {
-		t.Fatalf("expected 3 sets, got %d", len(sets))
-	}
-	expected := []float64{100, 95, 90}
-	for i, want := range expected {
-		if sets[i].Weight != want {
-			t.Errorf("set %d: expected weight %v, got %v", i, want, sets[i].Weight)
-		}
-	}
-}
-
-func TestParseEntrySets_NoSets(t *testing.T) {
-	form := url.Values{}
-	c := newEchoContextWithForm(t, form)
-	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err != nil {
-		t.Fatalf("parseExerciseEntrySets failed: %v", err)
-	}
-	if len(sets) != 0 {
-		t.Errorf("expected 0 sets, got %d", len(sets))
-	}
-}
-
-func TestParseEntrySets_EmptyRepsTreatedAsBlank(t *testing.T) {
-	form := url.Values{}
-	form.Set("sets[0][reps]", " ")
-	form.Set("sets[0][weight]", "100")
-
-	c := newEchoContextWithForm(t, form)
-	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err != nil {
-		t.Fatalf("parseExerciseEntrySets failed: %v", err)
-	}
-	if len(sets) != 0 {
-		t.Errorf("expected whitespace reps to be skipped, got %d sets", len(sets))
-	}
-}
-
-func TestParseEntrySets_TooManySets(t *testing.T) {
-	form := url.Values{}
-	// Submit MaxSetsPerEntry + 1 rows (all non-empty) to trigger the cap.
-	for i := 0; i <= views.MaxSetsPerExerciseEntry; i++ {
-		form.Set(fmt.Sprintf("sets[%d][reps]", i), "5")
-		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
-	}
-
-	c := newEchoContextWithForm(t, form)
-	_, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err == nil {
-		t.Fatal("expected error for too many sets")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %v", err)
-	}
-	if !strings.Contains(httpErr.Message.(string), "Maximum") {
-		t.Errorf("expected 'Maximum' in error, got %q", httpErr.Message)
-	}
-}
-
-func TestParseEntrySets_EmptyRowsCountTowardCap(t *testing.T) {
-	// A malicious client could send sets[0..99999] with empty reps. Even though
-	// parseExerciseEntrySets would skip them on processing, the count of submitted
-	// indices should still trip the cap before we waste cycles.
-	form := url.Values{}
-	for i := 0; i <= views.MaxSetsPerExerciseEntry; i++ {
-		form.Set(fmt.Sprintf("sets[%d][weight]", i), "100")
-		// No reps on any row.
-	}
-
-	c := newEchoContextWithForm(t, form)
-	_, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err == nil {
-		t.Fatal("expected error when too many empty rows submitted")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %v", err)
-	}
-}
-
-func TestParseEntrySets_InvalidReps(t *testing.T) {
-	form := url.Values{}
-	form.Set("sets[0][reps]", "abc")
-	form.Set("sets[0][weight]", "100")
-
-	c := newEchoContextWithForm(t, form)
-	_, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err == nil {
-		t.Fatal("expected error for non-numeric reps")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %v", err)
-	}
-	if !strings.Contains(httpErr.Message.(string), "reps") {
-		t.Errorf("expected 'reps' in error, got %q", httpErr.Message)
-	}
-}
-
-func TestParseEntrySets_InvalidWeight(t *testing.T) {
-	form := url.Values{}
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "-10")
-
-	c := newEchoContextWithForm(t, form)
-	_, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err == nil {
-		t.Fatal("expected error for negative weight")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %v", err)
-	}
-	if !strings.Contains(httpErr.Message.(string), "Weight") {
-		t.Errorf("expected 'Weight' in error, got %q", httpErr.Message)
-	}
-}
-
-func TestParseEntrySets_InvalidRestTime(t *testing.T) {
-	form := url.Values{}
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-	form.Set("sets[0][rest_time]", "abc")
-
-	c := newEchoContextWithForm(t, form)
-	_, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err == nil {
-		t.Fatal("expected error for non-numeric rest time")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %v", err)
-	}
-}
-
-func TestParseEntrySets_RestTimeDefaultsToZero(t *testing.T) {
-	form := url.Values{}
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-	// rest_time intentionally absent
-
-	c := newEchoContextWithForm(t, form)
-	sets, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err != nil {
-		t.Fatalf("parseExerciseEntrySets failed: %v", err)
-	}
-	if len(sets) != 1 || sets[0].RestTime != 0 {
-		t.Errorf("expected rest_time 0, got %+v", sets[0])
-	}
-}
-
-func TestParseEntrySets_PerRowErrorIncludesIndex(t *testing.T) {
-	// Second set is bad — error message should reference set 2 (1-indexed for users).
-	form := url.Values{}
-	form.Set("sets[0][reps]", "5")
-	form.Set("sets[0][weight]", "100")
-	form.Set("sets[1][reps]", "5")
-	form.Set("sets[1][weight]", "-5")
-
-	c := newEchoContextWithForm(t, form)
-	_, err := parseExerciseEntrySets(c, utils.NewValidator())
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "Set 2") {
-		t.Errorf("expected 'Set 2' in error, got %q", err.Error())
 	}
 }
 
@@ -2640,70 +1507,6 @@ func TestRegisterForm(t *testing.T) {
 	}
 }
 
-func TestTimerPage(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/timer", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.TimerPage(c); err != nil {
-		t.Fatalf("TimerPage failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Timer") {
-		t.Fatalf("expected timer page, got %q", body)
-	}
-	if !strings.Contains(body, `role="tablist"`) {
-		t.Fatalf("expected tablist on timer page, got %q", body)
-	}
-	if !strings.Contains(body, `id="timers-tab-timer"`) {
-		t.Fatalf("expected Timer tab button, got %q", body)
-	}
-	if !strings.Contains(body, `id="timers-tab-emom"`) {
-		t.Fatalf("expected EMOM tab button, got %q", body)
-	}
-	if !strings.Contains(body, `id="timers-panel-timer"`) {
-		t.Fatalf("expected Timer tab panel, got %q", body)
-	}
-	if !strings.Contains(body, `id="timers-panel-emom"`) {
-		t.Fatalf("expected EMOM tab panel, got %q", body)
-	}
-	// Timer tab must be the active one when on /timer
-	timerActiveRegex := regexp.MustCompile(`id="timers-tab-timer"[^>]*aria-selected="true"`)
-	emomActiveRegex := regexp.MustCompile(`id="timers-tab-emom"[^>]*aria-selected="true"`)
-	if !timerActiveRegex.MatchString(body) {
-		t.Fatalf("expected Timer tab to be active on /timer, got %q", body)
-	}
-	if emomActiveRegex.MatchString(body) {
-		t.Fatalf("expected EMOM tab to be inactive on /timer, got %q", body)
-	}
-}
-
-func TestTimerValidationError(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodPost, "/timer/error", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.TimerValidationError(c); err != nil {
-		t.Fatalf("TimerValidationError failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Invalid Duration") {
-		t.Fatalf("expected toast error, got %q", body)
-	}
-}
-
 func TestRegisterAndLogin(t *testing.T) {
 	h, _, _, e := setupHandler(t)
 
@@ -2724,8 +1527,8 @@ func TestRegisterAndLogin(t *testing.T) {
 		t.Fatalf("expected redirect after register, got %d", rec.Code)
 	}
 	loc := rec.Header().Get("Location")
-	if loc != "/" {
-		t.Fatalf("expected redirect to '/', got %q", loc)
+	if loc != dashboardPath {
+		t.Fatalf("expected redirect to %s, got %q", dashboardPath, loc)
 	}
 
 	cookies := rec.Result().Cookies()
@@ -2939,88 +1742,6 @@ func TestLogout(t *testing.T) {
 	}
 }
 
-func TestEMOMPage(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/timer/emom", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.EMOMPage(c); err != nil {
-		t.Fatalf("EMOMPage failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "EMOM") {
-		t.Fatalf("expected emom page, got %q", body)
-	}
-	if !strings.Contains(body, `role="tablist"`) {
-		t.Fatalf("expected tablist on emom page, got %q", body)
-	}
-	if !strings.Contains(body, `id="timers-tab-timer"`) {
-		t.Fatalf("expected Timer tab button, got %q", body)
-	}
-	if !strings.Contains(body, `id="timers-tab-emom"`) {
-		t.Fatalf("expected EMOM tab button, got %q", body)
-	}
-	// EMOM tab must be the active one when on /timer/emom
-	timerActiveRegex := regexp.MustCompile(`id="timers-tab-timer"[^>]*aria-selected="true"`)
-	emomActiveRegex := regexp.MustCompile(`id="timers-tab-emom"[^>]*aria-selected="true"`)
-	if !emomActiveRegex.MatchString(body) {
-		t.Fatalf("expected EMOM tab to be active on /timer/emom, got %q", body)
-	}
-	if timerActiveRegex.MatchString(body) {
-		t.Fatalf("expected Timer tab to be inactive on /timer/emom, got %q", body)
-	}
-}
-
-func TestEMOMValidationError(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	req := httptest.NewRequest(http.MethodPost, "/timer/emom/error", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.EMOMValidationError(c); err != nil {
-		t.Fatalf("EMOMValidationError failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Invalid Rounds") {
-		t.Fatalf("expected toast error, got %q", body)
-	}
-}
-
-func TestEMOMRoundToast(t *testing.T) {
-	h, _, _, e := setupHandler(t)
-
-	form := url.Values{}
-	form.Set("round", "3")
-
-	req := httptest.NewRequest(http.MethodPost, "/timer/emom/round", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.EMOMRoundToast(c); err != nil {
-		t.Fatalf("EMOMRoundToast failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Round 3 Complete") {
-		t.Fatalf("expected toast with round number, got %q", body)
-	}
-}
-
 // stubPhotoGetter is an export.PhotoGetter backed by an in-memory map.
 // The route test uses it to assert end-to-end zip streaming without
 // pulling in R2.
@@ -3038,7 +1759,7 @@ func (s *stubPhotoGetter) Get(_ context.Context, key string) (io.ReadCloser, err
 	return nil, errors.New("stub: not found: " + key)
 }
 
-// TestExportWeightZip_StreamsZip confirms GET /weight/export responds
+// TestExportWeightZip_StreamsZip confirms GET /export/weight responds
 // with a valid zip containing the user's entries. The route runs the
 // export in a background goroutine, so we have to read the whole body
 // before asserting on the zip — the in-memory httptest.ResponseRecorder
@@ -3059,7 +1780,7 @@ func TestExportWeightZip_StreamsZip(t *testing.T) {
 	}
 	h.weightCtrl = controllers.NewWeightController(mockWeight, stub)
 
-	req := httptest.NewRequest(http.MethodGet, "/weight/export", nil)
+	req := httptest.NewRequest(http.MethodGet, "/export/weight", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	setAuthContext(c, "u1", "test@example.com", "Test User", false)
@@ -3110,7 +1831,7 @@ func keys(m map[string]bool) []string {
 // production middleware layer would have already gated this).
 func TestExportWeightZip_RequiresAuthContext(t *testing.T) {
 	h, _, _, e := setupHandler(t)
-	req := httptest.NewRequest(http.MethodGet, "/weight/export", nil)
+	req := httptest.NewRequest(http.MethodGet, "/export/weight", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -3126,557 +1847,110 @@ func TestExportWeightZip_RequiresAuthContext(t *testing.T) {
 	}()
 	_ = h.ExportWeightZip(c)
 }
+
+// TestExportExerciseEntriesZip_StreamsZip confirms GET /export/exercises
+// responds with a valid zip containing the user's exercise entries.
+// Mirrors TestExportWeightZip_StreamsZip; exercise entries carry no
+// photos so the archive must contain only exercise_entries.csv and
+// manifest.json.
+func TestExportExerciseEntriesZip_StreamsZip(t *testing.T) {
+	h, mock, _, e := setupHandler(t)
+
+	mock.exerciseEntries = []models.ExerciseEntry{
+		{ID: "e1", UserID: "u1", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, RestTime: 180, CreatedAt: time.Date(2026, 1, 9, 8, 0, 0, 0, time.UTC)},
+		{ID: "e2", UserID: "u1", ExerciseID: "ex-2", ExerciseName: "Bench Press", Reps: 8, Weight: 60, RestTime: 90, CreatedAt: time.Date(2026, 1, 10, 8, 0, 0, 0, time.UTC)},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises/export", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "u1", "test@example.com", "Test User", false)
+
+	if err := h.ExportExerciseEntriesZip(c); err != nil {
+		t.Fatalf("ExportExerciseEntriesZip failed: %v", err)
+	}
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if got := rec.Header().Get(echo.HeaderContentType); got != "application/zip" {
+		t.Errorf("Content-Type = %q, want application/zip", got)
+	}
+	cd := rec.Header().Get("Content-Disposition")
+	if !strings.Contains(cd, "attachment") || !strings.Contains(cd, "stren-exercise-entries-export-") {
+		t.Errorf("Content-Disposition = %q, want attachment with stren-exercise-entries-export-*", cd)
+	}
+
+	// Validate the body is a real zip with exactly the expected files.
+	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatalf("body is not a valid zip: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range zr.File {
+		got[f.Name] = true
+	}
+	for _, want := range []string{"exercise_entries.csv", "manifest.json"} {
+		if !got[want] {
+			t.Errorf("expected %q in zip, got files: %v", want, keys(got))
+		}
+	}
+	for name := range got {
+		if strings.HasPrefix(name, "photos/") {
+			t.Errorf("unexpected photo file %q in exercise entries export", name)
+		}
+	}
+}
+
+// TestExportExerciseEntriesZip_RequiresAuthContext asserts the route
+// requires a valid auth context. Echo's auth middleware is responsible
+// for redirecting unauthenticated requests before they reach the
+// handler, so here we just confirm that the handler relies on
+// GetClaims (the production middleware layer would have already
+// gated this).
+func TestExportExerciseEntriesZip_RequiresAuthContext(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/export/exercises", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// No setAuthContext call. The handler dereferences
+	// claims.UserID, so a missing claim should surface as a panic
+	// — production traffic always has one (the middleware sets
+	// it). This test pins that contract: callers must wire up
+	// auth before invoking the handler.
+	defer func() {
+		if recover() == nil {
+			t.Errorf("expected panic when auth context is missing")
+		}
+	}()
+	_ = h.ExportExerciseEntriesZip(c)
+}
+
+// TestDataExportPage confirms GET /export renders the Data Export
+// page with both download links (weight + exercise entries).
+func TestDataExportPage(t *testing.T) {
+	h, _, _, e := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/export", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "u1", "test@example.com", "Test User", false)
+
+	if err := h.DataExportPage(c); err != nil {
+		t.Fatalf("DataExportPage failed: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"Data Export", `href="/export/weight"`, `href="/export/exercises"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected page body to contain %q", want)
+		}
+	}
+}
 // --- Goals route tests ---
-
-func TestGoalsPage(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodGet, "/goals", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.GoalsPage(c); err != nil {
-		t.Fatalf("GoalsPage failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "No goals yet") {
-		t.Error("expected empty-state on initial goals page")
-	}
-}
-
-func TestGoalsPage_Populated(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	target := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	mockGoals.goals["g1"] = &models.Goal{
-		ID:         "g1",
-		UserID:     "user-1",
-		Title:      "Run a 5k",
-		TargetDate: &target,
-	}
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodGet, "/goals", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.GoalsPage(c); err != nil {
-		t.Fatalf("GoalsPage failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Run a 5k") {
-		t.Error("expected goal title on populated goals page")
-	}
-	if !strings.Contains(body, `id="goal-g1"`) {
-		t.Error("expected card id on populated goals page")
-	}
-}
-
-func TestNewGoalForm(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodGet, "/goals/new", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.NewGoalForm(c); err != nil {
-		t.Fatalf("NewGoalForm failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-}
-
-func TestCreateGoal_Redirect(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	form := url.Values{}
-	form.Set("title", "Run a 5k")
-	form.Set("description", "Summer goal")
-	form.Set("start_date", "2026-01-01")
-	form.Set("target_date", "2026-07-01")
-
-	req := httptest.NewRequest(http.MethodPost, "/goals", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateGoal(c); err != nil {
-		t.Fatalf("CreateGoal failed: %v", err)
-	}
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("expected status 303, got %d", rec.Code)
-	}
-	if loc := rec.Header().Get("Location"); loc != "/goals" {
-		t.Errorf("expected redirect to /goals, got %q", loc)
-	}
-}
-
-func TestCreateGoal_HTMX(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	form := url.Values{}
-	form.Set("title", "Run a 5k")
-
-	req := httptest.NewRequest(http.MethodPost, "/goals", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateGoal(c); err != nil {
-		t.Fatalf("CreateGoal failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	hxTrigger := rec.Header().Get("HX-Trigger")
-	if !strings.Contains(hxTrigger, "triggerRedirect") {
-		t.Errorf("expected HX-Trigger to include triggerRedirect, got %q", hxTrigger)
-	}
-	if !strings.Contains(hxTrigger, "goalCreated") {
-		t.Errorf("expected HX-Trigger to include goalCreated, got %q", hxTrigger)
-	}
-	if !strings.Contains(rec.Body.String(), "Goal saved!") {
-		t.Errorf("expected success toast, got body: %s", rec.Body.String())
-	}
-	if len(mockGoals.goals) != 1 {
-		t.Errorf("expected 1 goal in mock, got %d", len(mockGoals.goals))
-	}
-}
-
-func TestCreateGoal_InvalidDate(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	form := url.Values{}
-	form.Set("title", "Run a 5k")
-	form.Set("start_date", "not-a-date")
-
-	req := httptest.NewRequest(http.MethodPost, "/goals", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateGoal(c); err != nil {
-		t.Fatalf("CreateGoal failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), "Start date") {
-		t.Error("expected error to mention start date")
-	}
-}
-
-func TestCreateGoal_EmptyTitle(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	form := url.Values{}
-	form.Set("title", "")
-
-	req := httptest.NewRequest(http.MethodPost, "/goals", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.CreateGoal(c); err != nil {
-		t.Fatalf("CreateGoal failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200 (rendered error), got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), "Error") {
-		t.Error("expected error toast for empty title")
-	}
-}
-
-func TestEditGoalForm_NotFound(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodGet, "/goals/missing/edit", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("missing")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	err := h.EditGoalForm(c)
-	if err == nil {
-		t.Fatal("expected error for missing goal")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusNotFound {
-		t.Fatalf("expected not found error, got %v", err)
-	}
-}
-
-func TestEditGoalForm_Populated(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "Run a 5k"}
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodGet, "/goals/g1/edit", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("g1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.EditGoalForm(c); err != nil {
-		t.Fatalf("EditGoalForm failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), "Run a 5k") {
-		t.Error("expected prefilled title in edit form")
-	}
-}
-
-func TestUpdateGoal_HTMX(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "Original"}
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	form := url.Values{}
-	form.Set("title", "Updated")
-	form.Set("description", "New desc")
-
-	req := httptest.NewRequest(http.MethodPut, "/goals/g1", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("g1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.UpdateGoal(c); err != nil {
-		t.Fatalf("UpdateGoal failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	hxTrigger := rec.Header().Get("HX-Trigger")
-	if !strings.Contains(hxTrigger, "goalUpdated") {
-		t.Errorf("expected HX-Trigger to include goalUpdated, got %q", hxTrigger)
-	}
-	if mockGoals.goals["g1"].Title != "Updated" {
-		t.Errorf("expected title to be updated, got %q", mockGoals.goals["g1"].Title)
-	}
-}
-
-func TestUpdateGoal_NotFound(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	form := url.Values{}
-	form.Set("title", "x")
-
-	req := httptest.NewRequest(http.MethodPut, "/goals/missing", strings.NewReader(form.Encode()))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("missing")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.UpdateGoal(c); err != nil {
-		t.Fatalf("UpdateGoal failed: %v", err)
-	}
-	if !strings.Contains(rec.Body.String(), "Goal not found") {
-		t.Error("expected 'Goal not found' error")
-	}
-}
-
-func TestMarkGoalComplete_HTMX(t *testing.T) {
-	// The Mark Complete route returns the GoalsSections OOB
-	// response (both section wrappers with hx-swap-oob="true")
-	// so htmx replaces them in the DOM and the card visually
-	// moves from active to completed in place — no page reload.
-	mockGoals := newMockGoalRepository()
-	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "x"}
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodPost, "/goals/g1/complete", nil)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("g1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.MarkGoalComplete(c); err != nil {
-		t.Fatalf("MarkGoalComplete failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	hxTrigger := rec.Header().Get("HX-Trigger")
-	if !strings.Contains(hxTrigger, "goalCompleted") {
-		t.Errorf("expected HX-Trigger to include goalCompleted, got %q", hxTrigger)
-	}
-	if !mockGoals.goals["g1"].IsComplete() {
-		t.Error("expected goal to be marked complete in mock")
-	}
-
-	// The response carries both section wrappers so htmx can
-	// OOB-swap them and the card "moves" from active to
-	// completed in one round trip.
-	body := rec.Body.String()
-	if !strings.Contains(body, `id="active-goals-section"`) {
-		t.Error("expected active-goals-section wrapper in OOB response")
-	}
-	if !strings.Contains(body, `id="completed-goals-section"`) {
-		t.Error("expected completed-goals-section wrapper in OOB response")
-	}
-	// hx-swap-oob="true" must appear on both wrappers so
-	// htmx processes both.
-	if strings.Count(body, `hx-swap-oob="true"`) < 2 {
-		t.Error("expected hx-swap-oob=\"true\" on both section wrappers")
-	}
-	if !strings.Contains(body, `id="goal-g1"`) {
-		t.Error("expected goal card id in OOB response")
-	}
-}
-
-// TestMarkGoalComplete_HTMX_MovesCardToCompleted is the key
-// behaviour test: when the only active goal is marked complete,
-// the OOB response places the card inside the completed wrapper
-// (not the active wrapper). The active wrapper shows the
-// empty-state hint because the user has no active goals left.
-func TestMarkGoalComplete_HTMX_MovesCardToCompleted(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "Only active"}
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodPost, "/goals/g1/complete", nil)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("g1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.MarkGoalComplete(c); err != nil {
-		t.Fatalf("MarkGoalComplete failed: %v", err)
-	}
-
-	body := rec.Body.String()
-	idxActive := strings.Index(body, `id="active-goals-section"`)
-	idxCompleted := strings.Index(body, `id="completed-goals-section"`)
-	idxCard := strings.Index(body, `id="goal-g1"`)
-
-	if idxActive < 0 || idxCompleted < 0 || idxCard < 0 {
-		t.Fatalf("missing expected ids: active=%d completed=%d card=%d", idxActive, idxCompleted, idxCard)
-	}
-	// The active wrapper renders first (it always does), the
-	// completed wrapper renders after. The card must live
-	// inside the completed wrapper — its byte position must be
-	// after the completed wrapper's opening id.
-	if !(idxCompleted < idxCard) {
-		t.Errorf("expected card to be inside the completed wrapper, got active=%d completed=%d card=%d",
-			idxActive, idxCompleted, idxCard)
-	}
-	// And the active wrapper should now show the empty-state
-	// hint (no active cards rendered, but the section itself is
-	// still in the DOM for future OOB swaps).
-	if !strings.Contains(body, "No active goals") {
-		t.Error("expected active wrapper to show the empty-state hint after the only active goal was completed")
-	}
-}
-
-func TestMarkGoalComplete_NotFound(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodPost, "/goals/missing/complete", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("missing")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	err := h.MarkGoalComplete(c)
-	if err == nil {
-		t.Fatal("expected error for missing goal")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusNotFound {
-		t.Fatalf("expected not found error, got %v", err)
-	}
-}
-
-func TestReopenGoal_HTMX(t *testing.T) {
-	// Reopen is the mirror of Mark Complete: the card "moves"
-	// from completed back to active via the same OOB-swap
-	// mechanism. The response carries both section wrappers.
-	completedAt := time.Now()
-	mockGoals := newMockGoalRepository()
-	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "x", CompletedAt: &completedAt}
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodPost, "/goals/g1/reopen", nil)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("g1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.ReopenGoal(c); err != nil {
-		t.Fatalf("ReopenGoal failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	hxTrigger := rec.Header().Get("HX-Trigger")
-	if !strings.Contains(hxTrigger, "goalReopened") {
-		t.Errorf("expected HX-Trigger to include goalReopened, got %q", hxTrigger)
-	}
-	if mockGoals.goals["g1"].IsComplete() {
-		t.Error("expected goal to be active after reopen")
-	}
-
-	// The response carries both section wrappers (active +
-	// completed) so htmx can OOB-swap them and the card "moves"
-	// from completed back to active in one round trip.
-	body := rec.Body.String()
-	if !strings.Contains(body, `id="active-goals-section"`) {
-		t.Error("expected active-goals-section wrapper in OOB response")
-	}
-	if !strings.Contains(body, `id="completed-goals-section"`) {
-		t.Error("expected completed-goals-section wrapper in OOB response")
-	}
-	if strings.Count(body, `hx-swap-oob="true"`) < 2 {
-		t.Error("expected hx-swap-oob=\"true\" on both section wrappers")
-	}
-	if !strings.Contains(body, `id="goal-g1"`) {
-		t.Error("expected goal card id in OOB response")
-	}
-}
-
-// TestReopenGoal_HTMX_MovesCardToActive is the key behaviour
-// test: when the only completed goal is reopened, the OOB
-// response places the card inside the active wrapper (not the
-// completed wrapper), and the completed wrapper becomes hidden
-// because there are no completed goals left.
-func TestReopenGoal_HTMX_MovesCardToActive(t *testing.T) {
-	completedAt := time.Now()
-	mockGoals := newMockGoalRepository()
-	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "Only completed", CompletedAt: &completedAt}
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodPost, "/goals/g1/reopen", nil)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("g1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.ReopenGoal(c); err != nil {
-		t.Fatalf("ReopenGoal failed: %v", err)
-	}
-
-	body := rec.Body.String()
-	idxActive := strings.Index(body, `id="active-goals-section"`)
-	idxCompleted := strings.Index(body, `id="completed-goals-section"`)
-	idxCard := strings.Index(body, `id="goal-g1"`)
-
-	if idxActive < 0 || idxCompleted < 0 || idxCard < 0 {
-		t.Fatalf("missing expected ids: active=%d completed=%d card=%d", idxActive, idxCompleted, idxCard)
-	}
-	// The card must live inside the active wrapper — its byte
-	// position must be after the active wrapper's opening id.
-	if !(idxActive < idxCard) {
-		t.Errorf("expected card to be inside the active wrapper, got active=%d completed=%d card=%d",
-			idxActive, idxCompleted, idxCard)
-	}
-	// And the completed wrapper should now be hidden because
-	// there are no completed goals left.
-	if !strings.Contains(body, `<div id="completed-goals-section" hx-swap-oob="true" class="hidden"`) {
-		t.Error("expected completed wrapper to be hidden when the only completed goal was reopened")
-	}
-}
-
-func TestDeleteGoal_HTMX(t *testing.T) {
-	// The edit form's delete button has no hx-target (it can't —
-	// the goal card isn't in the DOM on the edit page), so the
-	// route must respond with HX-Redirect to drive the browser
-	// back to /goals. No body / no toast — the redirect IS the
-	// feedback. This test pins that contract.
-	mockGoals := newMockGoalRepository()
-	mockGoals.goals["g1"] = &models.Goal{ID: "g1", UserID: "user-1", Title: "x"}
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodDelete, "/goals/g1", nil)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("g1")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	if err := h.DeleteGoal(c); err != nil {
-		t.Fatalf("DeleteGoal failed: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-	if got := rec.Header().Get("HX-Redirect"); got != "/goals" {
-		t.Errorf("expected HX-Redirect=/goals, got %q", got)
-	}
-	hxTrigger := rec.Header().Get("HX-Trigger")
-	if !strings.Contains(hxTrigger, "goalDeleted") {
-		t.Errorf("expected HX-Trigger to include goalDeleted, got %q", hxTrigger)
-	}
-	if _, ok := mockGoals.goals["g1"]; ok {
-		t.Error("expected goal to be removed from mock")
-	}
-}
-
-func TestDeleteGoal_NotFound(t *testing.T) {
-	mockGoals := newMockGoalRepository()
-	h, e := setupHandlerGoalsFresh(t, mockGoals)
-
-	req := httptest.NewRequest(http.MethodDelete, "/goals/missing", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("missing")
-	setAuthContext(c, "user-1", "test@example.com", "Test User", false)
-
-	err := h.DeleteGoal(c)
-	if err == nil {
-		t.Fatal("expected error for missing goal")
-	}
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok || httpErr.Code != http.StatusNotFound {
-		t.Fatalf("expected not found error, got %v", err)
-	}
-}
 
 // --- Admin create / update exercise route tests ---
 //

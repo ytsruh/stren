@@ -12,6 +12,10 @@ type PageData struct {
 	IsAuthenticated bool
 	IsAdmin         bool
 	CurrentPath     string
+	// Wide relaxes the layout's default max-w-3xl reading width
+	// to max-w-5xl. Only the marketing landing page uses it —
+	// app pages (tables, forms, charts) stay narrow on purpose.
+	Wide bool
 }
 
 // Layout is the base layout for all pages
@@ -55,7 +59,6 @@ templ Layout(data PageData) {
 				})();
 			</script>
 			<link rel="stylesheet" href="/css/styles.css"/>
-			<link rel="stylesheet" href="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.css"/>
 			<script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
 			// Pin htmx 1.x defaults we rely on. htmx 2 flipped
 			// `scrollBehavior` from "smooth" to "auto"; the
@@ -67,16 +70,7 @@ templ Layout(data PageData) {
 					htmx.config.scrollBehavior = 'smooth';
 				}
 			</script>
-			<script src="https://unpkg.com/image-compare-viewer@1.6.2/dist/image-compare-viewer.min.js" defer></script>
 			<script src="/js/basecoat.js" defer></script>
-			// canvas-confetti is loaded on every page so the goals
-			// page can fire its celebration burst without a per-page
-			// script tag. The library is a small (~9KB) zero-dep
-			// function (window.confetti) and is a no-op when no
-			// event fires. Loaded after the basecoat script so
-			// blocking-CDN failures don't disrupt the rest of the
-			// app.
-			<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
 		</head>
 		<body>
 			if data.IsAuthenticated {
@@ -94,24 +88,13 @@ templ Layout(data PageData) {
 								<ul>
 									<li>
 										<a
-											href="/"
-											if data.CurrentPath == "/" {
+											href="/dashboard"
+											if data.CurrentPath == "/dashboard" {
 												aria-current="page"
 											}
 										>
 											@components.Icon(components.IconProps{Name: "home", Size: 18})
 											<span>Dashboard</span>
-										</a>
-									</li>
-									<li>
-										<a
-											href="/exercise-entries/new"
-											if data.CurrentPath == "/exercise-entries/new" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "plus", Size: 18})
-											<span>New Set</span>
 										</a>
 									</li>
 									<li>
@@ -123,44 +106,6 @@ templ Layout(data PageData) {
 										>
 											@components.Icon(components.IconProps{Name: "dumbbell", Size: 18})
 											<span>Exercises</span>
-										</a>
-									</li>
-									<li>
-										<a
-											href="/timer"
-											if data.CurrentPath == "/timer" || data.CurrentPath == "/timer/emom" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "timer", Size: 18})
-											<span>Timer</span>
-										</a>
-									</li>
-								</ul>
-							</div>
-							<div>
-								<h3>Tracking</h3>
-								<ul>
-									<li>
-										<a
-											href="/weight"
-											if data.CurrentPath == "/weight" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "scale", Size: 18})
-											<span>Weight</span>
-										</a>
-									</li>
-									<li>
-										<a
-											href="/goals"
-											if data.CurrentPath == "/goals" {
-												aria-current="page"
-											}
-										>
-											@components.Icon(components.IconProps{Name: "target", Size: 18})
-											<span>Goals</span>
 										</a>
 									</li>
 								</ul>
@@ -202,17 +147,6 @@ templ Layout(data PageData) {
 												<span>Feedback</span>
 											</a>
 										</li>
-										<li>
-											<a
-												href="/admin/notifications"
-												if data.CurrentPath == "/admin/notifications" {
-													aria-current="page"
-												}
-											>
-												@components.Icon(components.IconProps{Name: "bell", Size: 18})
-												<span>Notifications</span>
-											</a>
-										</li>
 									</ul>
 								</div>
 							}
@@ -228,6 +162,17 @@ templ Layout(data PageData) {
 										>
 											@components.Icon(components.IconProps{Name: "user", Size: 18})
 											<span>Profile</span>
+										</a>
+									</li>
+									<li>
+										<a
+											href="/export"
+											if data.CurrentPath == "/export" {
+												aria-current="page"
+											}
+										>
+											@components.Icon(components.IconProps{Name: "download", Size: 18})
+											<span>Data Export</span>
 										</a>
 									</li>
 									<li>
@@ -266,8 +211,8 @@ templ Layout(data PageData) {
 				</aside>
 			}
 			<main>
-				<header>
-					<nav class="sticky top-0 flex items-center gap-4 px-4 py-2 bg-background border-b">
+				<header class="relative z-50">
+					<nav class="sticky top-0 z-50 flex items-center gap-4 px-3 md:px-4 py-2 bg-background border-b">
 						<ul class="w-full flex justify-between list-none m-0 p-0 items-center">
 							if data.IsAuthenticated {
 								<div class="flex items-center gap-1">
@@ -276,35 +221,105 @@ templ Layout(data PageData) {
 											@components.Icon(components.IconProps{Name: "menu", Size: 20})
 										</button>
 									</li>
-									<a href="/"><li class="flex lg:hidden text-primary">Stren</li></a>
+									<a href="/dashboard"><li class="flex lg:hidden text-primary">Stren</li></a>
 								</div>
-								<div class="flex gap-1">
-									<li>
-										<a href="/exercise-entries/new" class="btn-ghost">
-											@components.Icon(components.IconProps{Name: "plus", Size: 20})
-										</a>
-									</li>
+								<div class="flex items-center gap-2">
+									<button
+										type="button"
+										aria-label="Toggle dark mode"
+										onclick="window.basecoat.theme.toggle()"
+										class="btn size-8"
+										data-variant="outline"
+										data-size="icon"
+									>
+										<span class="hidden dark:block">@components.Icon(components.IconProps{Name: "sun", Size: 16})
+</span>
+										<span class="block dark:hidden">@components.Icon(components.IconProps{Name: "moon", Size: 16})
+</span>
+									</button>
 								</div>
 							} else {
-								<div class="w-full flex items-center justify-between">
-									<div class="flex items-center px-2 gap-2">
+								<div class="w-full flex items-center justify-between gap-2">
+									<a class="flex items-center px-2 gap-2" href="/">
 										<div class="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg font-bold">S</div>
 										<span class="font-bold text-sidebar-foreground truncate">Stren</span>
+									</a>
+									// Desktop: full inline nav (md+). Keeps existing desktop look 1:1.
+									<div class="hidden md:flex items-center gap-2">
+										<a href="/" class="btn-ghost">Home</a>
+										<a href="/#features" class="btn-ghost">Features</a>
+										<a href="/login" class="btn" data-variant="outline" data-size="sm">Login</a>
+										<a href="/register" class="btn" data-size="sm">Sign Up</a>
+										<button
+											type="button"
+											aria-label="Toggle dark mode"
+											onclick="window.basecoat.theme.toggle()"
+											class="btn size-8"
+											data-variant="outline"
+											data-size="icon"
+										>
+											<span class="hidden dark:block">@components.Icon(components.IconProps{Name: "sun", Size: 16})
+</span>
+											<span class="block dark:hidden">@components.Icon(components.IconProps{Name: "moon", Size: 16})
+</span>
+										</button>
 									</div>
-									<div class="flex gap-1">
-										<a href="/login" class="btn-ghost">Login</a>
-										<a href="/register" class="btn-ghost">Register</a>
+									// Mobile: compact — theme toggle + Basecoat dropdown-menu containing all nav links.
+									<div class="flex md:hidden items-center gap-1.5">
+										<button
+											type="button"
+											aria-label="Toggle dark mode"
+											onclick="window.basecoat.theme.toggle()"
+											class="btn size-8"
+											data-variant="outline"
+											data-size="icon"
+										>
+											<span class="hidden dark:block">@components.Icon(components.IconProps{Name: "sun", Size: 16})
+</span>
+											<span class="block dark:hidden">@components.Icon(components.IconProps{Name: "moon", Size: 16})
+</span>
+										</button>
+										<div class="dropdown-menu">
+											<button type="button" aria-label="Open menu" class="btn size-8" data-variant="ghost" data-size="icon">
+												@components.Icon(components.IconProps{Name: "menu", Size: 20})
+											</button>
+											<div data-popover data-align="end" class="min-w-52">
+												<div role="menu" class="flex flex-col gap-1">
+													<a role="menuitem" href="/">Home</a>
+													<a role="menuitem" href="/#features">Features</a>
+													<div role="separator"></div>
+													<a role="menuitem" href="/login">Login</a>
+													<a role="menuitem" href="/register" class="font-medium">Sign Up</a>
+												</div>
+											</div>
+										</div>
 									</div>
 								</div>
 							}
 						</ul>
 					</nav>
 				</header>
-				<div class="container mx-auto max-w-3xl px-4 py-4 md:py-8">
+				<div class={ "container", "mx-auto", templ.KV("max-w-3xl", !data.Wide), templ.KV("max-w-5xl", data.Wide), "px-4 py-4 md:py-8" }>
 					{ children... }
 				</div>
 			</main>
-			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
+			if !data.IsAuthenticated {
+				<footer class="border-t">
+					<div class="container mx-auto max-w-5xl px-3 md:px-4 py-4 md:py-6 flex flex-col items-center gap-2 md:gap-3 text-sm md:flex-row md:justify-between">
+						<div class="flex items-center gap-2 text-muted-foreground">
+							<div class="bg-primary text-primary-foreground flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-bold">S</div>
+							<span>© 2026 Stren</span>
+						</div>
+						<nav class="flex items-center gap-4 md:gap-5 text-muted-foreground">
+							<a href="/" class="hover:text-foreground transition-colors py-1">Home</a>
+							<a href="/showcase" class="hover:text-foreground transition-colors py-1">Showcase</a>
+							<a href="/register" class="hover:text-foreground transition-colors py-1">Sign up</a>
+							<a href="/login" class="hover:text-foreground transition-colors py-1">Login</a>
+						</nav>
+					</div>
+				</footer>
+			}
+			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-106.25" onclick="if(event.target===this)this.close()">
 				<form method="dialog">
 					<header>
 						<h3>Confirm</h3>
@@ -317,15 +332,14 @@ templ Layout(data PageData) {
 								The OK button defaults to `btn-destructive`
 								because the dialog was originally built for
 								"are you sure you want to delete …?"
-								confirmations (the only htmx-confirm uses in
-								the app today). Non-destructive callers
-								(e.g. the weight export) swap the class to
-								`btn` (or another non-destructive variant)
-								right before showModal() and restore the
-								original className on the dialog's `close`
-								event — see WeightExportScript in
-								internal/views/weight/list.templ for the
-								canonical example.
+								confirmations. Non-destructive callers
+								swap the class to `btn` (or another
+								non-destructive variant) right before
+								showModal() and restore the original
+								className on the dialog's `close`
+								event — see openConfirm in
+								internal/views/components/image_upload.templ
+								for the canonical example.
 							*/
 						}}
 						<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
@@ -354,32 +368,51 @@ templ Layout(data PageData) {
 						dialog.close();
 					}
 				});
+				// Server handlers that respond to an htmx call with a
+				// redirect (login, register, logout, admin save) send
+				// the response as a toast fragment plus an HX-Trigger
+				// header shaped {"triggerRedirect": "/target"}. htmx
+				// turns that header into a browser event named
+				// triggerRedirect carrying the URL in detail.value —
+				// this listener is what actually navigates. The short
+				// delay lets the success toast render and be seen
+				// before the page changes.
 				document.body.addEventListener('triggerRedirect', function(evt) {
-					setTimeout(function() {
-						window.location.href = evt.detail.value;
-					}, 500);
+					var target = evt.detail && evt.detail.value;
+					if (!target) return;
+					setTimeout(function() { window.location.href = target; }, 600);
 				});
-			</script>
-			<script>
-			if ('serviceWorker' in navigator) {
-				navigator.serviceWorker.register('/sw.js').catch(function(err) {
-					console.error('Service worker registration failed:', err);
-				});
-				// Page-side handler for the service worker's
-				// push-navigate messages. The SW cannot navigate
-				// an existing PWA client reliably on iOS
-				// (client.navigate is a no-op there), so the SW
-				// focuses the client and posts a message; this
-				// listener does the actual window.location.href
-				// change, which works on every platform.
-				navigator.serviceWorker.addEventListener('message', function (event) {
-					if (event.data && event.data.type === 'push-navigate' && typeof event.data.url === 'string') {
-						window.location.href = event.data.url;
+				// showToast clones the hidden <template> rendered
+				// above (toastTemplate) for the given category, fills
+				// in the title and description, and appends the clone
+				// to #toaster. The icon SVGs and toast structure live
+				// in one place (this layout) so widgets don't
+				// duplicate them. Falls back to the "default" template
+				// if the requested category isn't present. Global so
+				// any widget can raise a toast from client-side code
+				// (e.g. the photo upload widget, which uploads
+				// directly to R2 via a presigned URL and so can't
+				// piggy-back its toast onto an htmx response).
+				window.showToast = function(category, title, message) {
+					var toaster = document.getElementById('toaster');
+					if (!toaster) return;
+					var template = document.getElementById('toast-template-' + category) || document.getElementById('toast-template-default');
+					if (!template) return;
+					var clone = template.content.cloneNode(true);
+					var h2 = clone.querySelector('[data-toast-title]');
+					if (h2) h2.textContent = title;
+					var p = clone.querySelector('[data-toast-description]');
+					if (p) {
+						if (message) {
+							p.textContent = message;
+							p.classList.remove('hidden');
+						} else {
+							p.remove();
+						}
 					}
-				});
-			}
-		</script>
-			<script src="/js/push.js" defer></script>
+					toaster.appendChild(clone);
+				};
+			</script>
 			<div id="toaster" class="toaster"></div>
 			// Hidden toast templates. Widgets that need to render a
 			// toast from client-side code (e.g. the weight photo
@@ -461,13 +494,7 @@ templ EmptyState() {
 				@components.Icon(components.IconProps{Name: "dumbbell", Size: 24})
 			</div>
 			<h3 class="text-lg font-semibold">No workouts in the last 7 days</h3>
-			<p class="text-muted-foreground text-sm">Log a session to keep your streak going.</p>
+			<p class="text-muted-foreground text-sm">Log a session with the Stren app to keep your streak going.</p>
 		</header>
-		<section class="flex w-full max-w-sm min-w-0 flex-col items-center gap-3">
-			<a href="/exercise-entries/new" class="btn">
-				@components.Icon(components.IconProps{Name: "plus", Size: 18})
-				Add Set
-			</a>
-		</section>
 	</div>
 }

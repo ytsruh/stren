@@ -14,6 +14,11 @@ import (
 )
 
 func TestIsPublicRoute(t *testing.T) {
+	// The static-asset cases hit the real public/ directory via
+	// http.Dir, so the test must run from the project root for
+	// the lookups to resolve.
+	chdirToProjectRoot(t)
+
 	tests := []struct {
 		path     string
 		expected bool
@@ -21,16 +26,22 @@ func TestIsPublicRoute(t *testing.T) {
 		{"/login", true},
 		{"/register", true},
 		{"/api/v1/auth/password-reset/request", true},
+		// Static assets: public because they resolve to files in
+		// public/, which anonymous visitors' pages load.
 		{"/css/styles.css", true},
-		{"/icons/icon-192.png", true},
+		{"/icons/favicon-96x96.png", true},
+		{"/img/login.jpg", true},
+		{"/js/basecoat.js", true},
 		{"/manifest.json", true},
-		{"/sw.js", true},
 		{"/favicon.ico", true},
-		{"/", false},
-		{"/exercise-entries", false},
-		{"/exercise-entries/new", false},
+		// Not a file in public/ (the service worker was removed),
+		// so it falls through to the protected-route default.
+		{"/sw.js", false},
+		{"/", true},
+		{"/profile", false},
 		{"/exercises/Squat", false},
-		{"/api/exercises", false},
+		{"/export/weight", false},
+		{"/admin/users", false},
 	}
 
 	for _, tt := range tests {

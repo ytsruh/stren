@@ -260,8 +260,3 @@ func (d *DB) Transaction(fn func(*sql.Tx) error) error {
 
 	return tx.Commit()
 }
-
-// Now returns the current time formatted for SQLite
-func Now() string {
-	return time.Now().Format("2006-01-02 15:04:05")
-}

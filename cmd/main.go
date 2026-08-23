@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 	"stren/internal/export"
 	"stren/internal/imaging"
 	"stren/internal/models"
-	"stren/internal/push"
 	"stren/internal/reminders"
 	"stren/internal/routes"
 	"stren/internal/utils"
@@ -64,31 +62,11 @@ func main() {
 	userRepo := models.NewUserRepository(database)
 	adminUserRepo := models.NewUserAdminRepository(database)
 	weightRepo := models.NewWeightRepository(database)
-	pushRepo := models.NewPushSubscriptionRepository(database)
 	authTokenRepo := models.NewAuthTokenRepository(database)
 	goalsRepo := models.NewGoalRepository(database)
 
 	// Initialize auth service
 	jwtService := utils.NewJWTService(cfg.JWT_SECRET)
-
-	// Load or generate the VAPID keypair. Keys live alongside the
-	// SQLite file in the same persistent directory so subscriptions
-	// survive restarts. If the directory is wiped (e.g. a fresh
-	// container) a new keypair is generated and existing
-	// subscriptions become invalid until the user re-enables them.
-	vapidDataDir := filepath.Dir(cfg.DB_PATH)
-	keys, err := push.LoadOrGenerate(vapidDataDir)
-	if err != nil {
-		log.Fatalf("Failed to load or generate VAPID keys: %v", err)
-	}
-	vapidPublicKey := keys.PublicKeyString()
-	log.Printf("vapid: loaded keypair from %s", vapidDataDir)
-
-	// Wire the push client + fan-out service. A bounded HTTP client
-	// timeout (30s) is applied via the package default; no need to
-	// expose it.
-	pushClient := push.NewClient(keys, push.ClientConfig{})
-	pushService := push.NewService(pushClient, push.NewStoreAdapter(pushRepo), push.ServiceConfig{})
 
 	// Wire the email service. The SMTP client targets Cloudflare's
 	// implicit-TLS endpoint (smtp.mx.cloudflare.net:465); the
@@ -115,30 +93,23 @@ func main() {
 	adminCtrl := controllers.NewAdminController(repo)
 	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
-	timersCtrl := controllers.NewTimersController()
 	weightCtrl := controllers.NewWeightController(weightRepo, r2PhotoGetter{})
-	pushCtrl := controllers.NewPushController(pushRepo)
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(userRepo, authTokenRepo, emailService)
 	goalsCtrl := controllers.NewGoalsController(goalsRepo)
 
-	// Initialize the per-user weight-reminder orchestrator here
-	// (above the admin notifications controller it is wired
-	// into) so the controller constructor can take a non-nil
-	// pointer. The orchestrator's own scheduler is started
-	// further down, after the Echo routes are registered, so
-	// an init failure here is the same as an init failure
-	// there (log.Fatal).
+	// Initialize the per-user weight-reminder orchestrator here so
+	// the hourly cron scheduler below can drive it. The orchestrator
+	// fires each due user's email reminder on
+	// every tick; there is no admin UI for it any more — the hourly
+	// schedule is the only trigger.
 	weightReminder, err := reminders.NewUserReminder(
 		userRepo,
 		emailService,
-		pushService,
 		reminders.UserReminderConfig{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to initialize weight reminder: %v", err)
 	}
-
-	adminNotificationsCtrl := controllers.NewAdminNotificationsController(pushService, weightReminder)
 
 	// Initialize route handlers
 	validator := utils.NewValidator()
@@ -149,14 +120,8 @@ func main() {
 		adminCtrl,
 		adminUserCtrl,
 		feedbackCtrl,
-		timersCtrl,
 		weightCtrl,
-		pushCtrl,
-		adminNotificationsCtrl,
 		goalsCtrl,
-		pushRepo,
-		vapidPublicKey,
-		true, // pushConfigured — keys are always present after LoadOrGenerate
 		userRepo,
 		jwtService,
 		validator,
@@ -203,24 +168,17 @@ func main() {
 	h.RegisterRoutes(e)
 
 	// Start the hourly weight-reminder scheduler. The
-	// orchestrator was constructed above and is also
-	// shared with the admin notifications controller
-	// (the "send all due reminders now" button). The cron
-	// wrapper is the only place in the codebase that
-	// imports the third-party scheduling library, so
-	// a future "swap for a queue / system cron" change
-	// is a one-package diff. A bad spec (e.g. a typo
-	// in "0 * * * *") fails startup rather than
-	// silently never firing.
+	// orchestrator was constructed above; the cron wrapper is
+	// the only place in the codebase that imports the
+	// third-party scheduling library, so a future "swap for a
+	// queue / system cron" change is a one-package diff. A bad
+	// spec (e.g. a typo in "0 * * * *") fails startup rather
+	// than silently never firing.
 	scheduler, err := reminders.NewCronScheduler(
 		weightReminderCronSpec,
 		time.UTC,
 		// The cron job discards the TickResult — every
-		// useful field is already written to the server
-		// log. The admin "send all due reminders" route
-		// calls Run directly and renders the result
-		// into a result card; the cron path
-		// intentionally does not duplicate that.
+		// useful field is already written to the server log.
 		func(ctx context.Context) { _, _ = weightReminder.Run(ctx) },
 	)
 	if err != nil {

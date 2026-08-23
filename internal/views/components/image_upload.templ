@@ -181,33 +181,6 @@ templ ImageUpload(props ImageUploadProps) {
 			var REMOVED_TOAST = 'Image marked for removal — it will be deleted when you save.';
 			var CONFIRM_MESSAGE_DEFAULT = 'Remove this image? It will be deleted when you save.';
 
-			// showToast clones the hidden <template> rendered by
-			// the layout (toastTemplate) for the given category,
-			// fills in the title and description, and appends the
-			// clone to #toaster. The icon SVG and toast structure
-			// live in one place (the layout) so this widget doesn't
-			// duplicate them. Falls back to the "default" template
-			// if the requested category isn't present.
-			function showToast(category, title, message) {
-				var toaster = document.getElementById('toaster');
-				if (!toaster) return;
-				var template = document.getElementById('toast-template-' + category) || document.getElementById('toast-template-default');
-				if (!template) return;
-				var clone = template.content.cloneNode(true);
-				var h2 = clone.querySelector('[data-toast-title]');
-				if (h2) h2.textContent = title;
-				var p = clone.querySelector('[data-toast-description]');
-				if (p) {
-					if (message) {
-						p.textContent = message;
-						p.classList.remove('hidden');
-					} else {
-						p.remove();
-					}
-				}
-				toaster.appendChild(clone);
-			}
-
 			// openConfirm shows the global #confirm-dialog with the
 			// given message and resolves when the user clicks the
 			// OK button (or rejects when they cancel/close).

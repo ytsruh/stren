@@ -87,14 +87,6 @@ type User struct {
 	// "HH:00" in 24h UTC. The picker is hour-only by design; minute
 	// precision was explicitly out of scope.
 	ReminderTime string
-	// ReminderEmailEnabled controls whether the per-user email send
-	// runs. Independent of the push channel so a user can mute one
-	// while keeping the other.
-	ReminderEmailEnabled bool
-	// ReminderPushEnabled controls whether the per-user push
-	// broadcast runs. Even when true, push is skipped if the user has
-	// no push_subscriptions row (see the orchestrator's skip rules).
-	ReminderPushEnabled bool
 	// ReminderNextFireAt is the next time the periodic tick should
 	// fire this user's reminder. Set by ComputeNextFire on every
 	// preference change and on every successful fire. nil means
@@ -277,18 +269,4 @@ func parseReminderTime(s string) (int, int, error) {
 // only what the route needs.
 func ParseReminderTimeForRoute(s string) (int, int, error) {
 	return parseReminderTime(s)
-}
-
-// FormatReminderHour returns "HH:00" for the given 0–23 hour.
-// Used by the form when re-rendering the time picker so the
-// default selection is always in the same format the server
-// expects.
-func FormatReminderHour(hour int) string {
-	if hour < 0 {
-		hour = 0
-	}
-	if hour > 23 {
-		hour = 23
-	}
-	return fmt.Sprintf("%02d:00", hour)
 }

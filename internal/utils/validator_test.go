@@ -5,15 +5,6 @@ import (
 	"testing"
 )
 
-// mockValidator is a test double that returns a configurable error.
-type mockValidator struct {
-	err error
-}
-
-func (m *mockValidator) ValidateStruct(s interface{}) error {
-	return m.err
-}
-
 func TestNewValidator(t *testing.T) {
 	v := NewValidator()
 	if v == nil {

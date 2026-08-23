@@ -26,33 +26,6 @@ func renderToString(t *testing.T, component templ.Component) string {
 
 // === Helper function tests ===
 
-func TestCountUniqueExercises(t *testing.T) {
-	now := time.Now()
-	entries := []models.ExerciseEntry{
-		{ExerciseName: "Squat", CreatedAt: now.Add(-1 * time.Hour)},
-		{ExerciseName: "Bench Press", CreatedAt: now.Add(-2 * time.Hour)},
-		{ExerciseName: "Squat", CreatedAt: now.Add(-3 * time.Hour)},
-		{ExerciseName: "Deadlift", CreatedAt: now.Add(-8 * 24 * time.Hour)}, // older than 7 days
-	}
-	got := countUniqueExercises(entries)
-	if got != 2 {
-		t.Errorf("countUniqueExercises = %d, want 2", got)
-	}
-}
-
-func TestCalculateVolume(t *testing.T) {
-	now := time.Now()
-	entries := []models.ExerciseEntry{
-		{Weight: 100, CreatedAt: now.Add(-1 * time.Hour)},
-		{Weight: 80, CreatedAt: now.Add(-2 * time.Hour)},
-		{Weight: 120, CreatedAt: now.Add(-8 * 24 * time.Hour)}, // older than 7 days
-	}
-	got := calculateVolume(entries)
-	if got != 180 {
-		t.Errorf("calculateVolume = %f, want 180", got)
-	}
-}
-
 func TestPopularExercisesChartProps_Empty(t *testing.T) {
 	// Empty input should produce zero-value labels/values so the
 	// DonutChart component renders nothing — call sites gate on
@@ -288,28 +261,10 @@ func TestEntryRow(t *testing.T) {
 	if !strings.Contains(html, `id="exercise-entry-entry-1"`) {
 		t.Error("expected entry ID attribute")
 	}
-	if !strings.Contains(html, "/exercise-entries/entry-1/edit") {
-		t.Error("expected edit link")
-	}
-}
-
-func TestRecentEntries_WithData(t *testing.T) {
-	entries := []models.ExerciseEntry{
-		{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100},
-	}
-	html := renderToString(t, RecentExerciseEntries(entries, "kg"))
-	if !strings.Contains(html, "Recent Workouts") {
-		t.Error("expected section heading")
-	}
-	if !strings.Contains(html, "Squat") {
-		t.Error("expected entry data")
-	}
-}
-
-func TestRecentEntries_Empty(t *testing.T) {
-	html := renderToString(t, RecentExerciseEntries([]models.ExerciseEntry{}, "kg"))
-	if !strings.Contains(html, "No workouts in the last 7 days") {
-		t.Error("expected empty state")
+	// The dashboard is read-only on the web (set editing happens in
+	// the iOS client), so rows must not link to an edit form.
+	if strings.Contains(html, "/exercise-entries/") {
+		t.Error("row should not link to the removed edit form")
 	}
 }
 
@@ -320,20 +275,6 @@ func TestStatCard(t *testing.T) {
 	}
 	if !strings.Contains(html, "42") {
 		t.Error("expected value")
-	}
-}
-
-func TestQuickStats(t *testing.T) {
-	entries := []models.ExerciseEntry{
-		{ExerciseName: "Squat", Weight: 100, CreatedAt: time.Now()},
-		{ExerciseName: "Bench Press", Weight: 80, CreatedAt: time.Now()},
-	}
-	html := renderToString(t, QuickStats(entries, "kg"))
-	if !strings.Contains(html, "Last 7 Days") {
-		t.Error("expected heading")
-	}
-	if !strings.Contains(html, "Total Sets") {
-		t.Error("expected Total Sets stat")
 	}
 }
 

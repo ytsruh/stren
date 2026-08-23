@@ -97,25 +97,6 @@ func CreatePresignedPutURL(key, contentType string) (string, error) {
 	return presignedReq.URL, nil
 }
 
-// CreatePresignedGetURL generates a presigned GET URL for a private object.
-// (Not used in the current public-bucket setup, but kept for parity.)
-func CreatePresignedGetURL(key string) (string, error) {
-	client, err := GetS3Client()
-	if err != nil {
-		return "", err
-	}
-	sc := storageConfig
-	presignClient := s3.NewPresignClient(client)
-	presignedReq, err := presignClient.PresignGetObject(context.Background(), &s3.GetObjectInput{
-		Bucket: aws.String(sc.Bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to generate presigned URL: %w", err)
-	}
-	return presignedReq.URL, nil
-}
-
 // DeleteObject removes an object from R2 by key. Errors are wrapped.
 func DeleteObject(key string) error {
 	client, err := GetS3Client()

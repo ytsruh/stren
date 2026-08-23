@@ -1,12 +1,13 @@
 // Package routes: api_v1.go contains every JSON handler for the
-// /api/v1/* namespace. Each handler is intentionally thin: it
-// binds the request, validates it, calls the same controller
-// method the HTML route uses, and translates the result into a
-// DTO. The web app's behavior is unchanged.
+// /api/v1/* namespace — the contract the iOS client (client/)
+// is built against. Each handler is intentionally thin: it binds
+// the request, validates it, calls the shared controller method,
+// and translates the result into a DTO.
 package routes
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -187,8 +188,7 @@ func (h *Handler) APIListExercises(c echo.Context) error {
 // APIListExerciseEntries handles GET /api/v1/exercise-entries.
 // Accepts an optional ?days=N query parameter (default 7,
 // clamped to [1, 365]) and returns the user's sets from the
-// last N days, newest first. Same data the dashboard shows
-// for the web app.
+// last N days, newest first. Same data the web dashboard shows.
 func (h *Handler) APIListExerciseEntries(c echo.Context) error {
 	claims := GetClaims(c)
 
@@ -530,10 +530,9 @@ func (h *Handler) APIDeleteGoal(c echo.Context) error {
 
 // --- Feedback ---
 
-// APISubmitFeedback handles POST /api/v1/feedback. Accepts the
-// same {title, message} body the web app's /feedback form
-// collects and delegates to FeedbackController.Submit, which
-// applies the trim + length rules and persists the row scoped
+// APISubmitFeedback handles POST /api/v1/feedback. Accepts a
+// {title, message} body and delegates to FeedbackController.Submit,
+// which applies the trim + length rules and persists the row scoped
 // to the authenticated user. Returns 204 No Content on success
 // so the iOS client can simply call it and dismiss its form;
 // validation failures return the controller's human-readable
@@ -744,14 +743,29 @@ func (h *Handler) APICompareWeight(c echo.Context) error {
 	})
 }
 
+// formatWeightDelta produces a short human-readable summary of the
+// weight change between two entries. Positive deltas are prefixed with
+// "+", negative with "−" (U+2212), and deltas within ±0.05 return an
+// empty string so the caller can omit the change indicator entirely
+// (avoids the awkward "· no change" label). unit is the user's
+// preferred display unit ("kg" or "lbs") and is appended to the value
+// so the delta is labelled consistently with the entries it compares.
+func formatWeightDelta(delta float64, unit string) string {
+	switch {
+	case delta > 0.05:
+		return fmt.Sprintf("+%.1f %s", delta, unit)
+	case delta < -0.05:
+		return fmt.Sprintf("−%.1f %s", -delta, unit)
+	default:
+		return ""
+	}
+}
+
 // APIRequestPhotoUploadURL handles POST /api/v1/weight/photo-upload.
-// Thin JWT-protected wrapper around the existing presigned-URL
-// flow used by the web app (see `internal/routes/photos.go:33`
-// and the `/api/weight/photo-upload` HTML route). The web app
-// continues to use the unauthenticated-cookie variant; the
-// iOS client uses this JWT-protected variant so the browser
-// session and the native session share no transport-level
-// auth header.
+// Thin JWT-protected wrapper around the shared presigned-URL flow
+// (see `internal/routes/photos.go:33`). The iOS client uses this
+// JWT-protected variant so the native session never relies on
+// browser cookie auth.
 func (h *Handler) APIRequestPhotoUploadURL(c echo.Context) error {
 	var in WeightPhotoUploadRequest
 	if err := c.Bind(&in); err != nil {
@@ -761,10 +775,9 @@ func (h *Handler) APIRequestPhotoUploadURL(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, APIError{Error: friendlyValidationError(err)})
 	}
 
-	// Delegate to the existing handler for the file-type /
+	// Delegate to the shared handler for the file-type /
 	// extension / presigned-URL logic. The shared helper
-	// enforces the same image/* MIME check the web surface
-	// uses, so the iOS client cannot bypass it by going via
-	// the JSON API.
+	// enforces the image/* MIME check, so the iOS client
+	// cannot bypass it by going via the JSON API.
 	return h.PhotoUploadURL(c)
 }

@@ -2,19 +2,21 @@
 package routes
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/labstack/echo/v4"
 
-	"stren/internal/views"
 	"stren/internal/views/dashboard"
 	exerciseviews "stren/internal/views/exercise"
 )
 
 // --- Exercise Entry Handlers ---
+//
+// The web app is a read-only surface for exercise entries: it renders
+// the dashboard's recent-activity table and the per-exercise
+// history/chart pages. Creating, editing, and deleting exercise
+// entries happens in the iOS client via /api/v1/exercise-entries.
 
 // Dashboard renders the main dashboard page.
 func (h *Handler) Dashboard(c echo.Context) error {
@@ -30,184 +32,6 @@ func (h *Handler) Dashboard(c echo.Context) error {
 	}
 
 	return render(c, dashboard.Dashboard(exerciseEntries, claims.Name, true, claims.IsAdmin, unit))
-}
-
-// NewExerciseEntryForm renders the form for creating a new set.
-// When reached via /exercises/:id/new the path param preselects that exercise.
-func (h *Handler) NewExerciseEntryForm(c echo.Context) error {
-	exercises, err := h.exerciseEntryCtrl.List()
-	if err != nil {
-		return err
-	}
-
-	claims := GetClaims(c)
-
-	preselectedID := ""
-	if id := c.Param("id"); id != "" {
-		exercise, err := h.exerciseEntryCtrl.GetExerciseByID(id, claims.UserID)
-		if err != nil {
-			return err
-		}
-		if exercise != nil {
-			preselectedID = exercise.ID
-		}
-	}
-
-	unit := "kg"
-	if user := h.GetUser(c); user != nil {
-		unit = user.WeightUnitDisplay()
-	}
-
-	return render(c, exerciseviews.ExerciseEntryForm(exercises, preselectedID, claims.Name, true, claims.IsAdmin, unit))
-}
-
-// CreateExerciseEntry handles the creation of a new set (with one or more entries).
-func (h *Handler) CreateExerciseEntry(c echo.Context) error {
-	exerciseID := c.FormValue("exercise_id")
-	if exerciseID == "" {
-		return render(c, exerciseviews.ExerciseEntryFormError("Exercise is required"))
-	}
-
-	sets, err := parseExerciseEntrySets(c, h.validator)
-	if err != nil {
-		return render(c, exerciseviews.ExerciseEntryFormError(friendlyError(err)))
-	}
-	if len(sets) == 0 {
-		return render(c, exerciseviews.ExerciseEntryFormError("Add at least one set"))
-	}
-
-	claims := GetClaims(c)
-	notes := c.FormValue("notes")
-
-	// created_at is rendered as datetime-local; the form field carries the
-	// user's wall-clock pick. We default to time.Now() so an empty/absent
-	// value preserves the "log it now" behaviour. Parse errors surface as a
-	// user-visible error rather than silently falling back, since the user
-	// clearly intended to set a date.
-	createdAt := time.Now()
-	if dateStr := c.FormValue("created_at"); dateStr != "" {
-		parsed, parseErr := time.Parse("2006-01-02T15:04", dateStr)
-		if parseErr != nil {
-			return render(c, exerciseviews.ExerciseEntryFormError("Invalid date format"))
-		}
-		createdAt = parsed
-	}
-
-	created, err := h.exerciseEntryCtrl.CreateExerciseEntries(claims.UserID, exerciseID, notes, createdAt, sets)
-	if err != nil {
-		return render(c, exerciseviews.ExerciseEntryFormError("Failed to save set: "+err.Error()))
-	}
-
-	// Check if htmx request
-	if c.Request().Header.Get("HX-Request") == "true" {
-		msg := "Set saved!"
-		if len(created) > 1 {
-			msg = fmt.Sprintf("%d sets saved!", len(created))
-		}
-		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
-		return render(c, exerciseviews.ExerciseEntryFormSuccessToast(msg))
-	}
-
-	return c.Redirect(http.StatusSeeOther, "/")
-}
-
-// EditExerciseEntryForm renders the form for editing a set.
-func (h *Handler) EditExerciseEntryForm(c echo.Context) error {
-	id := c.Param("id")
-
-	claims := GetClaims(c)
-	exerciseEntry, err := h.exerciseEntryCtrl.GetExerciseEntry(id, claims.UserID)
-	if err != nil {
-		return err
-	}
-	if exerciseEntry == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "Set not found")
-	}
-
-	unit := "kg"
-	if user := h.GetUser(c); user != nil {
-		unit = user.WeightUnitDisplay()
-	}
-
-	return render(c, exerciseviews.EditExerciseEntryForm(exerciseEntry, claims.Name, true, claims.IsAdmin, unit))
-}
-
-// GetExerciseEntry returns a single exercise entry (for API/hx-get).
-func (h *Handler) GetExerciseEntry(c echo.Context) error {
-	id := c.Param("id")
-
-	claims := GetClaims(c)
-	exerciseEntry, err := h.exerciseEntryCtrl.GetExerciseEntry(id, claims.UserID)
-	if err != nil {
-		return err
-	}
-	if exerciseEntry == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "Set not found")
-	}
-
-	unit := "kg"
-	if user := h.GetUser(c); user != nil {
-		unit = user.WeightUnitDisplay()
-	}
-
-	return render(c, dashboard.ExerciseEntryRow(*exerciseEntry, unit))
-}
-
-// UpdateExerciseEntry handles updating an existing exercise entry.
-func (h *Handler) UpdateExerciseEntry(c echo.Context) error {
-	id := c.Param("id")
-
-	claims := GetClaims(c)
-
-	existing, err := h.exerciseEntryCtrl.GetExerciseEntry(id, claims.UserID)
-	if err != nil {
-		return err
-	}
-	if existing == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "Set not found")
-	}
-
-	exerciseEntry, err := parseExerciseEntryForm(c, h.validator)
-	if err != nil {
-		return render(c, exerciseviews.ExerciseEntryFormError(friendlyError(err)))
-	}
-
-	createdAt := existing.CreatedAt
-
-	if dateStr := c.FormValue("created_at"); dateStr != "" {
-		createdAt, err = time.Parse("2006-01-02T15:04", dateStr)
-		if err != nil {
-			return render(c, exerciseviews.ExerciseEntryFormError("Invalid date format"))
-		}
-	}
-
-	_, err = h.exerciseEntryCtrl.UpdateExerciseEntry(id, claims.UserID, existing.ExerciseID, exerciseEntry.Notes, exerciseEntry.Reps, exerciseEntry.Weight, exerciseEntry.RestTime, createdAt)
-	if err != nil {
-		return render(c, exerciseviews.ExerciseEntryFormError("Failed to update set: "+err.Error()))
-	}
-
-	if c.Request().Header.Get("HX-Request") == "true" {
-		return render(c, exerciseviews.ExerciseEntryFormSuccessToast("Set updated!"))
-	}
-
-	return c.Redirect(http.StatusSeeOther, "/")
-}
-
-// DeleteExerciseEntry handles deleting an exercise entry.
-func (h *Handler) DeleteExerciseEntry(c echo.Context) error {
-	id := c.Param("id")
-
-	claims := GetClaims(c)
-	if err := h.exerciseEntryCtrl.DeleteExerciseEntry(id, claims.UserID); err != nil {
-		return err
-	}
-
-	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
-		return render(c, views.Toast("success", "Set deleted!", ""))
-	}
-
-	return c.Redirect(http.StatusSeeOther, "/")
 }
 
 // ExerciseHistory shows all exercise entries for a specific exercise.
@@ -330,16 +154,6 @@ func parsePage(raw string) int {
 		return 1
 	}
 	return n
-}
-
-// ListExercisesJSON returns all exercises as JSON (for autocomplete).
-func (h *Handler) ListExercisesJSON(c echo.Context) error {
-	exercises, err := h.exerciseEntryCtrl.List()
-	if err != nil {
-		return err
-	}
-
-	return c.JSON(http.StatusOK, exercises)
 }
 
 // ListExercisesUI renders the exercises list page.

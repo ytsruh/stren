@@ -181,7 +181,7 @@ func welcomeText(name, baseURL string) string {
 			"Welcome to Stren. Stren helps you log every set, watch your numbers climb, and keep your training consistent.\n\n"+
 			"Head to your dashboard to log your first set:\n%s\n\n"+
 			"— The Stren team\n",
-		name, baseURL+"/",
+		name, baseURL+"/dashboard",
 	)
 }
 

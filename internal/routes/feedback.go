@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -10,41 +11,61 @@ import (
 	"stren/internal/views/feedback"
 )
 
+// FeedbackForm renders the user-facing GET /feedback page. The
+// dashboard's iOS banner links here so web users can get in
+// touch (e.g. to request iOS access). Authentication is enforced
+// by the global auth middleware — /feedback is not in the public
+// route list.
 func (h *Handler) FeedbackForm(c echo.Context) error {
 	claims := GetClaims(c)
 	return render(c, feedback.FeedbackPage(claims.Name, true, claims.IsAdmin))
 }
 
+// SubmitFeedback handles POST /feedback. Validation and storage
+// are delegated to FeedbackController.Submit — the same entry
+// point the iOS client uses via POST /api/v1/feedback — so both
+// surfaces enforce identical title/message rules. htmx requests
+// get toast fragments (error for validation failures, success +
+// a form-reset trigger on success); plain POSTs fall back to a
+// redirect to the dashboard.
 func (h *Handler) SubmitFeedback(c echo.Context) error {
 	title := c.FormValue("title")
 	message := c.FormValue("message")
 
 	claims := GetClaims(c)
-	err := h.feedbackCtrl.Submit(title, message, claims.UserID)
-	if err != nil {
-		if err == controllers.ErrTitleTooShort {
-			return render(c, feedback.FeedbackFormError("Title must be at least 5 characters"))
-		}
-		if err == controllers.ErrTitleTooLong {
-			return render(c, feedback.FeedbackFormError("Title must be at most 100 characters"))
-		}
-		if err == controllers.ErrMessageTooShort {
-			return render(c, feedback.FeedbackFormError("Message must be at least 10 characters"))
-		}
-		if err == controllers.ErrMessageTooLong {
-			return render(c, feedback.FeedbackFormError("Message must be at most 1000 characters"))
-		}
-		return render(c, feedback.FeedbackFormError("Failed to submit feedback: "+err.Error()))
+	if err := h.feedbackCtrl.Submit(title, message, claims.UserID); err != nil {
+		return render(c, feedback.FeedbackFormError(feedbackValidationError(err)))
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
-		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/"}`)
-		return render(c, feedback.FeedbackFormSuccess("Feedback submitted"))
+		// The success page listens for this event and resets the
+		// form fields (see internal/views/feedback/feedback.templ).
+		c.Response().Header().Set("HX-Trigger", "feedbackSubmitted")
+		return render(c, feedback.FeedbackFormSuccess("Thanks for your feedback"))
 	}
 
-	return c.Redirect(http.StatusSeeOther, "/")
+	return c.Redirect(http.StatusSeeOther, dashboardPath)
 }
 
+// feedbackValidationError maps FeedbackController validation
+// errors to user-friendly toast messages.
+func feedbackValidationError(err error) string {
+	switch {
+	case errors.Is(err, controllers.ErrTitleTooShort):
+		return "Title must be at least 5 characters"
+	case errors.Is(err, controllers.ErrTitleTooLong):
+		return "Title must be at most 100 characters"
+	case errors.Is(err, controllers.ErrMessageTooShort):
+		return "Message must be at least 10 characters"
+	case errors.Is(err, controllers.ErrMessageTooLong):
+		return "Message must be at most 1000 characters"
+	default:
+		return "Failed to submit feedback: " + err.Error()
+	}
+}
+
+// AdminListFeedback renders the admin feedback inbox with an
+// optional open/closed filter.
 func (h *Handler) AdminListFeedback(c echo.Context) error {
 	filter := c.QueryParam("filter")
 
@@ -81,8 +102,4 @@ func (h *Handler) AdminCloseFeedback(c echo.Context) error {
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/admin/feedback")
-}
-
-func (h *Handler) AdminFeedback(c echo.Context) error {
-	return h.AdminListFeedback(c)
 }

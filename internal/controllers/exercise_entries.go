@@ -2,9 +2,13 @@
 package controllers
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"math"
 	"time"
 
+	"stren/internal/export"
 	"stren/internal/models"
 )
 
@@ -16,11 +20,6 @@ type ExerciseEntryController struct {
 // NewExerciseEntryController creates a new ExerciseEntryController instance.
 func NewExerciseEntryController(repo models.Repository) *ExerciseEntryController {
 	return &ExerciseEntryController{repo: repo}
-}
-
-// ListExerciseEntries returns the latest exercise entries for a user.
-func (ec *ExerciseEntryController) ListExerciseEntries(userID string) ([]models.ExerciseEntry, error) {
-	return ec.repo.ListExerciseEntries(userID, 100)
 }
 
 // ListExerciseEntriesLast7Days returns exercise entries from the last 7 days for a user.
@@ -51,28 +50,11 @@ type ExerciseSetInput struct {
 	RestTime int
 }
 
-// CreateExerciseEntry creates a new exercise entry for the given user.
-func (ec *ExerciseEntryController) CreateExerciseEntry(userID string, exerciseID, notes string, createdAt time.Time, reps int, weight float64, restTime int) (*models.ExerciseEntry, error) {
-	exerciseEntry := &models.ExerciseEntry{
-		ExerciseID: exerciseID,
-		Notes:      notes,
-		Reps:       reps,
-		Weight:     weight,
-		RestTime:   restTime,
-		UserID:     userID,
-		CreatedAt:  createdAt,
-	}
-	if err := ec.repo.CreateExerciseEntry(exerciseEntry); err != nil {
-		return nil, err
-	}
-	return exerciseEntry, nil
-}
-
 // CreateExerciseEntries persists a group of sets in a single submission, all
 // sharing the same exercise, user, notes and the supplied createdAt timestamp.
-// The timestamp comes from the caller (typically parsed from the form's
-// created_at field, or time.Now() when the field is empty) so a multi-set
-// submission can be back-dated as a single unit. On the first repository
+// The timestamp comes from the caller (parsed from the client's created_at
+// field, or time.Now() when absent) so a multi-set submission can be
+// back-dated as a single unit. On the first repository
 // error the loop aborts and the error is returned; partial-success semantics
 // aren't worth the complexity for a workout log.
 func (ec *ExerciseEntryController) CreateExerciseEntries(userID, exerciseID, notes string, createdAt time.Time, sets []ExerciseSetInput) ([]models.ExerciseEntry, error) {
@@ -208,4 +190,54 @@ func (ec *ExerciseEntryController) GetRecentExerciseEntriesForChart(exerciseID, 
 // paginated repo method is reused to avoid introducing a new SQL query.
 func (ec *ExerciseEntryController) GetAllExerciseEntriesForChart(exerciseID, userID string) ([]models.ExerciseEntry, error) {
 	return ec.repo.GetExerciseEntriesByExercisePaginated(exerciseID, userID, math.MaxInt32, 0)
+}
+
+// SuggestedExerciseEntriesExportFilename returns the recommended filename
+// for a user's exercise entries export zip. Exposed so the route layer
+// (and tests) don't need to know the format.
+func SuggestedExerciseEntriesExportFilename(now time.Time) string {
+	return "stren-exercise-entries-export-" + now.UTC().Format("2006-01-02") + ".zip"
+}
+
+// ExportExerciseEntriesZip builds a streaming zip archive of the user's
+// exercise entries and returns a reader the caller can pipe straight to
+// the HTTP response. The string returned alongside is the suggested
+// filename for the Content-Disposition header.
+//
+// The export is built in a background goroutine writing into an io.Pipe,
+// mirroring WeightController.ExportWeightZip so the HTTP layer can start
+// sending bytes as soon as the first zip entry is written — no in-memory
+// buffering of the full archive.
+//
+// weightUnit is the user's preferred display unit ("kg" or "lbs") and is
+// recorded in the CSV's weight_unit column so the file is self-describing.
+//
+// The error returned covers failures up to the point of returning the
+// pipe reader; once streaming has started, errors are surfaced by the
+// goroutine closing the pipe with the error, which io.Copy propagates to
+// the response writer.
+func (ec *ExerciseEntryController) ExportExerciseEntriesZip(ctx context.Context, userID string, weightUnit string) (io.Reader, string, error) {
+	entries, err := ec.repo.ListExerciseEntries(userID, 0)
+	if err != nil {
+		return nil, "", fmt.Errorf("load exercise entries: %w", err)
+	}
+
+	pr, pw := io.Pipe()
+	filename := SuggestedExerciseEntriesExportFilename(time.Now())
+
+	go func() {
+		// Use a detached context for the actual build so an
+		// in-flight export isn't cancelled when the request
+		// context is. The pipe closure is the only way to
+		// signal a mid-stream error to io.Copy.
+		buildCtx := context.Background()
+		_, buildErr := export.BuildExerciseEntriesZip(buildCtx, pw, entries, userID, weightUnit)
+		if buildErr != nil {
+			_ = pw.CloseWithError(buildErr)
+			return
+		}
+		_ = pw.Close()
+	}()
+
+	return pr, filename, nil
 }

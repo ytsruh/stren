@@ -1,0 +1,278 @@
+package views
+
+import "stren/internal/views/components"
+
+// Showcase renders the public bento-grid showcase page at "/showcase".
+templ Showcase() {
+	@Layout(PageData{Title: "Showcase | Stren", Wide: true}) {
+		// Page intro — tighter than landing hero, editorial headline + sub.
+		<section class="mx-auto flex max-w-5xl flex-col items-center gap-5 py-10 text-center sm:py-14">
+			<span class="badge bg-primary text-primary-foreground border-primary px-3 py-1 text-sm h-auto">
+				Showcase
+			</span>
+			<h1 class="text-balance text-3xl font-bold tracking-[-0.02em] leading-[1.05] sm:text-4xl lg:text-[2.5rem]">
+				Every set, every weigh-in, every win — in one place.
+			</h1>
+			<p class="max-w-2xl text-pretty text-base leading-7 text-muted-foreground sm:text-[17px]">
+				A quick tour of Stren on iPhone. The bento below mixes real app screenshots
+				with placeholders you can swap for final art — same grid, same rhythm.
+			</p>
+			<div class="flex flex-wrap items-center justify-center gap-3 pt-1">
+				<a href="/register" class="btn">
+					Sign up
+				</a>
+			</div>
+		</section>
+		// Bento grid — 12-col on desktop, 1-2 col on mobile. Cards overflow hidden for images.
+		<section class="mx-auto max-w-5xl">
+			<div class="grid auto-rows-[minmax(220px,auto)] grid-cols-1 gap-4 sm:gap-5 md:grid-cols-12">
+				// Tile 1 — Dashboard overview (now 7 cols to match Your data stays yours' 7-col container)
+				<div class="group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm md:col-span-7">
+					<div class="flex items-center justify-between gap-3 border-b bg-card px-5 py-4">
+						<div class="flex items-center gap-3">
+							<div class="bg-primary text-white flex size-9 shrink-0 items-center justify-center rounded-xl">
+								@components.Icon(components.IconProps{Name: "home", Size: 18})
+							</div>
+							<div class="flex flex-col">
+								<h2 class="text-sm font-semibold tracking-tight">Dashboard</h2>
+								<p class="text-xs text-muted-foreground">Your week at a glance</p>
+							</div>
+						</div>
+					</div>
+					<div class="relative overflow-hidden">
+						<img
+							src="/img/showcase/dashboard.png"
+							alt="Stren dashboard showing recent exercise entries and 7-day history"
+							class="aspect-4/5 w-full bg-white object-cover object-top transition duration-300 group-hover:scale-[1.02]"
+							loading="eager"
+							decoding="async"
+						/>
+					</div>
+					<div class="px-5 py-4">
+						<p class="text-sm leading-6 text-muted-foreground">
+							Yourlast 7 days, and quick entry points — the dashboard you check between sets.
+						</p>
+					</div>
+				</div>
+				// Tile 2 — Log every set (5 cols to match Volume width; aspect 4/7.08 so image height matches Dashboard's 7-col 4/5 including grid gaps without changing width)
+				<div class="group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm md:col-span-5">
+					<div class="flex items-center gap-3 border-b bg-card px-5 py-4">
+						<div class="bg-primary text-white flex size-9 shrink-0 items-center justify-center rounded-xl">
+							@components.Icon(components.IconProps{Name: "dumbbell", Size: 18})
+						</div>
+						<div class="flex flex-col">
+							<h2 class="text-sm font-semibold tracking-tight">Log every set</h2>
+							<p class="text-xs text-muted-foreground">Reps · weight · rest</p>
+						</div>
+					</div>
+					<div class="relative overflow-hidden">
+						<img
+							src="/img/showcase/log.png"
+							alt="Exercise detail showing sets logged with reps and weight"
+							class="aspect-[4/7.08] w-full bg-white object-cover object-top transition duration-300 group-hover:scale-[1.02]"
+							loading="lazy"
+							decoding="async"
+						/>
+					</div>
+					<div class="px-5 py-4">
+						<p class="text-sm leading-6 text-muted-foreground">Add a whole set of sets in one go, right between exercises.</p>
+					</div>
+				</div>
+				// Tile 3 — Progression chart (wide placeholder uses picsum)
+				<div class="group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm md:col-span-6">
+					<div class="flex items-center gap-3 border-b bg-card px-5 py-4">
+						<div class="bg-primary text-white flex size-9 shrink-0 items-center justify-center rounded-xl">
+							@components.Icon(components.IconProps{Name: "trending-up", Size: 18})
+						</div>
+						<div class="flex flex-col">
+							<h2 class="text-sm font-semibold tracking-tight">Progression charts</h2>
+							<p class="text-xs text-muted-foreground">Max weight per day</p>
+						</div>
+					</div>
+					<div class="relative overflow-hidden">
+						<img
+							src="/img/showcase/progress.png"
+							alt=""
+							class="aspect-16/10 w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+							loading="lazy"
+							decoding="async"
+						/>
+					</div>
+					<div class="px-5 py-4">
+						<p class="text-sm leading-6 text-muted-foreground">Every lift builds your story. Personal bests are spotted automatically.</p>
+					</div>
+				</div>
+				// Tile 4 — History / per-exercise (placeholder)
+				<div class="group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm md:col-span-6">
+					<div class="flex items-center gap-3 border-b bg-card px-5 py-4">
+						<div class="bg-primary text-white flex size-9 shrink-0 items-center justify-center rounded-xl">
+							@components.Icon(components.IconProps{Name: "calendar", Size: 18})
+						</div>
+						<div class="flex flex-col">
+							<h2 class="text-sm font-semibold tracking-tight">Per-exercise history</h2>
+							<p class="text-xs text-muted-foreground">All sets, paginated</p>
+						</div>
+					</div>
+					<div class="relative overflow-hidden">
+						<img
+							src="/img/showcase/history.png"
+							alt=""
+							class="aspect-16/10 w-full object-cover object-top transition duration-300 group-hover:scale-[1.02]"
+							loading="lazy"
+							decoding="async"
+						/>
+					</div>
+					<div class="px-5 py-4">
+						<p class="text-sm leading-6 text-muted-foreground">Each exercise gets its own history and chart page.</p>
+					</div>
+				</div>
+				// Tile 5 — Weight journey (real screenshot) + Tile 6 — Goals (real screenshot) side-by-side
+				<div class="group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm md:col-span-6">
+					<div class="flex items-center gap-3 border-b bg-card px-5 py-4">
+						<div class="bg-primary text-white flex size-9 shrink-0 items-center justify-center rounded-xl">
+							@components.Icon(components.IconProps{Name: "scale", Size: 18})
+						</div>
+						<div class="flex flex-col">
+							<h2 class="text-sm font-semibold tracking-tight">Weight journey</h2>
+							<p class="text-xs text-muted-foreground">Progress & optional photos</p>
+						</div>
+					</div>
+					<div class="relative flex-1 overflow-hidden">
+						<img
+							src="/img/showcase/weight.png"
+							alt="Weight tracking showing weigh-ins and progress photos"
+							class="h-60 w-full bg-white object-cover object-top transition duration-300 group-hover:scale-[1.02] md:h-70"
+							loading="lazy"
+							decoding="async"
+						/>
+					</div>
+					<div class="px-5 py-4">
+						<p class="text-sm leading-6 text-muted-foreground">Log weigh-ins with optional photos; compare before & after anytime.</p>
+					</div>
+				</div>
+				<div class="group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm md:col-span-6">
+					<div class="flex items-center gap-3 border-b bg-card px-5 py-4">
+						<div class="bg-primary text-white flex size-9 shrink-0 items-center justify-center rounded-xl">
+							@components.Icon(components.IconProps{Name: "activity", Size: 18})
+						</div>
+						<div class="flex flex-col">
+							<h2 class="text-sm font-semibold tracking-tight">Goals & timers</h2>
+							<p class="text-xs text-muted-foreground">Countdown · EMOM</p>
+						</div>
+					</div>
+					<div class="relative flex-1 overflow-hidden">
+						<img
+							src="/img/showcase/timers.png"
+							alt="Goals page with target dates and timers"
+							class="h-60 w-full bg-white object-cover object-top transition duration-300 group-hover:scale-[1.02] md:h-70"
+							loading="lazy"
+							decoding="async"
+						/>
+					</div>
+					<div class="px-5 py-4">
+						<p class="text-sm leading-6 text-muted-foreground">Quick access countdown & EMOM timers to get you moving</p>
+					</div>
+				</div>
+				// Tile 7 — Volume / advanced (placeholder scatter)
+				<div class="group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm md:col-span-5">
+					<div class="flex items-center gap-3 border-b bg-card px-5 py-4">
+						<div class="bg-primary text-white flex size-9 shrink-0 items-center justify-center rounded-xl">
+							@components.Icon(components.IconProps{Name: "target", Size: 18})
+						</div>
+						<div class="flex flex-col">
+							<h2 class="text-sm font-semibold tracking-tight">Personal Goals</h2>
+							<p class="text-xs text-muted-foreground">Your progress is personal</p>
+						</div>
+					</div>
+					<div class="relative overflow-hidden">
+						<img
+							src="/img/showcase/goals.png"
+							alt=""
+							class="aspect-4/5 w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+							loading="lazy"
+							decoding="async"
+						/>
+					</div>
+					<div class="px-5 py-4">
+						<p class="text-sm leading-6 text-muted-foreground">Every set plotted by reps & weight — no per-day collapse.</p>
+					</div>
+				</div>
+				// Tile 8 — Mobile / iPhone + Privacy side
+				<div class="flex flex-col gap-4 md:col-span-7">
+					// Privacy / ownership tile — text-forward, with tiny image accent
+					<div class="flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
+						<div class="grid gap-0 sm:grid-cols-[1.2fr_0.8fr]">
+							<div class="flex flex-col gap-5 px-5 py-5 sm:px-6 sm:py-6">
+								<div class="bg-primary text-white flex size-9 shrink-0 items-center justify-center rounded-xl">
+									@components.Icon(components.IconProps{Name: "check", Size: 18})
+								</div>
+								<h2 class="text-base font-semibold tracking-tight">Your data stays yours</h2>
+								<p class="text-sm leading-6 text-muted-foreground">
+									No trackers. Never sold. Export everything — every set, every weigh-in, every photo — in a single ZIP.
+								</p>
+								<div class="flex flex-wrap gap-2 py-5">
+									<span class="badge" data-variant="outline">Private by default</span>
+									<span class="badge" data-variant="outline">Export ZIP</span>
+									<span class="badge" data-variant="outline">No trackers</span>
+								</div>
+							</div>
+							<div class="relative hidden overflow-hidden bg-muted sm:block">
+								<img
+									src="/img/showcase/locked.jpg"
+									alt=""
+									class="h-full w-full object-cover"
+									loading="lazy"
+									decoding="async"
+								/>
+								<div class="absolute inset-0 bg-linear-to-t from-black/20 to-transparent"></div>
+							</div>
+						</div>
+					</div>
+					// iPhone app CTA tile — adapts to theme: light bg + black text in light mode, dark bg + white text in dark mode
+					<div class="group relative flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
+						<div class="relative flex flex-col gap-4 p-6 sm:p-7">
+							<div class="flex items-center gap-3">
+								<div class="bg-primary text-white flex size-9 shrink-0 items-center justify-center rounded-xl">
+									@components.Icon(components.IconProps{Name: "smartphone", Size: 18})
+								</div>
+								<span class="text-sm font-medium text-black/70 dark:text-white/70">iPhone app</span>
+							</div>
+							<h2 class="text-xl font-semibold tracking-tight text-black dark:text-white sm:text-2xl">Log your journey on your phone, wherever you are.</h2>
+							<p class="text-sm leading-6 text-black/70 dark:text-white/70 sm:text-[15px]">
+								Stren is free. Log between sets on your phone — review history, charts, and progress.
+							</p>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
+		// Closing CTA
+		<section class="relative mt-4 overflow-hidden rounded-2xl border px-6 py-16 text-center sm:px-8 sm:py-20">
+			<div aria-hidden="true" class="absolute inset-0">
+				<img
+					src="/img/stock/gym-1.jpg"
+					alt=""
+					class="h-full w-full object-cover object-center"
+					loading="lazy"
+					decoding="async"
+				/>
+				<div class="absolute inset-0 bg-black/35 dark:bg-black/65"></div>
+				<div class="absolute inset-0 bg-linear-to-t from-black/20 dark:from-black/40 via-black/5 dark:via-black/10 to-black/10 dark:to-black/25"></div>
+			</div>
+			<div class="relative mx-auto flex max-w-xl flex-col items-center gap-4">
+				<h2 class="text-2xl font-semibold tracking-tight text-white sm:text-[1.7rem]">Ready to see what you're capable of?</h2>
+				<p class="max-w-xl text-[15px] leading-6 text-white/80 sm:text-base">
+					Stren is free. Sign up for the beta for iPhone today, or explore your dashboard on the web.
+				</p>
+				<div class="flex flex-wrap items-center justify-center gap-3 pt-1">
+					<a href="/register" class="btn">
+						Get Stren for iPhone
+					</a>
+					<a href="/login" class="btn border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white hover:text-black" data-variant="outline">
+						Log in
+					</a>
+				</div>
+			</div>
+		</section>
+	}
+}
