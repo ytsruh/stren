@@ -228,10 +228,14 @@ templ Layout(data PageData) {
 										type="button"
 										aria-label="Toggle dark mode"
 										onclick="window.basecoat.theme.toggle()"
-										class="btn size-8" data-variant="outline" data-size="icon"
+										class="btn size-8"
+										data-variant="outline"
+										data-size="icon"
 									>
-										<span class="hidden dark:block">@components.Icon(components.IconProps{Name: "sun", Size: 16})</span>
-										<span class="block dark:hidden">@components.Icon(components.IconProps{Name: "moon", Size: 16})</span>
+										<span class="hidden dark:block">@components.Icon(components.IconProps{Name: "sun", Size: 16})
+</span>
+										<span class="block dark:hidden">@components.Icon(components.IconProps{Name: "moon", Size: 16})
+</span>
 									</button>
 								</div>
 							} else {
@@ -250,10 +254,14 @@ templ Layout(data PageData) {
 											type="button"
 											aria-label="Toggle dark mode"
 											onclick="window.basecoat.theme.toggle()"
-											class="btn size-8" data-variant="outline" data-size="icon"
+											class="btn size-8"
+											data-variant="outline"
+											data-size="icon"
 										>
-											<span class="hidden dark:block">@components.Icon(components.IconProps{Name: "sun", Size: 16})</span>
-											<span class="block dark:hidden">@components.Icon(components.IconProps{Name: "moon", Size: 16})</span>
+											<span class="hidden dark:block">@components.Icon(components.IconProps{Name: "sun", Size: 16})
+</span>
+											<span class="block dark:hidden">@components.Icon(components.IconProps{Name: "moon", Size: 16})
+</span>
 										</button>
 									</div>
 									// Mobile: compact — theme toggle + Basecoat dropdown-menu containing all nav links.
@@ -262,10 +270,14 @@ templ Layout(data PageData) {
 											type="button"
 											aria-label="Toggle dark mode"
 											onclick="window.basecoat.theme.toggle()"
-											class="btn size-8" data-variant="outline" data-size="icon"
+											class="btn size-8"
+											data-variant="outline"
+											data-size="icon"
 										>
-											<span class="hidden dark:block">@components.Icon(components.IconProps{Name: "sun", Size: 16})</span>
-											<span class="block dark:hidden">@components.Icon(components.IconProps{Name: "moon", Size: 16})</span>
+											<span class="hidden dark:block">@components.Icon(components.IconProps{Name: "sun", Size: 16})
+</span>
+											<span class="block dark:hidden">@components.Icon(components.IconProps{Name: "moon", Size: 16})
+</span>
 										</button>
 										<div class="dropdown-menu">
 											<button type="button" aria-label="Open menu" class="btn size-8" data-variant="ghost" data-size="icon">
@@ -300,13 +312,14 @@ templ Layout(data PageData) {
 						</div>
 						<nav class="flex items-center gap-4 md:gap-5 text-muted-foreground">
 							<a href="/" class="hover:text-foreground transition-colors py-1">Home</a>
+							<a href="/showcase" class="hover:text-foreground transition-colors py-1">Showcase</a>
 							<a href="/register" class="hover:text-foreground transition-colors py-1">Sign up</a>
 							<a href="/login" class="hover:text-foreground transition-colors py-1">Login</a>
 						</nav>
 					</div>
 				</footer>
 			}
-			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-[425px]" onclick="if(event.target===this)this.close()">
+			<dialog id="confirm-dialog" class="dialog w-full sm:max-w-106.25" onclick="if(event.target===this)this.close()">
 				<form method="dialog">
 					<header>
 						<h3>Confirm</h3>

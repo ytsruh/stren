@@ -23,7 +23,7 @@ templ LoginPage(errorMsg string) {
 			// it flush inside the rounded corners. Explicit width is
 			// required because the img inside is absolutely positioned,
 			// so the div would otherwise collapse to zero width.
-			<div class="relative hidden min-h-[520px] md:w-1/2 md:block">
+			<div class="relative hidden min-h-130 md:w-1/2 md:block">
 				<img src="/img/login.jpg" alt="" class="absolute inset-0 size-full object-cover"/>
 			</div>
 			// Form half. Reproduces the standard card rhythm (px-6,
@@ -82,7 +82,7 @@ templ ForgotPasswordPage(errorMsg string, submitted bool) {
 		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-[url('/img/password.jpg')] bg-cover bg-center md:hidden"></div>
 		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-black/50 md:hidden"></div>
 		@components.Card(components.CardProps{Class: "w-full max-w-[420px] mx-auto mt-8 p-0 gap-0 md:max-w-full md:flex-row"}) {
-			<div class="relative hidden min-h-[520px] md:w-1/2 md:block">
+			<div class="relative hidden min-h-130 md:w-1/2 md:block">
 				<img src="/img/password.jpg" alt="" class="absolute inset-0 size-full object-cover"/>
 			</div>
 			<div class="flex flex-col justify-center gap-6 px-6 py-6 md:w-1/2">
@@ -135,7 +135,7 @@ templ ResetPasswordPage(token string, errorMsg string) {
 		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-[url('/img/reset.jpg')] bg-cover bg-center md:hidden"></div>
 		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-black/50 md:hidden"></div>
 		@components.Card(components.CardProps{Class: "w-full max-w-[420px] mx-auto mt-8 p-0 gap-0 md:max-w-full md:flex-row"}) {
-			<div class="relative hidden min-h-[520px] md:w-1/2 md:block">
+			<div class="relative hidden min-h-130 md:w-1/2 md:block">
 				<img src="/img/reset.jpg" alt="" class="absolute inset-0 size-full object-cover"/>
 			</div>
 			<div class="flex flex-col justify-center gap-6 px-6 py-6 md:w-1/2">
@@ -193,7 +193,7 @@ templ RegisterPage(errorMsg string) {
 		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-[url('/img/register.jpg')] bg-cover bg-center md:hidden"></div>
 		<div aria-hidden="true" class="fixed inset-0 -z-10 bg-black/50 md:hidden"></div>
 		@components.Card(components.CardProps{Class: "w-full max-w-[420px] mx-auto mt-8 p-0 gap-0 md:max-w-full md:flex-row"}) {
-			<div class="relative hidden min-h-[520px] md:w-1/2 md:block">
+			<div class="relative hidden min-h-130 md:w-1/2 md:block">
 				<img src="/img/register.jpg" alt="" class="absolute inset-0 size-full object-cover"/>
 			</div>
 			<div class="flex flex-col justify-center gap-6 px-6 py-6 md:w-1/2">

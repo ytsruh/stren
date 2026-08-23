@@ -135,6 +135,7 @@ func isPublicRoute(path string) bool {
 		"/register",
 		"/forgot",
 		"/reset",
+		"/showcase",
 		"/api/v1/auth/login",
 		"/api/v1/auth/register",
 		"/api/v1/auth/password-reset/request",
