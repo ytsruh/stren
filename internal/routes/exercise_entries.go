@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"stren/internal/models"
 	"stren/internal/views/dashboard"
 	exerciseviews "stren/internal/views/exercise"
 )
@@ -26,12 +27,9 @@ func (h *Handler) Dashboard(c echo.Context) error {
 		return err
 	}
 
-	unit := "kg"
-	if user := h.GetUser(c); user != nil {
-		unit = user.WeightUnitDisplay()
-	}
+	weightUnit, distanceUnit := h.displayUnits(c)
 
-	return render(c, dashboard.Dashboard(exerciseEntries, claims.Name, true, claims.IsAdmin, unit))
+	return render(c, dashboard.Dashboard(exerciseEntries, claims.Name, true, claims.IsAdmin, weightUnit, distanceUnit))
 }
 
 // ExerciseHistory shows all exercise entries for a specific exercise.
@@ -57,20 +55,17 @@ func (h *Handler) ExerciseHistory(c echo.Context) error {
 		return err
 	}
 
-	unit := "kg"
-	if user := h.GetUser(c); user != nil {
-		unit = user.WeightUnitDisplay()
-	}
+	weightUnit, distanceUnit := h.displayUnits(c)
 
 	if c.Request().Header.Get("HX-Request") == "true" {
 		c.Response().Header().Set("Vary", "HX-Request")
-		return render(c, exerciseviews.HistoryTable(exercise.ID, history, unit))
+		return render(c, exerciseviews.HistoryTable(exercise, history, weightUnit, distanceUnit))
 	}
 	chartExerciseEntries, err := h.exerciseEntryCtrl.GetRecentExerciseEntriesForChart(exercise.ID, claims.UserID)
 	if err != nil {
 		return err
 	}
-	return render(c, exerciseviews.ExerciseHistory(exercise, history, chartExerciseEntries, claims.Name, true, claims.IsAdmin, unit))
+	return render(c, exerciseviews.ExerciseHistory(exercise, history, chartExerciseEntries, claims.Name, true, claims.IsAdmin, weightUnit, distanceUnit))
 }
 
 // ExerciseChart renders the dedicated chart view for a specific exercise:
@@ -99,12 +94,9 @@ func (h *Handler) ExerciseChart(c echo.Context) error {
 		return err
 	}
 
-	unit := "kg"
-	if user := h.GetUser(c); user != nil {
-		unit = user.WeightUnitDisplay()
-	}
+	weightUnit, distanceUnit := h.displayUnits(c)
 
-	return render(c, exerciseviews.ExerciseChart(exercise, chartExerciseEntries, claims.Name, true, claims.IsAdmin, unit))
+	return render(c, exerciseviews.ExerciseChart(exercise, chartExerciseEntries, claims.Name, true, claims.IsAdmin, weightUnit, distanceUnit))
 }
 
 // ExerciseChartAdvanced renders the advanced chart view for a specific
@@ -113,7 +105,8 @@ func (h *Handler) ExerciseChart(c echo.Context) error {
 // exercise entries for the exercise are fetched (uncapped) and handed to
 // the view, which plots one translucent dot per set without per-day
 // aggregation. With fewer than 2 exercise entries the view shows a short
-// empty-state message instead of a chart.
+// empty-state message instead of a chart. Cardio exercises render a short
+// "strength only" notice instead of the scatter.
 func (h *Handler) ExerciseChartAdvanced(c echo.Context) error {
 	id := c.Param("id")
 
@@ -131,12 +124,23 @@ func (h *Handler) ExerciseChartAdvanced(c echo.Context) error {
 		return err
 	}
 
-	unit := "kg"
-	if user := h.GetUser(c); user != nil {
-		unit = user.WeightUnitDisplay()
-	}
+	weightUnit, _ := h.displayUnits(c)
 
-	return render(c, exerciseviews.ExerciseChartAdvanced(exercise, chartExerciseEntries, claims.Name, true, claims.IsAdmin, unit))
+	return render(c, exerciseviews.ExerciseChartAdvanced(exercise, chartExerciseEntries, claims.Name, true, claims.IsAdmin, weightUnit))
+}
+
+// displayUnits returns the cached user's preferred weight and distance
+// display units, falling back to "kg" / "km" when no user is attached to
+// the request context. Use this at every render call site that needs both
+// so the fallbacks live in one place.
+func (h *Handler) displayUnits(c echo.Context) (weightUnit string, distanceUnit string) {
+	weightUnit = models.NormalizeWeightUnit("")
+	distanceUnit = models.NormalizeDistanceUnit("")
+	if user := h.GetUser(c); user != nil {
+		weightUnit = user.WeightUnitDisplay()
+		distanceUnit = user.DistanceUnitDisplay()
+	}
+	return weightUnit, distanceUnit
 }
 
 // parsePage reads the ?page=N query param and returns a clamped 1-indexed page

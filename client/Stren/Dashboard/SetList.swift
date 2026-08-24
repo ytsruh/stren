@@ -15,6 +15,7 @@ import SwiftUI
 struct DashboardSetList: View {
     let groups: [DashboardDateGroup]
     let weightUnit: String
+    let distanceUnit: String
     let exerciseLookup: [String: ExerciseDTO]
     let onDelete: (ExerciseEntryDTO) -> Void
 
@@ -47,7 +48,7 @@ struct DashboardSetList: View {
     private func rowLink(for entry: ExerciseEntryDTO) -> some View {
         if let exercise = exerciseLookup[entry.exerciseID] {
             NavigationLink(value: exercise) {
-                SetRow(entry: entry, weightUnit: weightUnit)
+                SetRow(entry: entry, weightUnit: weightUnit, distanceUnit: distanceUnit)
             }
             .buttonStyle(.plain)
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -62,7 +63,7 @@ struct DashboardSetList: View {
             // set was logged. Show the row read-only so the
             // user can still see the set without crashing on
             // a missing destination.
-            SetRow(entry: entry, weightUnit: weightUnit)
+            SetRow(entry: entry, weightUnit: weightUnit, distanceUnit: distanceUnit)
                 .opacity(0.6)
         }
     }
@@ -71,12 +72,14 @@ struct DashboardSetList: View {
 /// One row in the date-grouped list. Mirrors the existing
 /// dashboard `SetRow` and is kept here so the list is a
 /// self-contained component. Only shows the exercise name,
-/// notes, and the reps × weight — the time of day and the
-/// date are intentionally omitted to keep the list
-/// scannable.
+/// notes, and a one-line metric summary — reps × weight for
+/// strength entries, duration · distance for cardio — with
+/// time of day and date intentionally omitted to keep the
+/// list scannable.
 struct SetRow: View {
     let entry: ExerciseEntryDTO
     let weightUnit: String
+    let distanceUnit: String
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -92,7 +95,7 @@ struct SetRow: View {
                 }
             }
             Spacer()
-            Text("\(entry.reps) × \(formattedWeight)")
+            Text(summaryText)
                 .font(.body.weight(.semibold).monospacedDigit())
                 .foregroundStyle(DSColors.text)
         }
@@ -101,8 +104,36 @@ struct SetRow: View {
         .contentShape(Rectangle())
     }
 
+    /// Type-aware one-line summary: "5 × 100.0 kg" for strength,
+    /// "25:00 · 5.20 km" for cardio (mirrors the web's Details column).
+    private var summaryText: String {
+        if entry.isCardio {
+            return "\(Self.formattedDuration(entry.durationSeconds)) · \(formattedDistance)"
+        }
+        return "\(entry.reps) × \(formattedWeight)"
+    }
+
     private var formattedWeight: String {
         String(format: "%.1f %@", entry.weight, weightUnit)
+    }
+
+    /// Distance converted from stored metres to the user's unit.
+    private var formattedDistance: String {
+        let km = entry.distanceMeters / 1000.0
+        if distanceUnit == "mi" {
+            return String(format: "%.2f mi", km / 1.609344)
+        }
+        return String(format: "%.2f km", km)
+    }
+
+    /// M:SS, switching to H:MM:SS past an hour ("25:00", "1:05:30").
+    static func formattedDuration(_ seconds: Int) -> String {
+        let s = max(0, seconds)
+        let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, sec)
+        }
+        return String(format: "%02d:%02d", m, sec)
     }
 }
 

@@ -37,6 +37,19 @@ public enum DSColors {
     /// Hairline divider. Maps to web `--border`.
     public static let separator = Color("border", bundle: .main)
 
+    // MARK: - Secondary (inverted chip fill)
+
+    /// High-contrast "inverted" fill for secondary chips and badges
+    /// (e.g. the cardio exercise-type pill). Deliberately NOT a muted
+    /// surface tint like the web's original `--secondary`: the pairing
+    /// takes the theme's foreground luminance so chips read against
+    /// both surfaces — dark fill in light mode, light fill in dark
+    /// mode. Maps to web `--secondary` (see styles/input.css).
+    public static let secondary = Color("secondary", bundle: .main)
+    /// Text/icon colour on a `secondary` surface.
+    /// Maps to web `--secondary-foreground`.
+    public static let onSecondary = Color("secondary-foreground", bundle: .main)
+
     // MARK: - Text
 
     /// Primary text. Maps to web `--foreground` / `Color(.label)`.

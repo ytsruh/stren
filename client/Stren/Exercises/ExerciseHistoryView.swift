@@ -13,12 +13,22 @@ import SwiftUI
 /// list. The nav-bar `+` button opens `NewSetView`
 /// pre-set to this exercise so the user can log a new set
 /// without leaving the context.
+///
+/// Everything metric-bearing branches on the exercise's
+/// type: strength plots heaviest-weight-per-day with a max-
+/// weight PR; cardio plots fastest-pace-per-day with the
+/// best-pace PR, and rows/stat cards render duration ·
+/// distance instead of reps × weight.
 struct ExerciseHistoryView: View {
     @EnvironmentObject private var env: AppEnvironment
     @EnvironmentObject private var authStore: AuthStore
     @Environment(\.openURL) private var openURL
 
     let exercise: ExerciseDTO
+
+    /// `true` when this screen belongs to a cardio exercise —
+    /// drives the stat cards, chart metric, and row rendering.
+    private var isCardio: Bool { exercise.type.lowercased() == "cardio" }
 
     @State private var page: HistoryPageDTO?
     @State private var chartPoints: [ChartPoint] = []
@@ -68,7 +78,7 @@ struct ExerciseHistoryView: View {
                 .environmentObject(authStore)
             }
             .alert(
-                "Delete this set?",
+                isCardio ? "Delete this session?" : "Delete this set?",
                 isPresented: $showingDeleteConfirm,
                 presenting: entryPendingDelete
             ) { entry in
@@ -77,7 +87,9 @@ struct ExerciseHistoryView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
-                Text("This will permanently remove the set from your history.")
+                Text(isCardio
+                     ? "This will permanently remove the session from your history."
+                     : "This will permanently remove the set from your history.")
             }
             .task(id: currentPage) { await load(refresh: false) }
     }
@@ -125,9 +137,9 @@ struct ExerciseHistoryView: View {
                 actionsSection
                 statsSection
                 chartSection
-                Section("History") {
+                Section(isCardio ? "Sessions" : "History") {
                     ForEach(page?.entries ?? []) { entry in
-                        HistorySetRow(entry: entry, weightUnit: weightUnit)
+                        HistorySetRow(entry: entry, weightUnit: weightUnit, distanceUnit: distanceUnit)
                             // Leading edge → Edit. Neutral
                             // grey tint (not the brand
                             // accent) so the two swipe
@@ -260,7 +272,7 @@ struct ExerciseHistoryView: View {
     @ViewBuilder
     private var chartSection: some View {
         if !chartPoints.isEmpty {
-            Section("Progress") {
+            Section(isCardio ? "Pace Progress" : "Progress") {
                 Chart {
                     ForEach(chartPoints) { point in
                         // Area fill rendered first so the line
@@ -273,7 +285,7 @@ struct ExerciseHistoryView: View {
                         AreaMark(
                             x: .value("Date", point.date),
                             yStart: .value("Baseline", chartYBaseline),
-                            yEnd: .value("Max weight", point.weight)
+                            yEnd: .value(chartMetricName, point.value)
                         )
                         .interpolationMethod(.monotone)
                         .foregroundStyle(
@@ -289,7 +301,7 @@ struct ExerciseHistoryView: View {
 
                         LineMark(
                             x: .value("Date", point.date),
-                            y: .value("Max weight", point.weight)
+                            y: .value(chartMetricName, point.value)
                         )
                         .interpolationMethod(.monotone)
                         .foregroundStyle(
@@ -306,7 +318,7 @@ struct ExerciseHistoryView: View {
 
                         PointMark(
                             x: .value("Date", point.date),
-                            y: .value("Max weight", point.weight)
+                            y: .value(chartMetricName, point.value)
                         )
                         .foregroundStyle(DSColors.accent)
                         .symbolSize(isMostRecentPoint(point) ? 160 : 50)
@@ -325,7 +337,7 @@ struct ExerciseHistoryView: View {
                                 .zIndex(-1)
                             PointMark(
                                 x: .value("Date", nearest.date),
-                                y: .value("Max weight", nearest.weight)
+                                y: .value(chartMetricName, nearest.value)
                             )
                             .foregroundStyle(DSColors.accent)
                             .symbolSize(160)
@@ -337,7 +349,9 @@ struct ExerciseHistoryView: View {
                     // axis. Drawn after the series so it
                     // overlays the line — the dashed stroke
                     // keeps it visually distinct from the
-                    // data line.
+                    // data line. For cardio the "PR" is the
+                    // fastest pace, so the domain direction
+                    // flips but the annotation reads the same.
                     if let pr = personalBest {
                         RuleMark(y: .value("PR", pr))
                             .foregroundStyle(DSColors.accent.opacity(0.55))
@@ -367,9 +381,9 @@ struct ExerciseHistoryView: View {
                         AxisGridLine()
                         AxisTick()
                         AxisValueLabel {
-                            if let weight = value.as(Double.self) {
-                                Text("\(Int(weight.rounded())) \(weightUnit)")
-                                    .font(.caption2)
+                            if let v = value.as(Double.self) {
+                                Text(axisLabel(for: v))
+                                    .font(.caption2.monospacedDigit())
                             }
                         }
                     }
@@ -390,7 +404,7 @@ struct ExerciseHistoryView: View {
                     if let selectedDate,
                        let nearest = nearestPoint(to: selectedDate),
                        let xPos = proxy.position(forX: nearest.date),
-                       let yPos = proxy.position(forY: nearest.weight) {
+                       let yPos = proxy.position(forY: nearest.value) {
                         // Floating card overlay. The proxy
                         // returns positions in the chart's
                         // content area; we clamp the x so the
@@ -418,9 +432,9 @@ struct ExerciseHistoryView: View {
     /// snapping to the next round number below the data (e.g.
     /// anchoring to 10 when the data actually starts at 11).
     private var chartYDomain: ClosedRange<Double> {
-        let weights = chartPoints.map(\.weight)
-        let rawLo = weights.min() ?? 0
-        let rawHi = weights.max() ?? 0
+        let values = chartPoints.map(\.value)
+        let rawLo = values.min() ?? 0
+        let rawHi = values.max() ?? 0
         let step = Self.niceStep(for: rawHi - rawLo)
         let lo = (rawLo / step).rounded(.down) * step
         let hi = (rawHi / step).rounded(.up) * step
@@ -451,16 +465,21 @@ struct ExerciseHistoryView: View {
         }
     }
 
-    /// The user's lifetime PR for this exercise, in the
-    /// user's preferred weight unit. Prefers the
-    /// `HistoryStatsDTO.maxWeight` value (always present
-    /// when there are entries) and falls back to the
-    /// heaviest chart point otherwise.
+    /// The user's lifetime personal best for this exercise, in
+    /// chart units: heaviest weight for strength, fastest pace
+    /// (lowest sec/km) for cardio. Prefers the type-appropriate
+    /// `HistoryStatsDTO` value and falls back to the chart points.
     private var personalBest: Double? {
+        if isCardio {
+            if let stats = page?.stats, stats.bestPaceSecPerKm > 0 {
+                return stats.bestPaceSecPerKm
+            }
+            return chartPoints.map(\.value).min()
+        }
         if let stats = page?.stats, stats.maxWeight > 0 {
             return stats.maxWeight
         }
-        return chartPoints.map(\.weight).max()
+        return chartPoints.map(\.value).max()
     }
 
     /// Lower bound for the area fill. Anchoring the fill
@@ -469,7 +488,7 @@ struct ExerciseHistoryView: View {
     /// gradient from bleeding into the y-axis tick-label
     /// row at the bottom of the chart.
     private var chartYBaseline: Double {
-        chartPoints.map(\.weight).min() ?? 0
+        chartPoints.map(\.value).min() ?? 0
     }
 
     /// `true` when the point is the most recent (latest
@@ -482,16 +501,17 @@ struct ExerciseHistoryView: View {
         return point.date == latest
     }
 
-    /// Small floating card showing the date and weight for the
-    /// highlighted chart point. Positioned by the caller via
-    /// `.position(x:y:)` so the card sits above the dot.
+    /// Small floating card showing the date and the metric value
+    /// (weight or pace) for the highlighted chart point.
+    /// Positioned by the caller via `.position(x:y:)` so the card
+    /// sits above the dot.
     @ViewBuilder
     private func chartTooltip(for point: ChartPoint) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(point.date.formatted(.dateTime.day().month(.abbreviated).year()))
                 .font(.caption2)
                 .foregroundStyle(DSColors.textSecondary)
-            Text("\(Int(point.weight.rounded())) \(weightUnit)")
+            Text(metricText(point.value))
                 .font(.caption.weight(.semibold).monospacedDigit())
                 .foregroundStyle(DSColors.text)
         }
@@ -507,6 +527,26 @@ struct ExerciseHistoryView: View {
                 .stroke(DSColors.separator, lineWidth: 0.5)
         )
         .fixedSize()
+    }
+
+    /// Formats a raw chart value for axis ticks and tooltips:
+    /// "85 kg" for strength, "4:58 /km" for cardio pace.
+    private func metricText(_ value: Double) -> String {
+        if isCardio {
+            return Self.paceText(value, unit: distanceUnit)
+        }
+        return String(format: "%.1f %@", value, weightUnit)
+    }
+
+    private func axisLabel(for value: Double) -> String {
+        metricText(value)
+    }
+
+    /// Renders a seconds-per-unit pace as "M:SS /unit".
+    static func paceText(_ secPerKm: Double, unit: String) -> String {
+        let seconds = unit == "mi" ? secPerKm * 1.609344 : secPerKm
+        let s = Int(seconds.rounded())
+        return String(format: "%d:%02d /%@", s / 60, s % 60, unit == "mi" ? "mi" : "km")
     }
 
     @ViewBuilder
@@ -528,30 +568,78 @@ struct ExerciseHistoryView: View {
                     ],
                     spacing: DSSpacing.sm
                 ) {
-                    StatCard(
-                        label: "Personal Best",
-                        value: String(format: "%.1f %@", stats.maxWeight, weightUnit),
-                        icon: Icons.trophy
-                    )
-                    .gridCellColumns(2)
+                    if isCardio {
+                        // Cardio personal best = fastest pace ever.
+                        StatCard(
+                            label: "Best Pace",
+                            value: stats.bestPaceSecPerKm > 0
+                                ? Self.paceText(stats.bestPaceSecPerKm, unit: distanceUnit)
+                                : "—",
+                            icon: Icons.trophy
+                        )
+                        .gridCellColumns(2)
 
-                    if let lastSet = stats.lastSet {
+                        if let lastSet = stats.lastSet {
+                            StatCard(
+                                label: "Last Session",
+                                value: lastSessionValue(lastSet),
+                                icon: Icons.dumbbellSmall
+                            )
+                            StatCard(
+                                label: "Longest Distance",
+                                value: longestDistanceValue(stats),
+                                icon: Icons.calendar
+                            )
+                        }
+                    } else {
                         StatCard(
-                            label: "Last Set",
-                            value: "\(lastSet.reps) × \(String(format: "%.1f", lastSet.weight)) \(weightUnit)",
-                            icon: Icons.dumbbellSmall
+                            label: "Personal Best",
+                            value: String(format: "%.1f %@", stats.maxWeight, weightUnit),
+                            icon: Icons.trophy
                         )
-                        StatCard(
-                            label: "Last Activity",
-                            value: lastSet.createdAt.formatted(.dateTime.day().month().year()),
-                            icon: Icons.calendar
-                        )
+                        .gridCellColumns(2)
+
+                        if let lastSet = stats.lastSet {
+                            StatCard(
+                                label: "Last Set",
+                                value: "\(lastSet.reps) × \(String(format: "%.1f", lastSet.weight)) \(weightUnit)",
+                                icon: Icons.dumbbellSmall
+                            )
+                            StatCard(
+                                label: "Last Activity",
+                                value: lastSet.createdAt.formatted(.dateTime.day().month().year()),
+                                icon: Icons.calendar
+                            )
+                        }
                     }
                 }
             }
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
         }
+    }
+
+    /// "25:00 · 5.20 km" summary for the cardio Last Session card,
+    /// mirroring SetRow's cardio rendering.
+    private func lastSessionValue(_ entry: ExerciseEntryDTO) -> String {
+        let duration = SetRow.formattedDuration(entry.durationSeconds)
+        return "\(duration) · \(distanceText(entry.distanceMeters))"
+    }
+
+    /// The user's longest-ever distance for this exercise, rendered
+    /// in their preferred unit; "—" when nothing qualifies yet.
+    private func longestDistanceValue(_ stats: HistoryStatsDTO) -> String {
+        guard stats.longestDistanceMeters > 0 else { return "—" }
+        return distanceText(stats.longestDistanceMeters)
+    }
+
+    /// Converts stored metres into the user's preferred unit string.
+    private func distanceText(_ meters: Double) -> String {
+        let km = meters / 1000.0
+        if distanceUnit == "mi" {
+            return String(format: "%.2f mi", km / 1.609344)
+        }
+        return String(format: "%.2f km", km)
     }
 
     @ViewBuilder
@@ -592,16 +680,18 @@ struct ExerciseHistoryView: View {
             Image(systemName: Icons.chartEmpty)
                 .font(.system(size: 48))
                 .foregroundStyle(DSColors.textSecondary)
-            Text("No sets yet")
+            Text(isCardio ? "No sessions yet" : "No sets yet")
                 .font(.title3.weight(.semibold))
-            Text("Log a set from the Today tab to start tracking \(exercise.name).")
+            Text(isCardio
+                 ? "Log a session from the Today tab to start tracking \(exercise.name)."
+                 : "Log a set from the Today tab to start tracking \(exercise.name).")
                 .font(.body)
                 .foregroundStyle(DSColors.textSecondary)
                 .multilineTextAlignment(.center)
             Button {
                 isPresentingNewSet = true
             } label: {
-                Label("Log First Set", systemImage: Icons.addSet)
+                Label(isCardio ? "Log First Session" : "Log First Set", systemImage: Icons.addSet)
                     .font(.headline)
             }
             .buttonStyle(.dsPrimary)
@@ -614,6 +704,16 @@ struct ExerciseHistoryView: View {
 
     private var weightUnit: String {
         authStore.currentUser?.weightUnit ?? "kg"
+    }
+
+    private var distanceUnit: String {
+        authStore.currentUser?.distanceUnit ?? "km"
+    }
+
+    /// The chart's y-axis semantic, used as the mark series name so
+    /// accessibility labels read correctly per exercise type.
+    private var chartMetricName: String {
+        isCardio ? "Pace" : "Max weight"
     }
 
     // MARK: - Data
@@ -647,7 +747,7 @@ struct ExerciseHistoryView: View {
     private func loadChart() async {
         do {
             let entries = try await env.api.getExerciseChartData(id: exercise.id)
-            chartPoints = Self.chartPoints(from: entries)
+            chartPoints = Self.chartPoints(from: entries, isCardio: isCardio)
         } catch {
             // Non-fatal: history is still useful without the chart.
             chartPoints = []
@@ -666,6 +766,7 @@ struct ExerciseHistoryView: View {
         guard let current = page else { return }
         let filteredEntries = current.entries.filter { $0.id != entry.id }
         page = HistoryPageDTO(
+            exerciseType: current.exerciseType,
             entries: filteredEntries,
             stats: current.stats,
             page: current.page,
@@ -704,6 +805,7 @@ struct ExerciseHistoryView: View {
             entry.id == updated.id ? updated : entry
         }
         page = HistoryPageDTO(
+            exerciseType: current.exerciseType,
             entries: updatedEntries,
             stats: current.stats,
             page: current.page,
@@ -717,28 +819,36 @@ struct ExerciseHistoryView: View {
     }
 
     /// Aggregates the full entry list into one point per
-    /// calendar day (the heaviest set of the day). Matches
-    /// the dashboard's "heaviest per day" series so the two
-    /// views agree.
-    private static func chartPoints(from entries: [ExerciseEntryDTO]) -> [ChartPoint] {
+    /// calendar day: the heaviest set of the day for strength,
+    /// the fastest pace of the day for cardio (entries without
+    /// a derivable pace are skipped). Matches the web chart's
+    /// per-day reduction so the two platforms agree.
+    private static func chartPoints(from entries: [ExerciseEntryDTO], isCardio: Bool) -> [ChartPoint] {
         let calendar = Calendar.current
-        let grouped = Dictionary(grouping: entries) { entry in
+        let grouped = Dictionary(grouping: entries.filter { entry in
+            isCardio ? entry.paceSecPerKm != nil : true
+        }) { entry in
             calendar.startOfDay(for: entry.createdAt)
         }
         return grouped
-            .map { day, sets in
-                ChartPoint(
-                    date: day,
-                    weight: sets.map(\.weight).max() ?? 0
-                )
+            .map { day, entries -> ChartPoint in
+                if isCardio {
+                    // Fastest pace of the day wins (lowest sec/km).
+                    let best = entries.compactMap(\.paceSecPerKm).min() ?? 0
+                    return ChartPoint(date: day, value: best)
+                }
+                return ChartPoint(date: day, value: entries.map(\.weight).max() ?? 0)
             }
             .sorted { $0.date < $1.date }
     }
 }
 
+/// One point on the progress chart. `value` is type-dependent:
+/// heaviest weight (kg) for strength, fastest pace (sec/km) for
+/// cardio — the view owns the interpretation.
 private struct ChartPoint: Identifiable {
     let date: Date
-    let weight: Double
+    let value: Double
     var id: TimeInterval { date.timeIntervalSince1970 }
 }
 
@@ -747,10 +857,12 @@ private struct ChartPoint: Identifiable {
 /// is implicit (we're already inside that exercise's screen),
 /// notes are dropped, and the time of day is hidden in favour
 /// of the date so rows scan cleanly when paging through
-/// history.
+/// history. Cardio entries render duration · distance instead
+/// of reps × weight.
 private struct HistorySetRow: View {
     let entry: ExerciseEntryDTO
     let weightUnit: String
+    let distanceUnit: String
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -758,11 +870,22 @@ private struct HistorySetRow: View {
                 .font(.subheadline)
                 .foregroundStyle(DSColors.textSecondary)
             Spacer()
-            Text("\(entry.reps) × \(String(format: "%.1f", entry.weight)) \(weightUnit)")
+            Text(summaryText)
                 .font(.body.weight(.semibold).monospacedDigit())
                 .foregroundStyle(DSColors.text)
         }
         .padding(.vertical, DSSpacing.xxs)
+    }
+
+    private var summaryText: String {
+        if entry.isCardio {
+            let km = entry.distanceMeters / 1000.0
+            let distance = distanceUnit == "mi"
+                ? String(format: "%.2f mi", km / 1.609344)
+                : String(format: "%.2f km", km)
+            return "\(SetRow.formattedDuration(entry.durationSeconds)) · \(distance)"
+        }
+        return "\(entry.reps) × \(String(format: "%.1f", entry.weight)) \(weightUnit)"
     }
 }
 

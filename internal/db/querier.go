@@ -37,6 +37,10 @@ type Querier interface {
 	GetAll(ctx context.Context) ([]GetAllRow, error)
 	GetAllClosed(ctx context.Context) ([]GetAllClosedRow, error)
 	GetAllOpen(ctx context.Context) ([]GetAllOpenRow, error)
+	// Fastest pace in seconds per kilometre across a user's cardio exercise entries
+	// (duration divided by distance). Entries without distance are excluded;
+	// returns 0 when no qualifying exercise entries exist.
+	GetBestPaceByExercise(ctx context.Context, arg GetBestPaceByExerciseParams) (float64, error)
 	GetByID(ctx context.Context, id string) (Exercise, error)
 	GetByName(ctx context.Context, name string) (Exercise, error)
 	GetExerciseEntriesByDateRange(ctx context.Context, arg GetExerciseEntriesByDateRangeParams) ([]GetExerciseEntriesByDateRangeRow, error)
@@ -45,6 +49,9 @@ type Querier interface {
 	GetFeedbackByID(ctx context.Context, id string) (GetFeedbackByIDRow, error)
 	GetGoal(ctx context.Context, arg GetGoalParams) (Goal, error)
 	GetLastSetByExercise(ctx context.Context, arg GetLastSetByExerciseParams) (GetLastSetByExerciseRow, error)
+	// Longest distance in metres logged for an exercise. Returns 0 when no exercise entries exist.
+	GetLongestDistanceByExercise(ctx context.Context, arg GetLongestDistanceByExerciseParams) (float64, error)
+	// Heaviest weight logged for a strength exercise. Returns 0 when no exercise entries exist.
 	GetMaxWeightByExercise(ctx context.Context, arg GetMaxWeightByExerciseParams) (float64, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id string) (User, error)

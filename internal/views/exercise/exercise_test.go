@@ -37,7 +37,7 @@ func TestChartDataForExercise(t *testing.T) {
 		{Weight: 85, CreatedAt: day1Evening},
 		{Weight: 90, CreatedAt: day3},
 	}
-	props := chartDataForExercise(entries, "Squat", "kg")
+	props := chartDataForExercise(entries, "Squat", models.ExerciseTypeStrength, "kg", "km")
 	if props.ID != "exercise-history-chart" {
 		t.Errorf("ID = %q, want %q", props.ID, "exercise-history-chart")
 	}
@@ -69,7 +69,7 @@ func TestChartDataForExercise(t *testing.T) {
 }
 
 func TestChartDataForExercise_Empty(t *testing.T) {
-	props := chartDataForExercise(nil, "Squat", "kg")
+	props := chartDataForExercise(nil, "Squat", models.ExerciseTypeStrength, "kg", "km")
 	if len(props.Labels) != 0 {
 		t.Errorf("expected no labels for empty input, got %v", props.Labels)
 	}
@@ -90,7 +90,7 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 		},
 		Page: 1,
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg"))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg", "km"))
 	if !strings.Contains(html, "Squat") {
 		t.Error("expected exercise name heading")
 	}
@@ -105,7 +105,7 @@ func TestExerciseHistory_WithEntries(t *testing.T) {
 func TestExerciseHistory_Empty(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{Page: 1}
-	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg"))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg", "km"))
 	if !strings.Contains(html, "No sets yet") {
 		t.Error("expected empty state")
 	}
@@ -125,7 +125,7 @@ func TestExerciseHistory_RendersChart(t *testing.T) {
 		{Weight: 85, CreatedAt: time.Date(2024, 6, 12, 9, 0, 0, 0, time.UTC)},
 		{Weight: 90, CreatedAt: time.Date(2024, 6, 15, 9, 0, 0, 0, time.UTC)},
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, chartExerciseEntries, "Test User", true, false, "kg"))
+	html := renderToString(t, ExerciseHistory(exercise, page, chartExerciseEntries, "Test User", true, false, "kg", "km"))
 	if !strings.Contains(html, `id="exercise-history-chart"`) {
 		t.Error("expected chart canvas with id exercise-history-chart")
 	}
@@ -162,20 +162,21 @@ func TestExerciseHistory_OmitsChartWhenSingleDay(t *testing.T) {
 		{Weight: 80, CreatedAt: sameDay},
 		{Weight: 85, CreatedAt: sameDay.Add(time.Hour)},
 	}
-	html := renderToString(t, ExerciseHistory(exercise, page, chartExerciseEntries, "Test User", true, false, "kg"))
+	html := renderToString(t, ExerciseHistory(exercise, page, chartExerciseEntries, "Test User", true, false, "kg", "km"))
 	if strings.Contains(html, `id="exercise-history-chart"`) {
 		t.Error("expected chart to be omitted when only one unique day is present")
 	}
 }
 
 func TestHistoryTable_NoPagerWhenSinglePage(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{
 		ExerciseEntries: []models.ExerciseEntry{
 			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
 		},
 		Page: 1,
 	}
-	html := renderToString(t, HistoryTable("ex-1", page, "kg"))
+	html := renderToString(t, HistoryTable(exercise, page, "kg", "km"))
 	if !strings.Contains(html, historyTableWrapID) {
 		t.Error("expected swappable wrap region to be present")
 	}
@@ -191,7 +192,7 @@ func TestHistoryTable_NoPagerWhenSinglePage(t *testing.T) {
 func TestExerciseHistory_RendersChartButton(t *testing.T) {
 	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{Page: 1}
-	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg"))
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg", "km"))
 	if !strings.Contains(html, `href="/exercises/ex-1/chart"`) {
 		t.Error("expected Chart link pointing at /exercises/ex-1/chart")
 	}
@@ -206,7 +207,7 @@ func TestExerciseHistory_RendersChartButton(t *testing.T) {
 		Stats: models.HistoryStats{MaxWeight: 100},
 		Page:  1,
 	}
-	populatedHTML := renderToString(t, ExerciseHistory(exercise, populatedPage, nil, "Test User", true, false, "kg"))
+	populatedHTML := renderToString(t, ExerciseHistory(exercise, populatedPage, nil, "Test User", true, false, "kg", "km"))
 	if !strings.Contains(populatedHTML, `href="/exercises/ex-1/chart"`) {
 		t.Error("expected Chart link in populated history view as well")
 	}
@@ -228,7 +229,7 @@ func TestExerciseChart(t *testing.T) {
 		{ID: "e1", Reps: 5, Weight: 100, CreatedAt: day1},
 		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: day2},
 	}
-	html := renderToString(t, ExerciseChart(exercise, chartExerciseEntries, "Test User", true, false, "kg"))
+	html := renderToString(t, ExerciseChart(exercise, chartExerciseEntries, "Test User", true, false, "kg", "km"))
 
 	// Button group container with the documented basecoat class.
 	if !strings.Contains(html, `class="button-group"`) {
@@ -283,7 +284,7 @@ func TestExerciseChart_RendersFullWidthChartCard(t *testing.T) {
 		{ID: "e2", Reps: 5, Weight: 105, CreatedAt: now.AddDate(0, 0, 7)},
 		{ID: "e3", Reps: 3, Weight: 110, CreatedAt: now.AddDate(0, 0, 14)},
 	}
-	html := renderToString(t, ExerciseChart(exercise, chartExerciseEntries, "Test User", true, false, "kg"))
+	html := renderToString(t, ExerciseChart(exercise, chartExerciseEntries, "Test User", true, false, "kg", "km"))
 
 	// Card container wraps the chart.
 	if !strings.Contains(html, `<div class="card p-4">`) {
@@ -344,7 +345,7 @@ func TestExerciseChart_EmptyState(t *testing.T) {
 	}
 	for name, entries := range cases {
 		t.Run(name, func(t *testing.T) {
-			html := renderToString(t, ExerciseChart(exercise, entries, "Test User", true, false, "kg"))
+			html := renderToString(t, ExerciseChart(exercise, entries, "Test User", true, false, "kg", "km"))
 			if !strings.Contains(html, "Log at least 2 sessions to see your progression.") {
 				t.Errorf("expected friendly empty-state message for %q", name)
 			}
@@ -373,7 +374,7 @@ func TestExerciseChart_AggregatesMaxWeightPerDay(t *testing.T) {
 		{ID: "e3", Reps: 5, Weight: 112, CreatedAt: day2morning}, // day2: 112 (max)
 		{ID: "e4", Reps: 5, Weight: 108, CreatedAt: day2evening}, // day2: 108 (not max)
 	}
-	html := renderToString(t, ExerciseChart(exercise, chartExerciseEntries, "Test User", true, false, "kg"))
+	html := renderToString(t, ExerciseChart(exercise, chartExerciseEntries, "Test User", true, false, "kg", "km"))
 
 	re := regexp.MustCompile(`<script id="exercise-chart-data" type="application/json">([\s\S]*?)</script>`)
 	m := re.FindStringSubmatch(html)
@@ -602,6 +603,7 @@ func TestExerciseChartAdvanced_PlotsEverySet(t *testing.T) {
 }
 
 func TestHistoryTable_ShowsNextAndPrev(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-1", Name: "Squat", Type: models.ExerciseTypeStrength}
 	page := &models.ExerciseHistoryPage{
 		ExerciseEntries: []models.ExerciseEntry{
 			{ID: "entry-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: time.Now()},
@@ -610,7 +612,7 @@ func TestHistoryTable_ShowsNextAndPrev(t *testing.T) {
 		HasPrev: true,
 		HasNext: true,
 	}
-	html := renderToString(t, HistoryTable("ex-1", page, "kg"))
+	html := renderToString(t, HistoryTable(exercise, page, "kg", "km"))
 	if !strings.Contains(html, `aria-label="Previous page"`) {
 		t.Error("expected Previous button on a middle page")
 	}
@@ -638,4 +640,141 @@ func TestHistoryTable_ShowsNextAndPrev(t *testing.T) {
 // already promises.
 func floatSliceEqual(a, b []float64) bool {
 	return reflect.DeepEqual(a, b)
+}
+
+// --- Cardio rendering ---
+
+// TestExerciseHistory_Cardio verifies a cardio exercise's history page
+// swaps the weight stat cards for session-based ones (Last Session /
+// Best Pace) and never renders reps × weight values.
+func TestExerciseHistory_Cardio(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-run", Name: "Run", Type: models.ExerciseTypeCardio}
+	page := &models.ExerciseHistoryPage{
+		ExerciseEntries: []models.ExerciseEntry{
+			{ID: "entry-1", ExerciseName: "Run", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1500, DistanceMeters: 5000, CreatedAt: time.Now()},
+		},
+		Stats: models.HistoryStats{
+			BestPaceSecPerKm:      300,
+			LongestDistanceMeters: 5000,
+			LastSet:               models.ExerciseEntry{ID: "entry-1", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1500, DistanceMeters: 5000},
+		},
+		Page: 1,
+	}
+	html := renderToString(t, ExerciseHistory(exercise, page, nil, "Test User", true, false, "kg", "km"))
+	if !strings.Contains(html, "Best Pace") {
+		t.Error("expected Best Pace stat card on cardio history")
+	}
+	if !strings.Contains(html, "Last Session") {
+		t.Error("expected Last Session stat card on cardio history")
+	}
+	if !strings.Contains(html, "5:00 /km") {
+		t.Error("expected formatted best pace value")
+	}
+	if strings.Contains(html, "Personal Best") || strings.Contains(html, "Last Set") {
+		t.Error("cardio history should not render strength stat cards")
+	}
+}
+
+// TestExerciseHistory_CardioRendersPaceChart locks in that a cardio
+// exercise's chart is fed the fastest-pace-per-day series (labelled
+// min/km) rather than max weight.
+func TestExerciseHistory_CardioRendersPaceChart(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-run", Name: "Run", Type: models.ExerciseTypeCardio}
+	page := &models.ExerciseHistoryPage{
+		ExerciseEntries: []models.ExerciseEntry{
+			{ID: "entry-1", ExerciseName: "Run", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1500, DistanceMeters: 5000, CreatedAt: time.Now()},
+		},
+		Stats: models.HistoryStats{BestPaceSecPerKm: 300},
+		Page:  1,
+	}
+	chartExerciseEntries := []models.ExerciseEntry{
+		{ID: "c1", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1500, DistanceMeters: 5000, CreatedAt: time.Date(2024, 6, 10, 9, 0, 0, 0, time.UTC)}, // 300 s/km
+		{ID: "c2", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1560, DistanceMeters: 5000, CreatedAt: time.Date(2024, 6, 12, 9, 0, 0, 0, time.UTC)}, // 312 s/km
+		{ID: "c3", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1470, DistanceMeters: 5000, CreatedAt: time.Date(2024, 6, 15, 9, 0, 0, 0, time.UTC)}, // 294 s/km (best)
+	}
+	html := renderToString(t, ExerciseHistory(exercise, page, chartExerciseEntries, "Test User", true, false, "kg", "km"))
+	if !strings.Contains(html, `id="exercise-history-chart"`) {
+		t.Fatal("expected chart canvas to render")
+	}
+	if !strings.Contains(html, "Last 3 Sessions") {
+		t.Error("expected cardio chart title to count sessions")
+	}
+	re := regexp.MustCompile(`<script id="exercise-history-chart-data" type="application/json">([\s\S]*?)</script>`)
+	m := re.FindStringSubmatch(html)
+	if len(m) < 2 {
+		t.Fatal("could not find chart data block")
+	}
+	var parsed struct {
+		Datasets []struct {
+			Label  string    `json:"label"`
+			Values []float64 `json:"values"`
+		} `json:"datasets"`
+	}
+	if err := json.Unmarshal([]byte(m[1]), &parsed); err != nil {
+		t.Fatalf("chart data not valid JSON: %v", err)
+	}
+	if len(parsed.Datasets) != 1 || parsed.Datasets[0].Label != "Run (min/km)" {
+		t.Fatalf("expected dataset labelled 'Run (min/km)', got %+v", parsed.Datasets)
+	}
+	want := []float64{300, 312, 294} // fastest pace per day
+	if !floatSliceEqual(parsed.Datasets[0].Values, want) {
+		t.Errorf("expected fastest-pace-per-day values %v, got %v", want, parsed.Datasets[0].Values)
+	}
+}
+
+// TestHistoryTable_CardioColumns verifies the paginated table renders
+// Duration / Distance headers and values for cardio exercises.
+func TestHistoryTable_CardioColumns(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-run", Name: "Run", Type: models.ExerciseTypeCardio}
+	page := &models.ExerciseHistoryPage{
+		ExerciseEntries: []models.ExerciseEntry{
+			{ID: "entry-1", ExerciseName: "Run", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 3900, DistanceMeters: 10000, CreatedAt: time.Now()},
+		},
+		Page: 1,
+	}
+	html := renderToString(t, HistoryTable(exercise, page, "kg", "mi"))
+	for _, want := range []string{"<th>Duration</th>", "<th>Distance</th>", "1:05:00", "6.21 mi"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("expected cardio table to contain %q", want)
+		}
+	}
+	if strings.Contains(html, "<th>Reps</th>") || strings.Contains(html, "<th>Weight</th>") {
+		t.Error("cardio table should not render strength column headers")
+	}
+}
+
+// TestExerciseChart_CardioHidesAdvancedNav verifies cardio exercises do
+// not get an Advanced nav link (the scatter's axes are strength-only).
+func TestExerciseChart_CardioHidesAdvancedNav(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-run", Name: "Run", Type: models.ExerciseTypeCardio}
+	day1 := time.Date(2025, 6, 10, 9, 0, 0, 0, time.UTC)
+	day2 := time.Date(2025, 6, 17, 9, 0, 0, 0, time.UTC)
+	entries := []models.ExerciseEntry{
+		{ID: "c1", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1500, DistanceMeters: 5000, CreatedAt: day1},
+		{ID: "c2", ExerciseType: models.ExerciseTypeCardio, DurationSeconds: 1440, DistanceMeters: 5000, CreatedAt: day2},
+	}
+	html := renderToString(t, ExerciseChart(exercise, entries, "Test User", true, false, "kg", "km"))
+	if strings.Contains(html, `/chart/advanced`) {
+		t.Error("expected Advanced link to be hidden for cardio exercises")
+	}
+	if !strings.Contains(html, "Fastest pace per training day") {
+		t.Error("expected cardio chart subtitle describing the pace aggregation")
+	}
+	if !strings.Contains(html, "Run Pace Progression") {
+		t.Error("expected cardio-specific page header")
+	}
+}
+
+// TestExerciseChartAdvanced_CardioNotice verifies direct navigation to
+// the advanced view for a cardio exercise renders the explanation
+// instead of the reps-vs-weight scatter.
+func TestExerciseChartAdvanced_CardioNotice(t *testing.T) {
+	exercise := &models.Exercise{ID: "ex-run", Name: "Run", Type: models.ExerciseTypeCardio}
+	html := renderToString(t, ExerciseChartAdvanced(exercise, nil, "Test User", true, false, "kg"))
+	if !strings.Contains(html, "strength exercises only") {
+		t.Error("expected strength-only notice for cardio advanced view")
+	}
+	if strings.Contains(html, `<canvas id="exercise-chart-advanced">`) {
+		t.Error("did not expect the scatter canvas for a cardio exercise")
+	}
 }

@@ -18,6 +18,7 @@ type profileInput struct {
 	Name         string   `validate:"required,min=2,max=100"`
 	TargetWeight *float64 `validate:"omitempty,gte=0,lte=1000"`
 	WeightUnit   string   `validate:"omitempty,oneof=kg lbs"`
+	DistanceUnit string   `validate:"omitempty,oneof=km mi"`
 	// ReminderEnabled is the master switch. The form
 	// posts the literal "1" or ""; "" reads as false.
 	ReminderEnabled bool
@@ -41,6 +42,10 @@ type profileInput struct {
 // (e.g. on older forms). Matches the SQL DEFAULT in migration 00005.
 const defaultWeightUnit = "kg"
 
+// defaultDistanceUnit is used when the form omits the distance_unit field.
+// Matches the SQL DEFAULT in migration 00010.
+const defaultDistanceUnit = models.DistanceUnitKm
+
 // defaultReminderTime is the hour-of-day used when the form
 // omits reminder_time entirely. Matches the SQL DEFAULT in
 // migration 00009.
@@ -57,6 +62,7 @@ func (h *Handler) Profile(c echo.Context) error {
 	user := h.GetUser(c)
 	var target *float64
 	unit := defaultWeightUnit
+	distanceUnit := defaultDistanceUnit
 	reminderState := profile.ReminderFormState{
 		Frequency: models.ReminderWeekly,
 		Time:      defaultReminderTime,
@@ -64,6 +70,7 @@ func (h *Handler) Profile(c echo.Context) error {
 	if user != nil {
 		target = user.TargetWeight
 		unit = user.WeightUnitDisplay()
+		distanceUnit = user.DistanceUnitDisplay()
 		// The user's stored preferences seed the form's
 		// first-paint state. Frequency falls back to off
 		// when the stored value is the empty string (a row
@@ -85,6 +92,7 @@ func (h *Handler) Profile(c echo.Context) error {
 		claims.IsAdmin,
 		target,
 		unit,
+		distanceUnit,
 		reminderState,
 	))
 }
@@ -106,12 +114,16 @@ func (h *Handler) UpdateProfile(c echo.Context) error {
 	input := profileInput{
 		Name:              c.FormValue("name"),
 		WeightUnit:        c.FormValue("weight_unit"),
+		DistanceUnit:      c.FormValue("distance_unit"),
 		ReminderEnabled:   c.FormValue("reminder_enabled") == "1",
 		ReminderFrequency: c.FormValue("reminder_frequency"),
 		ReminderTime:      c.FormValue("reminder_time"),
 	}
 	if input.WeightUnit == "" {
 		input.WeightUnit = defaultWeightUnit
+	}
+	if input.DistanceUnit == "" {
+		input.DistanceUnit = defaultDistanceUnit
 	}
 	if input.ReminderFrequency == "" {
 		// Empty form post keeps the existing frequency.
@@ -167,6 +179,7 @@ func (h *Handler) UpdateProfile(c echo.Context) error {
 		IsAdmin:      claims.IsAdmin,
 		TargetWeight: input.TargetWeight,
 		WeightUnit:   input.WeightUnit,
+		DistanceUnit: input.DistanceUnit,
 	}
 
 	if err := h.userRepo.UpdateUser(user); err != nil {

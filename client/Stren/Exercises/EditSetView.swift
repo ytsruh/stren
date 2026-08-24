@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Edit sheet for a single set. Mirrors the web's
-/// `EditExerciseEntryForm` in
-/// `internal/views/exercise/exercise_entry_form.templ:290-415`:
-/// single set, exercise is read-only (you can't change
-/// which exercise a set belongs to), and the user can
-/// adjust reps, weight, rest, notes, and the date.
+/// Edit sheet for a single exercise entry. The exercise is
+/// read-only (you can't change which exercise an entry
+/// belongs to) and the user can adjust the type-appropriate
+/// metrics, notes, and date:
+///   - strength entries: reps / weight / rest
+///   - cardio entries: duration (min) / distance (preferred
+///     unit) plus optional avg heart rate and calories
 ///
 /// Presented by the per-exercise history view's swipe-edit
 /// action. On Save the form PUTs the update via
@@ -28,16 +29,30 @@ struct EditSetView: View {
     /// from the local copy — e.g. server-normalised date).
     let onUpdated: (ExerciseEntryDTO) -> Void
 
+    // Strength fields.
     @State private var repsText: String = ""
     @State private var weightText: String = ""
     @State private var restText: String = ""
+
+    // Cardio fields.
+    @State private var durationMinutesText: String = ""
+    @State private var distanceText: String = ""
+    @State private var heartRateText: String = ""
+    @State private var caloriesText: String = ""
+
     @State private var notes: String = ""
     @State private var createdAt: Date = Date()
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
 
+    private var isCardio: Bool { exerciseEntry.isCardio }
+
     private var weightUnit: String {
         authStore.currentUser?.weightUnit ?? "kg"
+    }
+
+    private var distanceUnit: String {
+        authStore.currentUser?.distanceUnit ?? "km"
     }
 
     private var parsedReps: Int? {
@@ -55,12 +70,43 @@ struct EditSetView: View {
         return Int(trimmed) ?? 0
     }
 
-    /// `true` when reps and weight are both parseable and
-    /// reps is at least 1. Weight can be 0 for bodyweight
-    /// exercises (the server accepts 0). Rest time defaults
-    /// to 0 when blank.
+    /// Parsed cardio duration in whole seconds (decimal minutes input).
+    private var parsedDurationSeconds: Int? {
+        let trimmed = durationMinutesText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, let minutes = Double(trimmed) else { return nil }
+        return Int((minutes * 60).rounded())
+    }
+
+    /// Parsed distance converted to metres from the user's unit.
+    private var parsedDistanceMeters: Double? {
+        let trimmed = distanceText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, let value = Double(trimmed) else { return nil }
+        switch distanceUnit {
+        case "mi": return value * 1609.344
+        default:   return value * 1000
+        }
+    }
+
+    private var parsedHeartRate: Int {
+        let trimmed = heartRateText.trimmingCharacters(in: .whitespaces)
+        return Int(trimmed) ?? 0
+    }
+
+    private var parsedCalories: Double {
+        let trimmed = caloriesText.trimmingCharacters(in: .whitespaces)
+        return Double(trimmed) ?? 0
+    }
+
+    /// Type-aware validity mirroring the server's rules: strength
+    /// needs reps ≥ 1 (weight can be 0); cardio needs a positive
+    /// duration and a positive distance.
     private var canSave: Bool {
         guard !isSaving else { return false }
+        if isCardio {
+            guard let seconds = parsedDurationSeconds, seconds > 0 else { return false }
+            guard let meters = parsedDistanceMeters, meters > 0 else { return false }
+            return true
+        }
         guard let reps = parsedReps, reps > 0 else { return false }
         guard let weight = parsedWeight, weight >= 0 else { return false }
         return true
@@ -126,38 +172,71 @@ struct EditSetView: View {
         }
     }
 
-    /// Reps / weight / rest in a single row so the form
-    /// fits on one screen on the smallest iPhone. Mirrors
-    /// the web's three-column grid on `sm:` and stacks
-    /// vertically below it.
+    /// Metric editor, branched by the entry's type: strength shows
+    /// reps / weight / rest in one row; cardio shows duration /
+    /// distance in the first row and the optional heart rate /
+    /// calories pair below it.
+    @ViewBuilder
     private var setsSection: some View {
-        Section("Set") {
-            HStack(spacing: DSSpacing.xs) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Reps")
-                        .font(.caption)
-                        .foregroundStyle(DSColors.textSecondary)
-                    TextField("0", text: $repsText)
-                        .keyboardType(.numberPad)
-                        .textFieldStyle(.ds)
+        if isCardio {
+            Section("Session") {
+                HStack(spacing: DSSpacing.xs) {
+                    field(label: "Duration (min)") {
+                        TextField("0", text: $durationMinutesText)
+                            .keyboardType(.decimalPad)
+                            .textFieldStyle(.ds)
+                    }
+                    field(label: "Distance (\(distanceUnit))") {
+                        TextField("0.00", text: $distanceText)
+                            .keyboardType(.decimalPad)
+                            .textFieldStyle(.ds)
+                    }
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Weight (\(weightUnit))")
-                        .font(.caption)
-                        .foregroundStyle(DSColors.textSecondary)
-                    TextField("0.0", text: $weightText)
-                        .keyboardType(.decimalPad)
-                        .textFieldStyle(.ds)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Rest (s)")
-                        .font(.caption)
-                        .foregroundStyle(DSColors.textSecondary)
-                    TextField("0", text: $restText)
-                        .keyboardType(.numberPad)
-                        .textFieldStyle(.ds)
+                HStack(spacing: DSSpacing.xs) {
+                    field(label: "Avg HR (bpm)") {
+                        TextField("—", text: $heartRateText)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.ds)
+                    }
+                    field(label: "Calories (kcal)") {
+                        TextField("—", text: $caloriesText)
+                            .keyboardType(.decimalPad)
+                            .textFieldStyle(.ds)
+                    }
                 }
             }
+        } else {
+            Section("Set") {
+                HStack(spacing: DSSpacing.xs) {
+                    field(label: "Reps") {
+                        TextField("0", text: $repsText)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.ds)
+                    }
+                    field(label: "Weight (\(weightUnit))") {
+                        TextField("0.0", text: $weightText)
+                            .keyboardType(.decimalPad)
+                            .textFieldStyle(.ds)
+                    }
+                    field(label: "Rest (s)") {
+                        TextField("0", text: $restText)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.ds)
+                    }
+                }
+            }
+        }
+    }
+
+    /// One labelled field cell — shared caption-over-input styling
+    /// for both layouts.
+    @ViewBuilder
+    private func field<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(DSColors.textSecondary)
+            content()
         }
     }
 
@@ -183,34 +262,67 @@ struct EditSetView: View {
     /// Hydrates the editable state from the entry passed
     /// in. Runs once when the sheet appears.
     private func populateFromEntry() {
-        repsText = String(exerciseEntry.reps)
-        weightText = String(format: "%.1f", exerciseEntry.weight)
-        restText = exerciseEntry.restTime > 0 ? String(exerciseEntry.restTime) : ""
         notes = exerciseEntry.notes
         createdAt = exerciseEntry.createdAt
+        if isCardio {
+            durationMinutesText = String(format: "%.1f", Double(exerciseEntry.durationSeconds) / 60.0)
+            let km = exerciseEntry.distanceMeters / 1000.0
+            let displayKm = distanceUnit == "mi" ? km / 1.609344 : km
+            distanceText = String(format: "%.2f", displayKm)
+            heartRateText = exerciseEntry.avgHeartRate > 0 ? String(exerciseEntry.avgHeartRate) : ""
+            caloriesText = exerciseEntry.caloriesBurned > 0 ? String(format: "%.0f", exerciseEntry.caloriesBurned) : ""
+        } else {
+            repsText = String(exerciseEntry.reps)
+            weightText = String(format: "%.1f", exerciseEntry.weight)
+            restText = exerciseEntry.restTime > 0 ? String(exerciseEntry.restTime) : ""
+        }
     }
 
     private func save() async {
         errorMessage = nil
-        guard let reps = parsedReps, reps > 0,
-              let weight = parsedWeight, weight >= 0 else {
-            errorMessage = "Reps must be at least 1 and weight must be a non-negative number."
-            return
+        if isCardio {
+            guard let seconds = parsedDurationSeconds, seconds > 0,
+                  let meters = parsedDistanceMeters, meters > 0 else {
+                errorMessage = "Duration and distance are required for cardio sessions."
+                return
+            }
+            isSaving = true
+            defer { isSaving = false }
+            await submit(UpdateExerciseEntryRequest(
+                exerciseID: exerciseEntry.exerciseID,
+                notes: notes,
+                reps: 0,
+                weight: 0,
+                restTime: 0,
+                durationSeconds: seconds,
+                distanceMeters: meters,
+                avgHeartRate: parsedHeartRate,
+                caloriesBurned: parsedCalories,
+                createdAt: createdAt
+            ))
+        } else {
+            guard let reps = parsedReps, reps > 0,
+                  let weight = parsedWeight, weight >= 0 else {
+                errorMessage = "Reps must be at least 1 and weight must be a non-negative number."
+                return
+            }
+            isSaving = true
+            defer { isSaving = false }
+            await submit(UpdateExerciseEntryRequest(
+                exerciseID: exerciseEntry.exerciseID,
+                notes: notes,
+                reps: reps,
+                weight: weight,
+                restTime: parsedRest,
+                createdAt: createdAt
+            ))
         }
-        isSaving = true
-        defer { isSaving = false }
+    }
+
+    /// Shared PUT + result plumbing for both metric modes.
+    private func submit(_ request: UpdateExerciseEntryRequest) async {
         do {
-            let updated = try await env.api.updateExerciseEntry(
-                id: exerciseEntry.id,
-                request: UpdateExerciseEntryRequest(
-                    exerciseID: exerciseEntry.exerciseID,
-                    notes: notes,
-                    reps: reps,
-                    weight: weight,
-                    restTime: parsedRest,
-                    createdAt: createdAt
-                )
-            )
+            let updated = try await env.api.updateExerciseEntry(id: exerciseEntry.id, request: request)
             onUpdated(updated)
             dismiss()
         } catch let error as APIError {
@@ -227,6 +339,7 @@ struct EditSetView: View {
             id: "entry-1",
             exerciseID: "ex-1",
             exerciseName: "Squat",
+            exerciseType: "strength",
             reps: 5,
             weight: 80,
             notes: "Felt strong",

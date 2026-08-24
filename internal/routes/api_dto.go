@@ -64,6 +64,7 @@ type UserDTO struct {
 	Email        string   `json:"email"`
 	IsAdmin      bool     `json:"is_admin"`
 	WeightUnit   string   `json:"weight_unit"`
+	DistanceUnit string   `json:"distance_unit"`
 	TargetWeight *float64 `json:"target_weight,omitempty"`
 }
 
@@ -72,7 +73,7 @@ type UserDTO struct {
 // branch before encoding the response.
 func UserFromModel(u *models.User) UserDTO {
 	if u == nil {
-		return UserDTO{WeightUnit: "kg"}
+		return UserDTO{WeightUnit: "kg", DistanceUnit: models.DistanceUnitKm}
 	}
 	return UserDTO{
 		ID:           u.ID,
@@ -80,18 +81,18 @@ func UserFromModel(u *models.User) UserDTO {
 		Email:        u.Email,
 		IsAdmin:      u.IsAdmin,
 		WeightUnit:   u.WeightUnitDisplay(),
+		DistanceUnit: u.DistanceUnitDisplay(),
 		TargetWeight: u.TargetWeight,
 	}
 }
 
 // UpdateMeRequest is the JSON body for PUT /api/v1/me. Mirrors
 // the user-editable subset of the HTML profile form (name,
-// target weight, weight unit) so the iOS app can update the
-// same fields the web app exposes. Reminder preferences and
-// notification settings are deliberately omitted: they live
-// on the web app only for now, and the iOS client surfaces no
-// UI for them. Add fields here (and to UserDTO) when the iOS
-// app grows that surface.
+// target weight, weight unit, distance unit) so the iOS app can update the
+// same fields the web app exposes. Reminder preferences are
+// deliberately omitted: they live on the web app only for now, and the
+// iOS client surfaces no UI for them. Add fields here (and to UserDTO)
+// when the iOS app grows that surface.
 //
 // TargetWeight is a pointer so an omitted JSON field (or an
 // explicit null) clears the user's goal, matching the form's
@@ -100,6 +101,7 @@ type UpdateMeRequest struct {
 	Name         string   `json:"name"          validate:"required,min=2,max=100"`
 	TargetWeight *float64 `json:"target_weight" validate:"omitempty,gte=0,lte=1000"`
 	WeightUnit   string   `json:"weight_unit"   validate:"omitempty,oneof=kg lbs"`
+	DistanceUnit string   `json:"distance_unit" validate:"omitempty,oneof=km mi"`
 }
 
 // ExerciseDTO is the JSON shape for an exercise in any list or
@@ -149,29 +151,45 @@ func ExercisesFromModels(es []models.Exercise) []ExerciseDTO {
 	return out
 }
 
-// ExerciseEntryDTO is the JSON shape for a single set.
+// ExerciseEntryDTO is the JSON shape for a single set. The metric pair that
+// carries meaning depends on ExerciseType: strength entries use reps/weight/
+// rest_time, cardio entries use duration_seconds/distance_meters (+ optional
+// avg_heart_rate/calories_burned). The server always sends every field with 0
+// for the non-applicable pair, so clients can decode one struct and branch on
+// exercise_type instead of probing for nulls. Distance is metres; pace is not
+// sent — derive it as duration_seconds / (distance_meters/1000).
 type ExerciseEntryDTO struct {
-	ID           string    `json:"id"`
-	ExerciseID   string    `json:"exercise_id"`
-	ExerciseName string    `json:"exercise_name"`
-	Reps         int       `json:"reps"`
-	Weight       float64   `json:"weight"`
-	Notes        string    `json:"notes"`
-	RestTime     int       `json:"rest_time"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	ExerciseID      string    `json:"exercise_id"`
+	ExerciseName    string    `json:"exercise_name"`
+	ExerciseType    string    `json:"exercise_type"`
+	Reps            int       `json:"reps"`
+	Weight          float64   `json:"weight"`
+	Notes           string    `json:"notes"`
+	RestTime        int       `json:"rest_time"`
+	DurationSeconds int       `json:"duration_seconds"`
+	DistanceMeters  float64   `json:"distance_meters"`
+	AvgHeartRate    int       `json:"avg_heart_rate"`
+	CaloriesBurned  float64   `json:"calories_burned"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // ExerciseEntryFromModel converts a models.ExerciseEntry into its DTO.
 func ExerciseEntryFromModel(e models.ExerciseEntry) ExerciseEntryDTO {
 	return ExerciseEntryDTO{
-		ID:           e.ID,
-		ExerciseID:   e.ExerciseID,
-		ExerciseName: e.ExerciseName,
-		Reps:         e.Reps,
-		Weight:       e.Weight,
-		Notes:        e.Notes,
-		RestTime:     e.RestTime,
-		CreatedAt:    e.CreatedAt,
+		ID:              e.ID,
+		ExerciseID:      e.ExerciseID,
+		ExerciseName:    e.ExerciseName,
+		ExerciseType:    string(e.ExerciseType),
+		Reps:            e.Reps,
+		Weight:          e.Weight,
+		Notes:           e.Notes,
+		RestTime:        e.RestTime,
+		DurationSeconds: e.DurationSeconds,
+		DistanceMeters:  e.DistanceMeters,
+		AvgHeartRate:    e.AvgHeartRate,
+		CaloriesBurned:  e.CaloriesBurned,
+		CreatedAt:       e.CreatedAt,
 	}
 }
 
@@ -187,13 +205,20 @@ func ExerciseEntriesFromModels(es []models.ExerciseEntry) []ExerciseEntryDTO {
 }
 
 // CreateSetInput is one set within a CreateExerciseEntriesRequest.
-// The numeric limits match the HTML form (reps 1–1000, weight
-// 0–5000, rest 0–3600) so a client cannot bypass the form's
-// per-set validation by going through the JSON API.
+// The numeric limits match the HTML form heritage (reps 0–1000, weight
+// 0–5000, rest 0–3600) extended with cardio fields (duration 0–86400s,
+// distance 0–500km, HR 0–300bpm, calories 0–10000kcal). Minimums are 0
+// here because which fields are mandatory depends on the exercise's type
+// — that check lives in the controller's ValidateExerciseSetInput so the
+// JSON and any future surface share one rule set.
 type CreateSetInput struct {
-	Reps     int     `json:"reps"       validate:"gte=1,lte=1000"`
-	Weight   float64 `json:"weight"     validate:"gte=0,lte=5000"`
-	RestTime int     `json:"rest_time"  validate:"gte=0,lte=3600"`
+	Reps            int     `json:"reps"             validate:"gte=0,lte=1000"`
+	Weight          float64 `json:"weight"           validate:"gte=0,lte=5000"`
+	RestTime        int     `json:"rest_time"        validate:"gte=0,lte=3600"`
+	DurationSeconds int     `json:"duration_seconds" validate:"gte=0,lte=86400"`
+	DistanceMeters  float64 `json:"distance_meters"  validate:"gte=0,lte=500000"`
+	AvgHeartRate    int     `json:"avg_heart_rate"   validate:"gte=0,lte=300"`
+	CaloriesBurned  float64 `json:"calories_burned"  validate:"gte=0,lte=10000"`
 }
 
 // CreateExerciseEntriesRequest is the body for
@@ -202,7 +227,10 @@ type CreateSetInput struct {
 // notes and timestamp — same semantics as the web form).
 // CreatedAt is optional and defaults to time.Now() on the
 // server when omitted, so a client that just wants "log it
-// now" can send an empty body field.
+// now" can send an empty body field. For cardio exercises each
+// set must carry duration_seconds and distance_meters; for
+// strength exercises reps must be at least 1 (enforced after
+// binding, keyed off the linked exercise's type).
 type CreateExerciseEntriesRequest struct {
 	ExerciseID string           `json:"exercise_id" validate:"required"`
 	Notes      string           `json:"notes"       validate:"max=500"`
@@ -212,22 +240,31 @@ type CreateExerciseEntriesRequest struct {
 
 // UpdateExerciseEntryRequest is the body for
 // PUT /api/v1/exercise-entries/:id. The single-set shape
-// matches the existing HTML PUT handler, which edits one
-// set at a time.
+// matches the create request; the same type-driven validation
+// applies using the entry's current exercise.
 type UpdateExerciseEntryRequest struct {
-	ExerciseID string     `json:"exercise_id" validate:"required"`
-	Notes      string     `json:"notes"       validate:"max=500"`
-	Reps       int        `json:"reps"        validate:"gte=1,lte=1000"`
-	Weight     float64    `json:"weight"      validate:"gte=0,lte=5000"`
-	RestTime   int        `json:"rest_time"   validate:"gte=0,lte=3600"`
-	CreatedAt  *time.Time `json:"created_at,omitempty"`
+	ExerciseID      string     `json:"exercise_id"      validate:"required"`
+	Notes           string     `json:"notes"            validate:"max=500"`
+	Reps            int        `json:"reps"             validate:"gte=0,lte=1000"`
+	Weight          float64    `json:"weight"           validate:"gte=0,lte=5000"`
+	RestTime        int        `json:"rest_time"        validate:"gte=0,lte=3600"`
+	DurationSeconds int        `json:"duration_seconds" validate:"gte=0,lte=86400"`
+	DistanceMeters  float64    `json:"distance_meters"  validate:"gte=0,lte=500000"`
+	AvgHeartRate    int        `json:"avg_heart_rate"   validate:"gte=0,lte=300"`
+	CaloriesBurned  float64    `json:"calories_burned"  validate:"gte=0,lte=10000"`
+	CreatedAt       *time.Time `json:"created_at,omitempty"`
 }
 
 // HistoryStatsDTO is the lifetime-stats header shown above
-// the history list (personal best, last set).
+// the history list. Strength clients read max_weight; cardio
+// clients read best_pace_sec_per_km (0 = none) and
+// longest_distance_meters. Both sets are always populated so
+// the client only needs exercise_type to pick.
 type HistoryStatsDTO struct {
-	MaxWeight float64           `json:"max_weight"`
-	LastSet   *ExerciseEntryDTO `json:"last_set,omitempty"`
+	MaxWeight             float64           `json:"max_weight"`
+	BestPaceSecPerKm      float64           `json:"best_pace_sec_per_km"`
+	LongestDistanceMeters float64           `json:"longest_distance_meters"`
+	LastSet               *ExerciseEntryDTO `json:"last_set,omitempty"`
 }
 
 // HistoryStatsFromModel converts a models.HistoryStats into
@@ -235,7 +272,11 @@ type HistoryStatsDTO struct {
 // exercise entries for the exercise) is mapped to a nil
 // pointer so the field is omitted from the JSON.
 func HistoryStatsFromModel(s models.HistoryStats) HistoryStatsDTO {
-	out := HistoryStatsDTO{MaxWeight: s.MaxWeight}
+	out := HistoryStatsDTO{
+		MaxWeight:             s.MaxWeight,
+		BestPaceSecPerKm:      s.BestPaceSecPerKm,
+		LongestDistanceMeters: s.LongestDistanceMeters,
+	}
 	if s.LastSet.ID != "" {
 		dto := ExerciseEntryFromModel(s.LastSet)
 		out.LastSet = &dto
@@ -247,24 +288,38 @@ func HistoryStatsFromModel(s models.HistoryStats) HistoryStatsDTO {
 // response. The HasPrev/HasNext flags let the iOS pager
 // render the same "Previous / Next" buttons as the web
 // history view without a separate HEAD request.
+// ExerciseType tells the client which metric pair the stats
+// and entries carry ("strength" | "cardio" | "other").
 type HistoryPageDTO struct {
-	Entries []ExerciseEntryDTO `json:"entries"`
-	Stats   HistoryStatsDTO    `json:"stats"`
-	Page    int                `json:"page"`
-	HasPrev bool               `json:"has_prev"`
-	HasNext bool               `json:"has_next"`
+	ExerciseType string             `json:"exercise_type"`
+	Entries      []ExerciseEntryDTO `json:"entries"`
+	Stats        HistoryStatsDTO    `json:"stats"`
+	Page         int                `json:"page"`
+	HasPrev      bool               `json:"has_prev"`
+	HasNext      bool               `json:"has_next"`
 }
 
 // HistoryPageFromModel converts a models.ExerciseHistoryPage
 // into the DTO. The empty-cases return empty (non-nil) slices
-// so the JSON encoder writes `[]` rather than `null`.
+// so the JSON encoder writes `[]` rather than `null`. The page's
+// exercise type is read from the first entry (every entry in a
+// page belongs to the same exercise); an empty page falls back
+// to "other".
 func HistoryPageFromModel(p *models.ExerciseHistoryPage) HistoryPageDTO {
+	exerciseType := string(models.ExerciseTypeOther)
+	for _, e := range p.ExerciseEntries {
+		if e.ExerciseType != "" {
+			exerciseType = string(e.ExerciseType)
+			break
+		}
+	}
 	return HistoryPageDTO{
-		Entries: ExerciseEntriesFromModels(p.ExerciseEntries),
-		Stats:   HistoryStatsFromModel(p.Stats),
-		Page:    p.Page,
-		HasPrev: p.HasPrev,
-		HasNext: p.HasNext,
+		ExerciseType: exerciseType,
+		Entries:      ExerciseEntriesFromModels(p.ExerciseEntries),
+		Stats:        HistoryStatsFromModel(p.Stats),
+		Page:         p.Page,
+		HasPrev:      p.HasPrev,
+		HasNext:      p.HasNext,
 	}
 }
 

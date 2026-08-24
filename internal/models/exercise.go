@@ -171,14 +171,18 @@ func (r *ExerciseRepository) CreateExerciseEntry(exerciseEntry *ExerciseEntry) e
 
 		entryUUID := uuid.New().String()
 		_, err := qtx.CreateExerciseEntry(ctx, db.CreateExerciseEntryParams{
-			ID:         entryUUID,
-			ExerciseID: exerciseEntry.ExerciseID,
-			UserID:     sql.NullString{String: exerciseEntry.UserID, Valid: true},
-			Reps:       int64(exerciseEntry.Reps),
-			Weight:     exerciseEntry.Weight,
-			Notes:      stringToNullString(exerciseEntry.Notes),
-			RestTime:   int64(exerciseEntry.RestTime),
-			CreatedAt:  timeToNullTime(exerciseEntry.CreatedAt),
+			ID:              entryUUID,
+			ExerciseID:      exerciseEntry.ExerciseID,
+			UserID:          sql.NullString{String: exerciseEntry.UserID, Valid: true},
+			Reps:            int64(exerciseEntry.Reps),
+			Weight:          exerciseEntry.Weight,
+			Notes:           stringToNullString(exerciseEntry.Notes),
+			RestTime:        int64(exerciseEntry.RestTime),
+			DurationSeconds: int64(exerciseEntry.DurationSeconds),
+			DistanceMeters:  exerciseEntry.DistanceMeters,
+			AvgHeartRate:    int64(exerciseEntry.AvgHeartRate),
+			CaloriesBurned:  exerciseEntry.CaloriesBurned,
+			CreatedAt:       timeToNullTime(exerciseEntry.CreatedAt),
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create exercise entry: %w", err)
@@ -214,13 +218,17 @@ func (r *ExerciseRepository) UpdateExerciseEntry(exerciseEntry *ExerciseEntry, u
 		qtx := r.queries.WithTx(tx)
 
 		err := qtx.UpdateExerciseEntry(ctx, db.UpdateExerciseEntryParams{
-			ExerciseID: exerciseEntry.ExerciseID,
-			Reps:       int64(exerciseEntry.Reps),
-			Weight:     exerciseEntry.Weight,
-			Notes:      stringToNullString(exerciseEntry.Notes),
-			RestTime:   int64(exerciseEntry.RestTime),
-			ID:         exerciseEntry.ID,
-			UserID:     sql.NullString{String: userID, Valid: true},
+			ExerciseID:      exerciseEntry.ExerciseID,
+			Reps:            int64(exerciseEntry.Reps),
+			Weight:          exerciseEntry.Weight,
+			Notes:           stringToNullString(exerciseEntry.Notes),
+			RestTime:        int64(exerciseEntry.RestTime),
+			DurationSeconds: int64(exerciseEntry.DurationSeconds),
+			DistanceMeters:  exerciseEntry.DistanceMeters,
+			AvgHeartRate:    int64(exerciseEntry.AvgHeartRate),
+			CaloriesBurned:  exerciseEntry.CaloriesBurned,
+			ID:              exerciseEntry.ID,
+			UserID:          sql.NullString{String: userID, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update exercise entry: %w", err)
@@ -238,14 +246,18 @@ func (r *ExerciseRepository) UpdateExerciseEntryWithDate(exerciseEntry *Exercise
 		qtx := r.queries.WithTx(tx)
 
 		err := qtx.UpdateExerciseEntryWithDate(ctx, db.UpdateExerciseEntryWithDateParams{
-			ExerciseID: exerciseEntry.ExerciseID,
-			Reps:       int64(exerciseEntry.Reps),
-			Weight:     exerciseEntry.Weight,
-			Notes:      stringToNullString(exerciseEntry.Notes),
-			RestTime:   int64(exerciseEntry.RestTime),
-			CreatedAt:  timeToNullTime(exerciseEntry.CreatedAt),
-			ID:         exerciseEntry.ID,
-			UserID:     sql.NullString{String: userID, Valid: true},
+			ExerciseID:      exerciseEntry.ExerciseID,
+			Reps:            int64(exerciseEntry.Reps),
+			Weight:          exerciseEntry.Weight,
+			Notes:           stringToNullString(exerciseEntry.Notes),
+			RestTime:        int64(exerciseEntry.RestTime),
+			DurationSeconds: int64(exerciseEntry.DurationSeconds),
+			DistanceMeters:  exerciseEntry.DistanceMeters,
+			AvgHeartRate:    int64(exerciseEntry.AvgHeartRate),
+			CaloriesBurned:  exerciseEntry.CaloriesBurned,
+			CreatedAt:       timeToNullTime(exerciseEntry.CreatedAt),
+			ID:              exerciseEntry.ID,
+			UserID:          sql.NullString{String: userID, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update exercise entry: %w", err)
@@ -325,6 +337,36 @@ func (r *ExerciseRepository) GetMaxWeightByExercise(exerciseID string, userID st
 	return max, nil
 }
 
+// GetBestPaceByExercise returns the fastest pace (seconds per kilometre) logged for
+// the given exercise by the given user, or 0 when no qualifying exercise entries exist.
+// Scopes to the given user ID.
+func (r *ExerciseRepository) GetBestPaceByExercise(exerciseID string, userID string) (float64, error) {
+	ctx := context.Background()
+	best, err := r.queries.GetBestPaceByExercise(ctx, db.GetBestPaceByExerciseParams{
+		ExerciseID: exerciseID,
+		UserID:     sql.NullString{String: userID, Valid: true},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to get best pace by exercise: %w", err)
+	}
+	return best, nil
+}
+
+// GetLongestDistanceByExercise returns the longest distance (metres) logged for the
+// given exercise by the given user, or 0 when no exercise entries exist.
+// Scopes to the given user ID.
+func (r *ExerciseRepository) GetLongestDistanceByExercise(exerciseID string, userID string) (float64, error) {
+	ctx := context.Background()
+	longest, err := r.queries.GetLongestDistanceByExercise(ctx, db.GetLongestDistanceByExerciseParams{
+		ExerciseID: exerciseID,
+		UserID:     sql.NullString{String: userID, Valid: true},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to get longest distance by exercise: %w", err)
+	}
+	return longest, nil
+}
+
 // GetLastSetByExercise returns the most recent exercise entry for the given exercise by the
 // given user. Returns (nil, nil) when no exercise entries exist. Scopes to the given user ID.
 func (r *ExerciseRepository) GetLastSetByExercise(exerciseID string, userID string) (*ExerciseEntry, error) {
@@ -370,34 +412,37 @@ func (r *ExerciseRepository) ListExerciseEntriesLast7Days(userID string) ([]Exer
 
 // --- Mapping helpers ---
 
+// mapExerciseEntryFields copies the shared exercise entry columns from a
+// sqlc row into the domain model. Every SELECT in the exercise entries
+// queries returns the same column list, so one helper keeps all six
+// per-query mapping helpers in sync.
+func mapExerciseEntryFields(target *ExerciseEntry, id, exerciseID, exerciseName, exerciseType, userID string, reps int64, weight float64, notes string, restTime int64, durationSeconds int64, distanceMeters float64, avgHeartRate int64, caloriesBurned float64, createdAt sql.NullTime) {
+	target.ID = id
+	target.ExerciseID = exerciseID
+	target.ExerciseName = exerciseName
+	target.ExerciseType = ExerciseType(exerciseType)
+	target.UserID = userID
+	target.Reps = int(reps)
+	target.Weight = weight
+	target.Notes = notes
+	target.RestTime = int(restTime)
+	target.DurationSeconds = int(durationSeconds)
+	target.DistanceMeters = distanceMeters
+	target.AvgHeartRate = int(avgHeartRate)
+	target.CaloriesBurned = caloriesBurned
+	target.CreatedAt = nullTimeToTime(createdAt)
+}
+
 func mapGetExerciseEntryRow(row db.GetExerciseEntryRow) *ExerciseEntry {
-	return &ExerciseEntry{
-		ID:           row.ID,
-		ExerciseID:   row.ExerciseID,
-		UserID:       nullStringToString(row.UserID),
-		ExerciseName: row.ExerciseName,
-		Reps:         int(row.Reps),
-		Weight:       row.Weight,
-		Notes:        nullStringToString(row.Notes),
-		RestTime:     int(row.RestTime),
-		CreatedAt:    nullTimeToTime(row.CreatedAt),
-	}
+	e := &ExerciseEntry{}
+	mapExerciseEntryFields(e, row.ID, row.ExerciseID, row.ExerciseName, row.ExerciseType, nullStringToString(row.UserID), row.Reps, row.Weight, nullStringToString(row.Notes), row.RestTime, row.DurationSeconds, row.DistanceMeters, row.AvgHeartRate, row.CaloriesBurned, row.CreatedAt)
+	return e
 }
 
 func mapListExerciseEntriesRows(rows []db.ListExerciseEntriesRow) []ExerciseEntry {
 	exerciseEntries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
-		exerciseEntries[i] = ExerciseEntry{
-			ID:           row.ID,
-			ExerciseID:   row.ExerciseID,
-			UserID:       nullStringToString(row.UserID),
-			ExerciseName: row.ExerciseName,
-			Reps:         int(row.Reps),
-			Weight:       row.Weight,
-			Notes:        nullStringToString(row.Notes),
-			RestTime:     int(row.RestTime),
-			CreatedAt:    nullTimeToTime(row.CreatedAt),
-		}
+		mapExerciseEntryFields(&exerciseEntries[i], row.ID, row.ExerciseID, row.ExerciseName, row.ExerciseType, nullStringToString(row.UserID), row.Reps, row.Weight, nullStringToString(row.Notes), row.RestTime, row.DurationSeconds, row.DistanceMeters, row.AvgHeartRate, row.CaloriesBurned, row.CreatedAt)
 	}
 	return exerciseEntries
 }
@@ -405,17 +450,7 @@ func mapListExerciseEntriesRows(rows []db.ListExerciseEntriesRow) []ExerciseEntr
 func mapListExerciseEntriesWithLimitRows(rows []db.ListExerciseEntriesWithLimitRow) []ExerciseEntry {
 	exerciseEntries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
-		exerciseEntries[i] = ExerciseEntry{
-			ID:           row.ID,
-			ExerciseID:   row.ExerciseID,
-			UserID:       nullStringToString(row.UserID),
-			ExerciseName: row.ExerciseName,
-			Reps:         int(row.Reps),
-			Weight:       row.Weight,
-			Notes:        nullStringToString(row.Notes),
-			RestTime:     int(row.RestTime),
-			CreatedAt:    nullTimeToTime(row.CreatedAt),
-		}
+		mapExerciseEntryFields(&exerciseEntries[i], row.ID, row.ExerciseID, row.ExerciseName, row.ExerciseType, nullStringToString(row.UserID), row.Reps, row.Weight, nullStringToString(row.Notes), row.RestTime, row.DurationSeconds, row.DistanceMeters, row.AvgHeartRate, row.CaloriesBurned, row.CreatedAt)
 	}
 	return exerciseEntries
 }
@@ -423,49 +458,21 @@ func mapListExerciseEntriesWithLimitRows(rows []db.ListExerciseEntriesWithLimitR
 func mapGetExerciseEntriesByExercisePaginatedRows(rows []db.GetExerciseEntriesByExercisePaginatedRow) []ExerciseEntry {
 	exerciseEntries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
-		exerciseEntries[i] = ExerciseEntry{
-			ID:           row.ID,
-			ExerciseID:   row.ExerciseID,
-			UserID:       nullStringToString(row.UserID),
-			ExerciseName: row.ExerciseName,
-			Reps:         int(row.Reps),
-			Weight:       row.Weight,
-			Notes:        nullStringToString(row.Notes),
-			RestTime:     int(row.RestTime),
-			CreatedAt:    nullTimeToTime(row.CreatedAt),
-		}
+		mapExerciseEntryFields(&exerciseEntries[i], row.ID, row.ExerciseID, row.ExerciseName, row.ExerciseType, nullStringToString(row.UserID), row.Reps, row.Weight, nullStringToString(row.Notes), row.RestTime, row.DurationSeconds, row.DistanceMeters, row.AvgHeartRate, row.CaloriesBurned, row.CreatedAt)
 	}
 	return exerciseEntries
 }
 
 func mapGetLastSetByExerciseRow(row db.GetLastSetByExerciseRow) *ExerciseEntry {
-	return &ExerciseEntry{
-		ID:           row.ID,
-		ExerciseID:   row.ExerciseID,
-		UserID:       nullStringToString(row.UserID),
-		ExerciseName: row.ExerciseName,
-		Reps:         int(row.Reps),
-		Weight:       row.Weight,
-		Notes:        nullStringToString(row.Notes),
-		RestTime:     int(row.RestTime),
-		CreatedAt:    nullTimeToTime(row.CreatedAt),
-	}
+	e := &ExerciseEntry{}
+	mapExerciseEntryFields(e, row.ID, row.ExerciseID, row.ExerciseName, row.ExerciseType, nullStringToString(row.UserID), row.Reps, row.Weight, nullStringToString(row.Notes), row.RestTime, row.DurationSeconds, row.DistanceMeters, row.AvgHeartRate, row.CaloriesBurned, row.CreatedAt)
+	return e
 }
 
 func mapGetExerciseEntriesByDateRangeRows(rows []db.GetExerciseEntriesByDateRangeRow) []ExerciseEntry {
 	exerciseEntries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
-		exerciseEntries[i] = ExerciseEntry{
-			ID:           row.ID,
-			ExerciseID:   row.ExerciseID,
-			UserID:       nullStringToString(row.UserID),
-			ExerciseName: row.ExerciseName,
-			Reps:         int(row.Reps),
-			Weight:       row.Weight,
-			Notes:        nullStringToString(row.Notes),
-			RestTime:     int(row.RestTime),
-			CreatedAt:    nullTimeToTime(row.CreatedAt),
-		}
+		mapExerciseEntryFields(&exerciseEntries[i], row.ID, row.ExerciseID, row.ExerciseName, row.ExerciseType, nullStringToString(row.UserID), row.Reps, row.Weight, nullStringToString(row.Notes), row.RestTime, row.DurationSeconds, row.DistanceMeters, row.AvgHeartRate, row.CaloriesBurned, row.CreatedAt)
 	}
 	return exerciseEntries
 }
@@ -473,17 +480,7 @@ func mapGetExerciseEntriesByDateRangeRows(rows []db.GetExerciseEntriesByDateRang
 func mapListExerciseEntriesLast7DaysRows(rows []db.ListExerciseEntriesLast7DaysRow) []ExerciseEntry {
 	exerciseEntries := make([]ExerciseEntry, len(rows))
 	for i, row := range rows {
-		exerciseEntries[i] = ExerciseEntry{
-			ID:           row.ID,
-			ExerciseID:   row.ExerciseID,
-			UserID:       nullStringToString(row.UserID),
-			ExerciseName: row.ExerciseName,
-			Reps:         int(row.Reps),
-			Weight:       row.Weight,
-			Notes:        nullStringToString(row.Notes),
-			RestTime:     int(row.RestTime),
-			CreatedAt:    nullTimeToTime(row.CreatedAt),
-		}
+		mapExerciseEntryFields(&exerciseEntries[i], row.ID, row.ExerciseID, row.ExerciseName, row.ExerciseType, nullStringToString(row.UserID), row.Reps, row.Weight, nullStringToString(row.Notes), row.RestTime, row.DurationSeconds, row.DistanceMeters, row.AvgHeartRate, row.CaloriesBurned, row.CreatedAt)
 	}
 	return exerciseEntries
 }

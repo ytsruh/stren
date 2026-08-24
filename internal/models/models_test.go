@@ -222,3 +222,168 @@ func TestValidateURL(t *testing.T) {
 		})
 	}
 }
+
+// --- Cardio helpers ---
+
+func TestExerciseEntry_IsCardio(t *testing.T) {
+	tests := []struct {
+		name     string
+		entry    ExerciseEntry
+		expected bool
+	}{
+		{name: "cardio entry", entry: ExerciseEntry{ExerciseType: ExerciseTypeCardio}, expected: true},
+		{name: "strength entry", entry: ExerciseEntry{ExerciseType: ExerciseTypeStrength}, expected: false},
+		{name: "other entry", entry: ExerciseEntry{ExerciseType: ExerciseTypeOther}, expected: false},
+		// Legacy rows (pre-cardio) have an empty type and must render as strength.
+		{name: "empty type defaults to strength", entry: ExerciseEntry{}, expected: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.entry.IsCardio(); got != tt.expected {
+				t.Errorf("IsCardio() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    int
+		expected string
+	}{
+		{name: "zero", input: 0, expected: "00:00"},
+		{name: "negative clamps to zero", input: -5, expected: "00:00"},
+		{name: "under a minute", input: 45, expected: "00:45"},
+		{name: "exactly a minute", input: 60, expected: "01:00"},
+		{name: "25 minutes (typical run)", input: 1500, expected: "25:00"},
+		{name: "over an hour switches to H:MM:SS", input: 3930, expected: "1:05:30"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FormatDuration(tt.input); got != tt.expected {
+				t.Errorf("FormatDuration(%d) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatDistance(t *testing.T) {
+	tests := []struct {
+		name     string
+		meters   float64
+		unit     string
+		expected string
+	}{
+		{name: "5k in km", meters: 5000, unit: "km", expected: "5.00 km"},
+		{name: "5k normalised from empty unit", meters: 5000, unit: "", expected: "5.00 km"},
+		{name: "5k in miles", meters: 5000, unit: "mi", expected: "3.11 mi"},
+		{name: "unknown unit falls back to km", meters: 42195, unit: "yards", expected: "42.20 km"}, // marathon distance
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FormatDistance(tt.meters, tt.unit); got != tt.expected {
+				t.Errorf("FormatDistance(%v, %q) = %q, want %q", tt.meters, tt.unit, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestExerciseEntry_PaceSecPerKm(t *testing.T) {
+	tests := []struct {
+		name     string
+		entry    ExerciseEntry
+		expected float64
+	}{
+		{
+			name:     "25 min for 5 km is 300 sec/km",
+			entry:    ExerciseEntry{DurationSeconds: 1500, DistanceMeters: 5000},
+			expected: 300,
+		},
+		{name: "no distance means no pace", entry: ExerciseEntry{DurationSeconds: 1500}, expected: 0},
+		{name: "no duration means no pace", entry: ExerciseEntry{DistanceMeters: 5000}, expected: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.entry.PaceSecPerKm()
+			if got != tt.expected {
+				t.Errorf("PaceSecPerKm() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatPace(t *testing.T) {
+	tests := []struct {
+		name      string
+		secPerKm  float64
+		unit      string
+		expected  string
+	}{
+		{name: "5:00 /km", secPerKm: 300, unit: "km", expected: "5:00 /km"},
+		{name: "sub-minute seconds are zero padded", secPerKm: 298.4, unit: "km", expected: "4:58 /km"},
+		{name: "mi converts km pace to mile pace", secPerKm: 300, unit: "mi", expected: "8:02 /mi"},
+		{name: "non-positive pace renders empty", secPerKm: 0, unit: "km", expected: ""},
+		{name: "negative pace renders empty", secPerKm: -10, unit: "km", expected: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FormatPace(tt.secPerKm, tt.unit); got != tt.expected {
+				t.Errorf("FormatPace(%v, %q) = %q, want %q", tt.secPerKm, tt.unit, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNormalizeDistanceUnit(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "km passes through", input: "km", expected: DistanceUnitKm},
+		{name: "mi passes through", input: "mi", expected: DistanceUnitMi},
+		{name: "empty defaults to km", input: "", expected: DistanceUnitKm},
+		{name: "unknown defaults to km", input: "miles", expected: DistanceUnitKm},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeDistanceUnit(tt.input); got != tt.expected {
+				t.Errorf("NormalizeDistanceUnit(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestUser_DistanceUnitDisplay(t *testing.T) {
+	var nilUser *User
+	if got := nilUser.DistanceUnitDisplay(); got != DistanceUnitKm {
+		t.Errorf("nil user DistanceUnitDisplay() = %q, want km", got)
+	}
+	u := &User{DistanceUnit: "mi"}
+	if got := u.DistanceUnitDisplay(); got != DistanceUnitMi {
+		t.Errorf("DistanceUnitDisplay() = %q, want mi", got)
+	}
+	u = &User{DistanceUnit: "nautical-miles"}
+	if got := u.DistanceUnitDisplay(); got != DistanceUnitKm {
+		t.Errorf("unknown unit DistanceUnitDisplay() = %q, want km fallback", got)
+	}
+}
+
+func TestExerciseEntry_Summary(t *testing.T) {
+	strength := &ExerciseEntry{Reps: 5, Weight: 100, ExerciseType: ExerciseTypeStrength}
+	if got := strength.Summary("kg", "km"); got != "5 × 100.0 kg" {
+		t.Errorf("strength Summary() = %q, want %q", got, "5 × 100.0 kg")
+	}
+
+	cardio := &ExerciseEntry{DurationSeconds: 1500, DistanceMeters: 5200, ExerciseType: ExerciseTypeCardio}
+	if got := cardio.Summary("kg", "km"); got != "25:00 · 5.20 km" {
+		t.Errorf("cardio Summary() = %q, want %q", got, "25:00 · 5.20 km")
+	}
+
+	// Empty type (legacy rows) renders the strength summary.
+	legacy := &ExerciseEntry{Reps: 8, Weight: 60}
+	if got := legacy.Summary("lbs", "mi"); got != "8 × 60.0 lbs" {
+		t.Errorf("legacy Summary() = %q, want %q", got, "8 × 60.0 lbs")
+	}
+}

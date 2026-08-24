@@ -1,6 +1,6 @@
-# Strength Tracker
+# Stren - The Fitness Tracker
 
-A simple strength tracking application built with Go, Echo, htmx, Tailwind CSS + Basecoat CSS, and SQLite/Turso. HTMX and Basecoat give a simple, clean semantic view layer. Built using an MVC architecture and focused on using as few dependencies as possible.
+A simple fitness tracking application built with Go, Echo, htmx, Tailwind CSS + Basecoat CSS, and SQLite/Turso. HTMX and Basecoat give a simple, clean semantic view layer for the web interface & SwiftUI is used for the iOS app. Built using an MVC architecture and focused on using as few dependencies as possible.
 
 ## Product shape
 
@@ -14,13 +14,6 @@ This web app is a limited companion surface:
 - Data Export page (`GET /export`, sidebar under Account) with weight data export (`/export/weight`) and exercise entries export (`/export/exercises`) ZIP downloads
 - Admin: exercise management (+ image upload), users, feedback inbox
 - Authentication (register / login / password reset)
-
-## Features
-
-- User based authentication
-- Read-only exercise dashboard & history views
-- Weight reminder notifications (email only, hourly cron)
-- Data Export page: weight & exercise entries ZIP downloads
 
 ## Environment Variables
 

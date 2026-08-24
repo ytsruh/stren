@@ -71,6 +71,7 @@ struct DashboardView: View {
                     DashboardSetList(
                         groups: groups,
                         weightUnit: weightUnit,
+                        distanceUnit: authStore.currentUser?.distanceUnit ?? "km",
                         exerciseLookup: exerciseLookup,
                         onDelete: { entry in
                             Task { await deleteEntry(entry) }

@@ -55,6 +55,17 @@ type Repository interface {
 	// the given user. Returns 0 when no exercise entries exist. Scopes to the given user ID.
 	GetMaxWeightByExercise(exerciseID string, userID string) (float64, error)
 
+	// GetBestPaceByExercise returns the fastest pace (seconds per kilometre) across the
+	// given exercise's exercise entries for the given user. Entries without a positive
+	// duration and distance are excluded. Returns 0 when no qualifying exercise entries
+	// exist. Scopes to the given user ID.
+	GetBestPaceByExercise(exerciseID string, userID string) (float64, error)
+
+	// GetLongestDistanceByExercise returns the longest distance (metres) logged for the
+	// given exercise by the given user. Returns 0 when no exercise entries exist.
+	// Scopes to the given user ID.
+	GetLongestDistanceByExercise(exerciseID string, userID string) (float64, error)
+
 	// GetLastSetByExercise returns the most recent exercise entry for the given exercise by
 	// the given user, or sql.ErrNoRows when no exercise entries exist. Scopes to the given user ID.
 	GetLastSetByExercise(exerciseID string, userID string) (*ExerciseEntry, error)
