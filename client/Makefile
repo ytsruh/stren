@@ -3,7 +3,14 @@
 # Xcode/CommandLineTools — this file is just a thin wrapper so
 # the day-to-day commands are short and memorable.
 
-SCHEME = Stren
+# Schemes are defined in project.yml and generated into the
+# xcodeproj by `make gen`. `Dev` runs the Debug configuration
+# (localhost dev server, com.ytsruh.stren.dev bundle ID); `Prod`
+# is the ship lane (Release config, production server). All
+# day-to-day targets below build Debug via the Dev scheme; the
+# `release` target archives through the Prod scheme.
+SCHEME = Dev
+RELEASE_SCHEME = Prod
 # Use the generic simulator destination so xcodebuild doesn't
 # try to resolve `OS:latest` to the latest installed runtime
 # (which can be a beta iOS that doesn't have the iPhone model
@@ -12,7 +19,11 @@ SCHEME = Stren
 # build finishes.
 DESTINATION ?= generic/platform=iOS Simulator
 XCODEPROJ = Stren.xcodeproj
-BUNDLE_ID = com.ytsruh.stren
+# Bundle ID of the DEBUG build (see Configs/Debug.xcconfig).
+# `run` installs and launches that one, so `simctl launch`
+# must use the `.dev` identifier — the plain com.ytsruh.stren
+# belongs to Release/production installs.
+BUNDLE_ID = com.ytsruh.stren.dev
 
 # A regex that matches a simulator UUID. Used by `boot` and
 # `run` to extract a usable device id from the (somewhat
@@ -38,7 +49,7 @@ help:
 	@echo "  make test     Build and run the unit tests on a simulator (booted device preferred)"
 	@echo "  make boot     Boot the first available iPhone simulator (no-op if one is already running)"
 	@echo "  make run      Build, install, and launch on the booted simulator (auto-boots one if needed)"
-	@echo "  make release  Archive a Release build and open Xcode's Organizer to install on a connected iPhone"
+	@echo "  make release  Archive a Release build (Prod scheme) and open Xcode's Organizer to install on a connected iPhone"
 	@echo "  make clean    Wipe build artifacts"
 	@echo ""
 	@echo "Override the destination with DESTINATION=...  e.g."
@@ -183,10 +194,12 @@ clean:
 # `release` produces a signed Release build for a real iOS
 # device and hands it off to Xcode's Organizer. The user
 # then picks "Distribute App" → "Development" → their
-# iPhone to install. The base URL comes from
-# Stren/Configs/Release.xcconfig (https://stren.ytsruh.com/
-# api/v1) so the on-device build talks to the production
-# server, not the localhost dev one used by `make run`.
+# iPhone to install. It drives the Prod scheme (whose
+# archive action is the Release configuration) and passes
+# `-configuration Release` explicitly anyway, so the result
+# is unambiguous: production bundle ID, "Stren" display
+# name, and the base URL from Stren/Configs/Release.xcconfig
+# (https://stren.ytsruh.com/api/v1).
 #
 # Signing is automatic via Xcode's personal-team
 # provisioning. On first run Xcode will prompt for your
@@ -205,7 +218,7 @@ release:
 	mkdir -p build && \
 	xcodebuild \
 	-project $(XCODEPROJ) \
-	-scheme $(SCHEME) \
+	-scheme $(RELEASE_SCHEME) \
 	-configuration Release \
 	-destination 'generic/platform=iOS' \
 	-archivePath "$$ARCHIVE_DIR" \

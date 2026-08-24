@@ -19,17 +19,19 @@ make gen           # generates Stren.xcodeproj from project.yml
 open Stren.xcodeproj   # optional — only needed for the debugger
 ```
 
-Edit `Stren/Info.plist` (or pass a build setting in Xcode) to set
-`STREN_API_BASE_URL` to the URL the simulator can reach. Defaults are
-already wired up in `project.yml`:
+Edit `Stren/Configs/*.xcconfig` to change the server a build talks
+to. Defaults are already wired up:
 
-| Scheme | API URL |
-|---|---|
-| Debug (simulator) | `http://localhost:8080/api/v1` |
-| Release / device  | `https://stren.ytsruh.com/api/v1` |
+| Scheme | Config | API URL | Bundle ID |
+|---|---|---|---|
+| **Dev** (daily driver) | Debug | `http://localhost:8080/api/v1` | `com.ytsruh.stren.dev` |
+| **Prod** (ship lane) | Release | `https://stren.ytsruh.com/api/v1` | `com.ytsruh.stren` |
 
-You can override per build in Xcode's scheme editor → Run → Arguments
-→ Environment Variables, or by editing `project.yml`.
+The two bundle IDs mean a dev install ("Stren Dev") and a production
+install ("Stren") can coexist side-by-side on the same device or
+simulator, with independent logins. Select the scheme in Xcode's
+scheme picker, or override the server per build in scheme editor →
+Run → Arguments → Environment Variables.
 
 ## Day-to-day workflow
 
@@ -39,6 +41,7 @@ You can override per build in Xcode's scheme editor → Run → Arguments
 | `make build`   | Compile the app for the booted iOS simulator (no run) |
 | `make boot`    | Open the first available iPhone simulator (no-op if one is already running) |
 | `make run`     | Build, install, and launch on the booted simulator — **auto-boots one if nothing is running** |
+| `make release` | Archive a Release build (Prod scheme) and open Xcode's Organizer to install on a connected iPhone |
 | `make clean`   | Wipe build artifacts |
 
 `make run` is a one-keystroke dev loop. It first checks whether a
@@ -47,6 +50,12 @@ iPhone and opens the Simulator app, then installs and launches the
 app on it. If you want to run on a different simulator than the
 default, just open it manually first (`make boot` will pick that
 one) — the first iPhone in the `Booted` list wins.
+
+Everything above uses the **Dev** scheme (Debug configuration →
+localhost server). Shipping is `make release`, which archives via
+the **Prod** scheme (Release configuration → production server).
+To smoke-test the production API from a simulator, select the Prod
+scheme in Xcode and just Run — no archive needed.
 
 Most edits — Swift files, `project.yml`, plist values — don't need
 Xcode at all. Re-run `make gen` after structural changes (added

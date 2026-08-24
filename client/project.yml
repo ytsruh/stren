@@ -42,7 +42,11 @@ targets:
     info:
       path: Stren/Info.plist
       properties:
-        CFBundleDisplayName: Stren
+        # Resolved per build configuration from the xcconfig
+        # files (Stren/Configs/*.xcconfig): "Stren Dev" in
+        # Debug, "Stren" in Release — so dev and prod installs
+        # are distinguishable on the home screen.
+        CFBundleDisplayName: $(STREN_DISPLAY_NAME)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:
@@ -83,7 +87,12 @@ targets:
       Release: Stren/Configs/Release.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ytsruh.stren
+        # NOTE: PRODUCT_BUNDLE_IDENTIFIER is intentionally NOT
+        # set here. Direct target build settings override
+        # xcconfig files, so pinning it here would defeat the
+        # per-configuration split (com.ytsruh.stren.dev in
+        # Debug vs com.ytsruh.stren in Release) defined in
+        # Stren/Configs/{Debug,Release}.xcconfig.
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -104,8 +113,24 @@ targets:
         # hand-maintained one); the test bundle has no plist of
         # its own, so let Xcode synthesise a minimal one.
         GENERATE_INFOPLIST_FILE: YES
+# Two shared schemes over the same targets. The environment
+# split comes from the build configuration each action uses:
+#
+#   Dev  — the daily driver. Run/Test use Debug, which pulls
+#          Stren/Configs/Debug.xcconfig: localhost dev server,
+#          com.ytsruh.stren.dev bundle ID, "Stren Dev" name.
+#   Prod — the ship lane. Run/Profile/Archive use Release
+#          (Configs/Release.xcconfig): production HTTPS server,
+#          com.ytsruh.stren, "Stren". Run = Release here means
+#          you can smoke-test against the live API on a
+#          simulator before archiving.
+#
+# Schemes MUST be declared here (not hand-added in Xcode) —
+# Stren.xcodeproj is gitignored and regenerated wholesale by
+# XcodeGen; anything defined only in the project file is lost
+# on `make gen`.
 schemes:
-  Stren:
+  Dev:
     build:
       targets:
         Stren: all
@@ -113,6 +138,33 @@ schemes:
     run:
       config: Debug
     test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - StrenTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      # Archiving from Dev still yields a production build.
+      # Shipping should go through the Prod scheme or
+      # `make release`; this is only a safety net so an
+      # accidental archive is never a localhost build.
+      config: Release
+  Prod:
+    build:
+      targets:
+        Stren: all
+        StrenTests: [test]
+    run:
+      # Release config → production server. Lets you launch
+      # the real app against stren.ytsruh.com without going
+      # through an archive + device install first.
+      config: Release
+    test:
+      # Tests always run against Debug — they need the test
+      # bundle and don't care which server the app points at.
       config: Debug
       gatherCoverageData: false
       targets:

@@ -19,3 +19,17 @@
 STREN_API_SCHEME = http
 STREN_API_HOST = localhost:8080
 STREN_API_PATH = /api/v1
+
+// The Debug configuration installs as a SEPARATE app from the
+// Release one: a `.dev` bundle ID and a "Stren Dev" home-screen
+// name let a production install and a dev install coexist
+// side-by-side on the same device/simulator without overwriting
+// each other. iOS sandboxes Keychain per bundle ID, so the two
+// apps also keep independent logins.
+//
+// These deliberately live here and NOT in project.yml's target
+// settings — direct build settings in the pbxproj take precedence
+// over xcconfig files, which would pin every configuration to a
+// single value.
+PRODUCT_BUNDLE_IDENTIFIER = com.ytsruh.stren.dev
+STREN_DISPLAY_NAME = Stren Dev
