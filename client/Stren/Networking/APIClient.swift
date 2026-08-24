@@ -61,6 +61,12 @@ public final class APIClient: @unchecked Sendable {
         return f
     }()
 
+    /// RFC 3339 formatter for query-string dates (the
+    /// `from`/`to` params). Default GMT output keeps every
+    /// produced string "+"-free so no percent-encoding of the
+    /// offset is required.
+    private static let queryDateFormatter = ISO8601DateFormatter()
+
     public init(
         baseURL: URL,
         session: URLSession = .shared,
@@ -146,6 +152,22 @@ public final class APIClient: @unchecked Sendable {
 
     public func listExerciseEntries(days: Int = 7) async throws -> [ExerciseEntryDTO] {
         try await send("GET", "exercise-entries?days=\(days)")
+    }
+
+    /// Lists exercise entries within an explicit range
+    /// (`GET /api/v1/exercise-entries?from=<RFC3339>&to=<RFC3339>`,
+    /// inclusive on both ends). The week calendar uses this so day
+    /// boundaries are computed client-side in the user's local
+    /// timezone: callers pass absolute instants and the server never
+    /// needs to know the user's offset. Timestamps are formatted in
+    /// UTC ("Z"), which is the same instant — this also sidesteps
+    /// the classic "+ becomes a space" query-encoding pitfall, since
+    /// a UTC RFC 3339 string contains no "+" sign.
+    public func listExerciseEntries(from: Date, to: Date) async throws -> [ExerciseEntryDTO] {
+        let path = "exercise-entries"
+            + "?from=" + Self.queryDateFormatter.string(from: from)
+            + "&to=" + Self.queryDateFormatter.string(from: to)
+        return try await send("GET", path)
     }
 
     public func getExerciseEntry(id: String) async throws -> ExerciseEntryDTO {

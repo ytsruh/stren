@@ -28,13 +28,14 @@ SIM_UUID_RE = [A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}
 # `simctl boot` starts the device headless.
 SIMULATOR_APP = $(shell xcode-select -p)/Applications/Simulator.app
 
-.PHONY: help gen build boot run clean release
+.PHONY: help gen build test boot run clean release
 
 help:
 	@echo "Stren iOS — available targets:"
 	@echo ""
 	@echo "  make gen      Regenerate $(XCODEPROJ) from project.yml"
 	@echo "  make build    Compile for the booted simulator"
+	@echo "  make test     Build and run the unit tests on a simulator (booted device preferred)"
 	@echo "  make boot     Boot the first available iPhone simulator (no-op if one is already running)"
 	@echo "  make run      Build, install, and launch on the booted simulator (auto-boots one if needed)"
 	@echo "  make release  Archive a Release build and open Xcode's Organizer to install on a connected iPhone"
@@ -59,6 +60,27 @@ build:
 		-configuration Debug \
 		-destination '$(DESTINATION)' \
 		build
+
+# Unit tests. Unlike `build`, running tests needs a concrete,
+# bootable device (the generic destination can't host a test
+# run), so this resolves one the same way `run` does: prefer an
+# already-booted iPhone, otherwise boot the first available.
+#
+# IMPORTANT: like `run`, this recipe body MUST be one
+# continuous shell block — a `#` comment without a trailing
+# `\` would split the script across subshells. Explanatory
+# comments live above the recipe, not inside it.
+test:
+	@DEVICE=$$(xcrun simctl list devices booted 2>/dev/null | grep -E "iPhone" | head -1 | grep -oE "$(SIM_UUID_RE)"); \
+	if [ -z "$$DEVICE" ]; then \
+		DEVICE=$$(make -s boot); \
+	fi; \
+	echo "Running unit tests on simulator $$DEVICE..."; \
+	xcodebuild \
+		-project $(XCODEPROJ) \
+		-scheme $(SCHEME) \
+		-destination "id=$$DEVICE" \
+		test
 
 # `boot` opens the first available iPhone simulator. It's a
 # no-op if one is already booted so the user can run it
