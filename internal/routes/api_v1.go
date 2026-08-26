@@ -191,37 +191,81 @@ func (h *Handler) APIListExercises(c echo.Context) error {
 
 // --- Exercise entries (sets) ---
 
+// maxExerciseEntryRangeSpan caps the from/to window on
+// GET /api/v1/exercise-entries. The calendar fetches one week at a
+// time (plus buffer), so this is generous headroom rather than a
+// feature limit — it exists to stop a caller requesting an
+// effectively unbounded scan.
+const maxExerciseEntryRangeSpan = 62 * 24 * time.Hour
+
 // APIListExerciseEntries handles GET /api/v1/exercise-entries.
-// Accepts an optional ?days=N query parameter (default 7,
-// clamped to [1, 365]) and returns the user's sets from the
-// last N days, newest first. Same data the web dashboard shows.
+//
+// Two mutually-exclusive ways to pick the window:
+//
+//   - ?days=N (default 7, clamped to [1, 365]): the user's sets
+//     from the last N days relative to now, newest first. Same
+//     data the web dashboard shows.
+//   - ?from=<RFC3339>&to=<RFC3339>: an explicit instant range,
+//     inclusive on both ends. Used by the iOS week calendar so
+//     day boundaries are computed client-side in the user's
+//     local timezone and sent as absolute instants.
+//
+// When either from or to is present the range mode wins; days is
+// ignored. Malformed ranges return 400s with an APIError body.
 func (h *Handler) APIListExerciseEntries(c echo.Context) error {
 	claims := GetClaims(c)
 
-	days := 7
-	if raw := c.QueryParam("days"); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil || n < 1 {
-			return c.JSON(http.StatusBadRequest, APIError{Error: "days must be a positive integer"})
-		}
-		if n > 365 {
-			n = 365
-		}
-		days = n
-	}
+	rawFrom, rawTo := c.QueryParam("from"), c.QueryParam("to")
 
 	var (
 		entries []models.ExerciseEntry
 		err     error
 	)
-	if days == 7 {
-		// Fast path: reuses the existing "last 7 days" query,
-		// which is the dashboard's hot path.
-		entries, err = h.exerciseEntryCtrl.ListExerciseEntriesLast7Days(claims.UserID)
-	} else {
-		end := time.Now()
-		start := end.AddDate(0, 0, -days)
-		entries, err = h.exerciseEntryCtrl.GetExerciseEntriesByDateRange(start, end, claims.UserID)
+	switch {
+	case rawFrom != "" || rawTo != "":
+		// Explicit range mode. Both bounds are required — a
+		// half-specified range is almost certainly a client bug,
+		// so fail loudly instead of guessing the missing edge.
+		if rawFrom == "" || rawTo == "" {
+			return c.JSON(http.StatusBadRequest, APIError{Error: "both from and to are required"})
+		}
+		from, parseErr := time.Parse(time.RFC3339, rawFrom)
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, APIError{Error: "from must be an RFC3339 timestamp"})
+		}
+		to, parseErr := time.Parse(time.RFC3339, rawTo)
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, APIError{Error: "to must be an RFC3339 timestamp"})
+		}
+		if from.After(to) {
+			return c.JSON(http.StatusBadRequest, APIError{Error: "from must not be after to"})
+		}
+		if to.Sub(from) > maxExerciseEntryRangeSpan {
+			return c.JSON(http.StatusBadRequest, APIError{Error: "range must not exceed 62 days"})
+		}
+		entries, err = h.exerciseEntryCtrl.GetExerciseEntriesByDateRange(from, to, claims.UserID)
+	default:
+		days := 7
+		if raw := c.QueryParam("days"); raw != "" {
+			n, atoiErr := strconv.Atoi(raw)
+			if atoiErr != nil || n < 1 {
+				return c.JSON(http.StatusBadRequest, APIError{Error: "days must be a positive integer"})
+			}
+			if n > 365 {
+				n = 365
+			}
+			days = n
+		}
+
+		if days == 7 {
+			// Fast path: reuses the existing "last 7 days" query,
+			// which is the dashboard's hot path.
+			entries, err = h.exerciseEntryCtrl.ListExerciseEntriesLast7Days(claims.UserID)
+		} else {
+			end := time.Now()
+			start := end.AddDate(0, 0, -days)
+			entries, err = h.exerciseEntryCtrl.GetExerciseEntriesByDateRange(start, end, claims.UserID)
+		}
 	}
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, APIError{Error: "failed to load exercise entries"})

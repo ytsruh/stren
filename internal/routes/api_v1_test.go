@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -640,6 +641,115 @@ func TestAPIListExerciseEntries_BadDays(t *testing.T) {
 	if apiErr.Error == "" {
 		t.Fatal("expected validation error")
 	}
+}
+
+// --- /exercise-entries from/to range mode ---
+
+// TestAPIListExerciseEntries_DateRange verifies the explicit
+// ?from=&to= window (the iOS week calendar's access path):
+// only entries inside the inclusive range come back.
+func TestAPIListExerciseEntries_DateRange(t *testing.T) {
+	h, mock, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "dr@example.com", "DR")
+
+	// Three entries: one before the range, one inside, one after.
+	mid := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	mock.exerciseEntries = []models.ExerciseEntry{
+		{ID: "before", UserID: "user-dr@example.com", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 80, CreatedAt: mid.AddDate(0, 0, -3)},
+		{ID: "inside", UserID: "user-dr@example.com", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 100, CreatedAt: mid},
+		{ID: "after", UserID: "user-dr@example.com", ExerciseID: "ex-1", ExerciseName: "Squat", Reps: 5, Weight: 90, CreatedAt: mid.AddDate(0, 0, 3)},
+	}
+
+	from := mid.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := mid.Add(1 * time.Hour).Format(time.RFC3339)
+	path := "/api/v1/exercise-entries?from=" + from + "&to=" + to
+
+	rec := apiDo(t, e, http.MethodGet, path, token, nil)
+	entries := decodeAPI[[]ExerciseEntryDTO](t, rec, http.StatusOK)
+	if len(entries) != 1 {
+		t.Fatalf("len = %d, want 1 (only the entry inside the range)", len(entries))
+	}
+	if entries[0].ID != "inside" {
+		t.Fatalf("id = %q, want inside", entries[0].ID)
+	}
+}
+
+// TestAPIListExerciseEntries_DateRangeEncodedOffset proves a
+// non-UTC RFC3339 offset survives URL decoding. The '+' in
+// "+01:00" must arrive as '+' (clients percent-encode it as
+// %2B); if it were decoded as a space the parse would fail.
+func TestAPIListExerciseEntries_DateRangeEncodedOffset(t *testing.T) {
+	h, mock, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "off@example.com", "OFF")
+
+	inside := time.Date(2026, 8, 10, 9, 0, 0, 0, time.UTC) // 10:00 +01:00
+	mock.exerciseEntries = []models.ExerciseEntry{
+		{ID: "inside", UserID: "user-off@example.com", ExerciseID: "ex-1", ExerciseName: "Run", DurationSeconds: 1800, DistanceMeters: 5000, CreatedAt: inside},
+	}
+
+	loc := time.FixedZone("test", 3600)
+	from := time.Date(2026, 8, 10, 0, 0, 0, 0, loc).Format(time.RFC3339) // midnight local
+	to := time.Date(2026, 8, 11, 0, 0, 0, 0, loc).Add(-time.Second).Format(time.RFC3339)
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/exercise-entries?from="+url.QueryEscape(from)+"&to="+url.QueryEscape(to), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	entries := decodeAPI[[]ExerciseEntryDTO](t, rec, http.StatusOK)
+	if len(entries) != 1 || entries[0].ID != "inside" {
+		t.Fatalf("entries = %+v, want just 'inside'", entries)
+	}
+}
+
+// TestAPIListExerciseEntries_RangeHalfSpecified verifies a lone
+// from or to is rejected rather than guessed.
+func TestAPIListExerciseEntries_RangeHalfSpecified(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "half@example.com", "HALF")
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/exercise-entries?from="+time.Now().Format(time.RFC3339), token, nil)
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+// TestAPIListExerciseEntries_BadRangeFormat verifies malformed
+// timestamps are rejected with a 400.
+func TestAPIListExerciseEntries_BadRangeFormat(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "bf@example.com", "BF")
+
+	rec := apiDo(t, e, http.MethodGet, "/api/v1/exercise-entries?from=yesterday&to="+time.Now().Format(time.RFC3339), token, nil)
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+// TestAPIListExerciseEntries_InvertedRange verifies from > to
+// is rejected.
+func TestAPIListExerciseEntries_InvertedRange(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "inv@example.com", "INV")
+
+	now := time.Now()
+	path := "/api/v1/exercise-entries?from=" + now.Format(time.RFC3339) +
+		"&to=" + now.AddDate(0, 0, -7).Format(time.RFC3339)
+
+	rec := apiDo(t, e, http.MethodGet, path, token, nil)
+	decodeAPIError(t, rec, http.StatusBadRequest)
+}
+
+// TestAPIListExerciseEntries_RangeTooLarge verifies spans beyond
+// maxExerciseEntryRangeSpan are rejected so a caller cannot ask
+// for an unbounded scan.
+func TestAPIListExerciseEntries_RangeTooLarge(t *testing.T) {
+	h, _, mockUser, e := setupHandler(t)
+	token, _ := loginUser(t, h, mockUser, "big@example.com", "BIG")
+
+	now := time.Now()
+	path := "/api/v1/exercise-entries?from=" + now.AddDate(0, 0, -100).Format(time.RFC3339) +
+		"&to=" + now.Format(time.RFC3339)
+
+	rec := apiDo(t, e, http.MethodGet, path, token, nil)
+	decodeAPIError(t, rec, http.StatusBadRequest)
 }
 
 func TestAPIGetExerciseEntry_NotFound(t *testing.T) {

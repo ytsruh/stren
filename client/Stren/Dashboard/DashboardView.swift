@@ -2,29 +2,81 @@ import SwiftUI
 
 /// The "Today" tab. The layout mirrors the web dashboard:
 /// action cards at the top, a "Last 7 Days" stats row, the
-/// "Most Popular Exercises (7d)" donut, and the date-grouped
-/// list of sets. Tapping a set row pushes the exercise's
-/// history view, matching the web's eye-icon link.
+/// "Most Popular Exercises (7d)" donut, and a week calendar
+/// whose selected day lists that day's sets. Tapping a set row
+/// pushes the exercise's history view, matching the web's
+/// eye-icon link.
+///
+/// The calendar replaces the old always-on "Recent Sets"
+/// list: weeks are fetched lazily via the entry-range endpoint
+/// as the user pages back and forth, cached per day for the
+/// session (`entriesByDay`), and the donut keeps using the
+/// fixed last-7-days snapshot fetched at load time.
 struct DashboardView: View {
     @EnvironmentObject private var env: AppEnvironment
     @EnvironmentObject private var authStore: AuthStore
 
-    @State private var entries: [ExerciseEntryDTO] = []
+    /// Last-7-days snapshot feeding the donut only; the
+    /// calendar reads from `entriesByDay` instead so lazy
+    /// paging doesn't change what the donut shows.
+    @State private var recentEntries: [ExerciseEntryDTO] = []
     @State private var exerciseLookup: [String: ExerciseDTO] = [:]
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
+
+    // MARK: Calendar state
+
+    /// The day tapped in the week calendar (any instant;
+    /// normalise with `startOfDay` before use).
+    @State private var selectedDate: Date = Date()
+    /// Session cache of fetched exercise entries bucketed by
+    /// local start-of-day. Weeks are merged in as the user
+    /// pages around; buckets are overwritten wholesale when
+    /// their week is refetched.
+    @State private var entriesByDay: [Date: [ExerciseEntryDTO]] = [:]
+    /// Week starts currently being fetched (drives the inline
+    /// spinner under the selected day).
+    @State private var loadingWeeks: Set<Date> = []
+    /// Week starts already present in `entriesByDay`; guards
+    /// against refetching a page the user has already visited.
+    @State private var loadedWeeks: Set<Date> = []
+    /// Guards the reappear-refresh: `.task` owns the first
+    /// appearance, every *reappearance* (pop-back from a
+    /// history view, tab re-entry) needs a cache invalidation
+    /// because entries may have been edited or deleted elsewhere.
+    @State private var hasAppeared: Bool = false
+    /// Bound navigation path so pop-back is detectable. The
+    /// stack only ever pushes `ExerciseDTO` destinations, so a
+    /// plain array suffices; an empty path after a non-empty one
+    /// means the user returned from a pushed view.
+    @State private var navigationPath: [ExerciseDTO] = []
+    /// Serialises the reappear-refresh triggers (`onAppear` and
+    /// path-change can both fire for one pop-back).
+    @State private var isRefreshing: Bool = false
+
     @State private var showingNewSet: Bool = false
     @State private var showingTimer: Bool = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             content
                 .navigationTitle("Dashboard")
                 .navigationDestination(for: ExerciseDTO.self) { exercise in
                     ExerciseHistoryView(exercise: exercise)
                 }
+                // NOTE: attached to the content INSIDE the stack,
+                // not to the NavigationStack itself — the outer
+                // container never disappears/appears as children
+                // are pushed and popped, so its onAppear would
+                // fire exactly once per tab lifetime.
+                .onAppear {
+                    if hasAppeared {
+                        refreshIfIdle()
+                    }
+                    hasAppeared = true
+                }
                 .sheet(isPresented: $showingNewSet, onDismiss: {
-                    Task { await load() }
+                    Task { await refresh() }
                 }) {
                     NewSetView()
                         .environmentObject(env)
@@ -34,48 +86,71 @@ struct DashboardView: View {
                 }
         }
         .task { await load() }
-        .refreshable { await load() }
+        .refreshable { await refresh() }
+        .onChange(of: navigationPath) { newPath in
+            // Deterministic pop-back signal (covers devices/
+            // OS versions where root onAppear semantics are
+            // unreliable). Only an empty path — i.e. back at
+            // the dashboard itself — needs a reload.
+            if newPath.isEmpty && hasAppeared {
+                refreshIfIdle()
+            }
+        }
+        .onChange(of: selectedDate) { newSelection in
+            Task { await ensureWeekLoaded(for: newSelection) }
+        }
+    }
+
+    /// Runs `refresh()` unless one is already in flight, so the
+    /// overlapping reappear signals coalesce into one reload.
+    private func refreshIfIdle() {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        Task {
+            await refresh()
+            isRefreshing = false
+        }
     }
 
     // MARK: - Content states
 
     @ViewBuilder
     private var content: some View {
-        if isLoading && entries.isEmpty {
+        if isLoading && recentEntries.isEmpty && entriesByDay.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let errorMessage, entries.isEmpty {
+        } else if let errorMessage, recentEntries.isEmpty && entriesByDay.isEmpty {
             errorState(errorMessage)
-        } else if entries.isEmpty {
-            loadedScrollView(empty: true)
         } else {
-            loadedScrollView(empty: false)
+            loadedScrollView
         }
     }
 
-    /// Renders the dashboard's normal layout (action cards,
-    /// donut, list). When `empty` is true the list is
-    /// replaced with the empty-state view so the layout still
-    /// shows the action cards (Add Set is the empty-state's
-    /// primary call to action anyway).
+    /// Renders the dashboard's normal layout: action cards,
+    /// donut, calendar. The donut section is always attempted
+    /// and hides itself when the last-7-days snapshot has
+    /// nothing to chart (original dashboard behaviour); the
+    /// calendar's own per-day empty states handle sparse days.
     @ViewBuilder
-    private func loadedScrollView(empty: Bool) -> some View {
+    private var loadedScrollView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DSSpacing.md) {
                 actionCards
                 donutSection
-                if empty {
-                    emptyState
-                } else {
-                    sectionHeader("Recent Sets")
-                    DashboardSetList(
-                        groups: groups,
+                sectionHeader("Calendar")
+                WeekCalendarView(
+                    selection: $selectedDate,
+                    isBusy: { day in
+                        !(entriesByDay[CalendarMath.startOfDay(day)] ?? []).isEmpty
+                    }
+                ) { day in
+                    SelectedDaySetList(
+                        date: day,
+                        entries: entriesByDay[day] ?? [],
+                        isLoading: loadingWeeks.contains(CalendarMath.startOfWeek(for: day)),
                         weightUnit: weightUnit,
                         distanceUnit: authStore.currentUser?.distanceUnit ?? "km",
-                        exerciseLookup: exerciseLookup,
-                        onDelete: { entry in
-                            Task { await deleteEntry(entry) }
-                        }
+                        exerciseLookup: exerciseLookup
                     )
                 }
             }
@@ -97,7 +172,7 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var donutSection: some View {
-        let buckets = popularExerciseBuckets(entries)
+        let buckets = popularExerciseBuckets(recentEntries)
         if !buckets.isEmpty {
             VStack(alignment: .leading, spacing: DSSpacing.xs) {
                 sectionHeader("7 Day History")
@@ -123,22 +198,6 @@ struct DashboardView: View {
             .padding(.horizontal, DSSpacing.xs)
     }
 
-    private var emptyState: some View {
-        VStack(spacing: DSSpacing.md) {
-            Image(systemName: Icons.dumbbellLarge)
-                .font(.system(size: 48))
-                .foregroundStyle(DSColors.textSecondary)
-            Text("No sets yet")
-                .font(.title3.weight(.semibold))
-            Text("Tap Add Set to log your first workout.")
-                .font(.body)
-                .foregroundStyle(DSColors.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(DSSpacing.lg)
-        .frame(maxWidth: .infinity)
-    }
-
     private func errorState(_ message: String) -> some View {
         VStack(spacing: DSSpacing.md) {
             Image(systemName: Icons.warning)
@@ -160,20 +219,14 @@ struct DashboardView: View {
         authStore.currentUser?.weightUnit ?? "kg"
     }
 
-    private var groups: [DashboardDateGroup] {
-        Self.group(entries: entries)
-    }
-
     // MARK: - Networking
 
-    /// Fetches the 7-day entries and the full exercise
-    /// catalogue in parallel. The catalogue is needed so
-    /// every list row can navigate to its exercise's
-    /// history view (the row's `exerciseID` alone is not
-    /// enough to push — we need the full `ExerciseDTO`).
-    /// Both fetches share the same 401 handling, so an
-    /// expired session still signs the user out exactly
-    /// once.
+    /// Initial load: the 7-day snapshot for the donut plus the
+    /// full exercise catalogue (needed so every list row can
+    /// navigate to its exercise's history view without a fetch
+    /// per row), then the selected day's week for the calendar.
+    /// All fetches share the same 401 handling, so an expired
+    /// session signs the user out exactly once.
     private func load() async {
         errorMessage = nil
         isLoading = true
@@ -182,7 +235,7 @@ struct DashboardView: View {
             async let entriesTask = env.api.listExerciseEntries(days: 7)
             async let exercisesTask = env.api.listExercises()
             let (fetchedEntries, fetchedExercises) = try await (entriesTask, exercisesTask)
-            entries = fetchedEntries
+            recentEntries = fetchedEntries
             exerciseLookup = Dictionary(
                 uniqueKeysWithValues: fetchedExercises.map { ($0.id, $0) }
             )
@@ -192,33 +245,68 @@ struct DashboardView: View {
         } catch {
             errorMessage = "Could not load your sets."
         }
+        await ensureWeekLoaded(for: selectedDate)
     }
 
-    private func deleteEntry(_ entry: ExerciseEntryDTO) async {
-        // Optimistic remove; rollback on error.
-        entries.removeAll { $0.id == entry.id }
-        do {
-            try await env.api.deleteExerciseEntry(id: entry.id)
-        } catch {
-            await load()
+    /// Post-change reload (pull-to-refresh, new-set sheet
+    /// dismiss, reappearing from a history view where entries
+    /// may have been edited or deleted). Drops *every* cached
+    /// week — not just the visible one — because edits can move
+    /// an entry across days/weeks and new sets can be back-dated,
+    /// then re-pulls the donut snapshot; `load` refetches the
+    /// selected week since its marker was just cleared. Any
+    /// other week is fetched fresh the next time it's visited.
+    private func refresh() async {
+        loadedWeeks.removeAll()
+        await load()
+    }
+
+    /// Fetches the calendar week containing `date` unless it's
+    /// already cached. Results are bucketed by local start-of-day
+    /// into `entriesByDay`. The range is sent as absolute instants
+    /// (local midnight → next-local-midnight minus one second) so
+    /// day semantics are computed on-device, never server-side.
+    ///
+    /// Failures leave the week unmarked in `loadedWeeks` so a
+    /// later visit retries; the spinner clears either way.
+    private func ensureWeekLoaded(for date: Date, force: Bool = false) async {
+        let weekStart = CalendarMath.startOfWeek(for: date)
+        if !force, loadedWeeks.contains(weekStart) || loadingWeeks.contains(weekStart) {
+            return
         }
-    }
-
-    /// Groups an unsorted set of entries into day buckets in
-    /// the local timezone, ordered newest first.
-    private static func group(entries: [ExerciseEntryDTO]) -> [DashboardDateGroup] {
         let calendar = Calendar.current
-        let grouped = Dictionary(grouping: entries) { entry in
-            calendar.startOfDay(for: entry.createdAt)
-        }
-        return grouped
-            .map {
-                DashboardDateGroup(
-                    date: $0.key,
-                    entries: $0.value.sorted { $0.createdAt > $1.createdAt }
-                )
+        guard
+            let weekEndExclusive = calendar.date(byAdding: .day, value: 7, to: weekStart),
+            let weekEndInclusive = calendar.date(byAdding: .second, value: -1, to: weekEndExclusive)
+        else { return }
+
+        loadingWeeks.insert(weekStart)
+        defer { loadingWeeks.remove(weekStart) }
+
+        do {
+            let entries = try await env.api.listExerciseEntries(
+                from: weekStart,
+                to: weekEndInclusive
+            )
+            var byDay = entriesByDay
+            for day in CalendarMath.days(inWeekOf: weekStart) {
+                byDay[day] = []
             }
-            .sorted { $0.date > $1.date }
+            for entry in entries {
+                let dayKey = CalendarMath.startOfDay(entry.createdAt)
+                byDay[dayKey, default: []].append(entry)
+            }
+            // Newest first within each day bucket.
+            for key in byDay.keys where CalendarMath.days(inWeekOf: weekStart).contains(key) {
+                byDay[key]?.sort { $0.createdAt > $1.createdAt }
+            }
+            entriesByDay = byDay
+            loadedWeeks.insert(weekStart)
+        } catch let error as APIError {
+            if case .unauthorized = error { return }
+        } catch {
+            // Transient failure — leave uncached to retry later.
+        }
     }
 }
 
