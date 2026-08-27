@@ -74,7 +74,7 @@ public struct WeekCalendarView<DayContent: View>: View {
             content(CalendarMath.startOfDay(selection))
         }
         .gesture(swipeToChangeWeek)
-        .onChange(of: selection) { newSelection in
+        .onChange(of: selection) { _, newSelection in
             // If `selection` moved outside the displayed week
             // (external change or a future multi-day jump),
             // follow it. Same-week taps keep the current page.

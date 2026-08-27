@@ -76,7 +76,12 @@ struct DashboardView: View {
                     hasAppeared = true
                 }
                 .sheet(isPresented: $showingNewSet, onDismiss: {
-                    Task { await refresh() }
+                    // `refresh()` is `@MainActor`; this unstructured
+                    // task is the one place an unannotated call
+                    // would otherwise compile-time error on us,
+                    // so pin the body to the main actor explicitly
+                    // rather than relying on inference.
+                    Task { @MainActor in await refresh() }
                 }) {
                     NewSetView()
                         .environmentObject(env)
@@ -87,7 +92,7 @@ struct DashboardView: View {
         }
         .task { await load() }
         .refreshable { await refresh() }
-        .onChange(of: navigationPath) { newPath in
+        .onChange(of: navigationPath) { _, newPath in
             // Deterministic pop-back signal (covers devices/
             // OS versions where root onAppear semantics are
             // unreliable). Only an empty path — i.e. back at
@@ -96,17 +101,29 @@ struct DashboardView: View {
                 refreshIfIdle()
             }
         }
-        .onChange(of: selectedDate) { newSelection in
-            Task { await ensureWeekLoaded(for: newSelection) }
+        .onChange(of: selectedDate) { _, newSelection in
+            // `ensureWeekLoaded` is `@MainActor`; pin the task
+            // body to the main actor explicitly so the day
+            // change handler can't quietly hop off-main and
+            // trip SwiftUI's iOS 17 main-thread `@State`
+            // assertion.
+            Task { @MainActor in await ensureWeekLoaded(for: newSelection) }
         }
     }
 
     /// Runs `refresh()` unless one is already in flight, so the
     /// overlapping reappear signals coalesce into one reload.
+    ///
+    /// The task body is explicitly pinned to `@MainActor` —
+    /// `refresh()` is `@MainActor` so the compiler would error
+    /// here anyway, but the annotation makes the intent clear:
+    /// this unstructured task must not hop to the global
+    /// executor, which is exactly what was crashing the
+    /// dashboard on reappear (the original bug).
     private func refreshIfIdle() {
         guard !isRefreshing else { return }
         isRefreshing = true
-        Task {
+        Task { @MainActor in
             await refresh()
             isRefreshing = false
         }
@@ -227,6 +244,17 @@ struct DashboardView: View {
     /// per row), then the selected day's week for the calendar.
     /// All fetches share the same 401 handling, so an expired
     /// session signs the user out exactly once.
+    ///
+    /// `@MainActor` because this method mutates `@State`
+    /// (`isLoading`, `errorMessage`, `recentEntries`,
+    /// `exerciseLookup`, plus `entriesByDay`/`loadingWeeks`/
+    /// `loadedWeeks` via `ensureWeekLoaded`). SwiftUI enforces
+    /// main-thread `@State` access on iOS 17, and the
+    /// reappear-refresh path in particular used to launch this
+    /// from an unstructured `Task { ... }` which runs on the
+    /// global executor — pinning the method to `@MainActor`
+    /// turns that into a compile-time error at the call site.
+    @MainActor
     private func load() async {
         errorMessage = nil
         isLoading = true
@@ -256,6 +284,11 @@ struct DashboardView: View {
     /// then re-pulls the donut snapshot; `load` refetches the
     /// selected week since its marker was just cleared. Any
     /// other week is fetched fresh the next time it's visited.
+    ///
+    /// `@MainActor` because this clears `loadedWeeks` before
+    /// delegating to `load()`. See `load()` for the full
+    /// rationale on pinning these methods to the main actor.
+    @MainActor
     private func refresh() async {
         loadedWeeks.removeAll()
         await load()
@@ -269,6 +302,11 @@ struct DashboardView: View {
     ///
     /// Failures leave the week unmarked in `loadedWeeks` so a
     /// later visit retries; the spinner clears either way.
+    ///
+    /// `@MainActor` because this mutates `@State`
+    /// (`loadingWeeks`, `entriesByDay`, `loadedWeeks`).
+    /// See `load()` for the full rationale.
+    @MainActor
     private func ensureWeekLoaded(for date: Date, force: Bool = false) async {
         let weekStart = CalendarMath.startOfWeek(for: date)
         if !force, loadedWeeks.contains(weekStart) || loadingWeeks.contains(weekStart) {
