@@ -40,6 +40,15 @@ struct DashboardDonutChart: View {
             .frame(height: 180)
             .chartLegend(shouldShowLegend ? .visible : .hidden)
             .chartAngleSelection(value: $selectedAngle)
+            .onChange(of: buckets) { _, _ in
+                // A dashboard reappear or pull-to-refresh replaces
+                // the bucket list. An angle the user previously
+                // selected may no longer map to any slice in the
+                // new data; keeping it attached across a data
+                // change is a known iOS 17 SwiftUI Charts crash.
+                // Clearing it simply closes the tooltip.
+                selectedAngle = nil
+            }
             .chartOverlay { proxy in
                 if let bucket = selectedBucket {
                     GeometryReader { geometry in

@@ -40,10 +40,15 @@ struct DashboardView: View {
     /// Week starts already present in `entriesByDay`; guards
     /// against refetching a page the user has already visited.
     @State private var loadedWeeks: Set<Date> = []
-    /// Guards the reappear-refresh: `.task` owns the first
-    /// appearance, every *reappearance* (pop-back from a
-    /// history view, tab re-entry) needs a cache invalidation
-    /// because entries may have been edited or deleted elsewhere.
+    /// Distinguishes the first appearance (where `.task
+    /// { load() }` alone fetches) from every *reappearance*
+    /// (pop-back from a history view, tab re-entry), which
+    /// additionally triggers the `onAppear` cache-invalidation
+    /// refresh because entries may have been edited or deleted
+    /// elsewhere. Note that `.task` also restarts on
+    /// reappearance per Apple's documented behaviour, so both
+    /// paths fire on a reappear; the single-flight guard in
+    /// `load()` coalesces them into one network pass.
     @State private var hasAppeared: Bool = false
     /// Bound navigation path so pop-back is detectable. The
     /// stack only ever pushes `ExerciseDTO` destinations, so a
@@ -254,8 +259,19 @@ struct DashboardView: View {
     /// from an unstructured `Task { ... }` which runs on the
     /// global executor — pinning the method to `@MainActor`
     /// turns that into a compile-time error at the call site.
+    ///
+    /// Single-flight: `.task` restarts on every reappear (per
+    /// Apple's documented behaviour) AND the `onAppear` path
+    /// triggers its own refresh, so two loads can be requested
+    /// in the same transaction. A caller arriving while one is
+    /// already in flight returns immediately; the in-flight
+    /// pass refetches everything anyway, and its trailing
+    /// `ensureWeekLoaded` picks up any week markers a
+    /// concurrent `refresh()` cleared while it was still
+    /// awaiting the network.
     @MainActor
     private func load() async {
+        guard !isLoading else { return }
         errorMessage = nil
         isLoading = true
         defer { isLoading = false }
@@ -264,9 +280,16 @@ struct DashboardView: View {
             async let exercisesTask = env.api.listExercises()
             let (fetchedEntries, fetchedExercises) = try await (entriesTask, exercisesTask)
             recentEntries = fetchedEntries
-            exerciseLookup = Dictionary(
-                uniqueKeysWithValues: fetchedExercises.map { ($0.id, $0) }
-            )
+            // Duplicate-tolerant lookup build. `Dictionary(
+            // uniqueKeysWithValues:)` calls fatalError on a
+            // repeated key, which would take the whole app down
+            // over a server-side data oddity; last value wins
+            // instead.
+            var lookup: [String: ExerciseDTO] = [:]
+            for exercise in fetchedExercises {
+                lookup[exercise.id] = exercise
+            }
+            exerciseLookup = lookup
         } catch let error as APIError {
             if case .unauthorized = error { return }
             errorMessage = error.errorDescription
@@ -326,11 +349,17 @@ struct DashboardView: View {
                 from: weekStart,
                 to: weekEndInclusive
             )
+            // Defensive de-duplication by id: a duplicated row
+            // (server anomaly, sync hiccup) would otherwise give
+            // `SelectedDaySetList`'s ForEach duplicate identities,
+            // which crashes SwiftUI. Keep the first occurrence.
+            var seen = Set<String>()
+            let uniqueEntries = entries.filter { seen.insert($0.id).inserted }
             var byDay = entriesByDay
             for day in CalendarMath.days(inWeekOf: weekStart) {
                 byDay[day] = []
             }
-            for entry in entries {
+            for entry in uniqueEntries {
                 let dayKey = CalendarMath.startOfDay(entry.createdAt)
                 byDay[dayKey, default: []].append(entry)
             }

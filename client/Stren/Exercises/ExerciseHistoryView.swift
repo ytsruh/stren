@@ -722,6 +722,12 @@ struct ExerciseHistoryView: View {
     /// first page — used when the user just saved a new set
     /// from the embedded `NewSetView` sheet so the new row
     /// appears at the top immediately.
+    ///
+    /// `@MainActor` because this mutates `@State` (`isLoading`,
+    /// `page`, `errorMessage`) and delegates to `loadChart`,
+    /// which also writes state. Same rationale as the
+    /// dashboard's pinned networking methods.
+    @MainActor
     private func load(refresh: Bool) async {
         let isFirstLoad = page == nil
         if isFirstLoad || refresh { isLoading = true }
@@ -744,6 +750,9 @@ struct ExerciseHistoryView: View {
         }
     }
 
+    /// `@MainActor` because this mutates `@State`
+    /// (`chartPoints`, `selectedDate`).
+    @MainActor
     private func loadChart() async {
         do {
             let entries = try await env.api.getExerciseChartData(id: exercise.id)
@@ -752,6 +761,12 @@ struct ExerciseHistoryView: View {
             // Non-fatal: history is still useful without the chart.
             chartPoints = []
         }
+        // The chart selection (via `chartXSelection`) references
+        // a point in the PREVIOUS data. Keeping it attached
+        // across a reload — page change, save, or delete — is a
+        // known iOS 17 SwiftUI Charts crash; dropping it just
+        // closes the floating tooltip.
+        selectedDate = nil
     }
 
     // MARK: - Row actions
