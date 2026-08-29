@@ -148,6 +148,11 @@ public struct ExerciseDTO: Codable, Equatable, Identifiable, Hashable {
     public let videoURL: String
     public let imgURL: String
     public let imageURL: String
+    /// Higher-resolution variant (2400x800) for the full-screen
+    /// image viewer. Optional: older server builds omit the key
+    /// entirely, and exercises without an original omit it via
+    /// `omitempty`.
+    public let imageURLOriginal: String?
     public let type: String
 
     enum CodingKeys: String, CodingKey {
@@ -157,6 +162,7 @@ public struct ExerciseDTO: Codable, Equatable, Identifiable, Hashable {
         case videoURL = "video_url"
         case imgURL = "img_url"
         case imageURL = "image_url"
+        case imageURLOriginal = "image_url_original"
         case type
     }
 
@@ -167,6 +173,7 @@ public struct ExerciseDTO: Codable, Equatable, Identifiable, Hashable {
         videoURL: String,
         imgURL: String,
         imageURL: String,
+        imageURLOriginal: String? = nil,
         type: String
     ) {
         self.id = id
@@ -175,6 +182,7 @@ public struct ExerciseDTO: Codable, Equatable, Identifiable, Hashable {
         self.videoURL = videoURL
         self.imgURL = imgURL
         self.imageURL = imageURL
+        self.imageURLOriginal = imageURLOriginal
         self.type = type
     }
 
@@ -183,6 +191,16 @@ public struct ExerciseDTO: Codable, Equatable, Identifiable, Hashable {
     /// reading emptiness on either field is equivalent;
     /// `imageURL` is the field the views actually use.
     public var hasImage: Bool { !imageURL.isEmpty }
+
+    /// The URL the full-screen image viewer should load: the
+    /// higher-resolution original when the server provides one
+    /// (sharper pinch-zoom), otherwise the display image.
+    public var viewerImageURL: String {
+        if let original = imageURLOriginal, !original.isEmpty {
+            return original
+        }
+        return imageURL
+    }
 
     /// `true` when the exercise has a video link to open.
     public var hasVideo: Bool { !videoURL.isEmpty }

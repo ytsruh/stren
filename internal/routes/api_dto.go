@@ -116,19 +116,27 @@ type UpdateMeRequest struct {
 // feeds into its `<img src=…>`. Keeping both fields lets older
 // clients keep reading `img_url` while newer clients (the iOS
 // app) get a ready-to-render URL with no extra config.
+//
+// `ImageURLOriginal` mirrors the higher-resolution
+// "img_url_original" variant (see DefaultExerciseImageConfig).
+// It is omitted from the JSON entirely for exercises without an
+// original, so older clients never see an empty-URL key. The iOS
+// full-screen image viewer prefers it for sharper pinch-zoom,
+// falling back to `ImageURL` on older server builds.
 type ExerciseDTO struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	VideoURL    string `json:"video_url"`
-	ImgURL      string `json:"img_url"`
-	ImageURL    string `json:"image_url"`
-	Type        string `json:"type"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+	VideoURL         string `json:"video_url"`
+	ImgURL           string `json:"img_url"`
+	ImageURL         string `json:"image_url"`
+	ImageURLOriginal string `json:"image_url_original,omitempty"`
+	Type             string `json:"type"`
 }
 
 // ExerciseFromModel converts a models.Exercise into its DTO.
 func ExerciseFromModel(e models.Exercise) ExerciseDTO {
-	return ExerciseDTO{
+	dto := ExerciseDTO{
 		ID:          e.ID,
 		Name:        e.Name,
 		Description: e.Description,
@@ -137,6 +145,13 @@ func ExerciseFromModel(e models.Exercise) ExerciseDTO {
 		ImageURL:    utils.PublicURLFor(e.ImgURL),
 		Type:        string(e.Type),
 	}
+	// Only resolve the original's public URL when an original
+	// exists — PublicURLFor on an empty key would build a
+	// meaningless bare-bucket URL.
+	if e.ImgURLOriginal != "" {
+		dto.ImageURLOriginal = utils.PublicURLFor(e.ImgURLOriginal)
+	}
+	return dto
 }
 
 // ExercisesFromModels converts a slice of exercises into the

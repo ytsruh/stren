@@ -229,6 +229,15 @@ struct ExerciseHistoryView: View {
         }
     }
 
+    /// Item driving the full-screen image viewer. Non-nil
+    /// presents `ImageViewer` over everything else; nil dismisses.
+    private struct ViewerImage: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
+
+    @State private var fullScreenImage: ViewerImage?
+
     /// Width cap for the hero banner: the frame is exactly 3:1
     /// (BannerImage), so capping width keeps the whole photo
     /// visible — ~353pt iPhone rows render ~353x118pt full-width,
@@ -240,18 +249,32 @@ struct ExerciseHistoryView: View {
     /// placeholder use it so empty states match.
     private let heroMaxWidth: CGFloat? = 360
 
-    @ViewBuilder
     private var heroImage: some View {
         // A nil URL renders the component's own placeholder tile,
         // so the no-image state goes through the identical 3:1
         // layout path as a loaded photo and the two can never
-        // diverge.
+        // diverge. Tapping (when an image exists) opens the
+        // full-screen zoomable viewer; with no image the empty
+        // URL makes the tap a no-op.
         BannerImage(
             url: exercise.hasImage ? URL(string: exercise.imageURL) : nil,
             accessibilityLabel: exercise.name,
             placeholderIcon: Icons.exercises
         )
         .frame(maxWidth: heroMaxWidth)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // viewerImageURL prefers the hi-res original and
+            // falls back to the display image.
+            if let url = URL(string: exercise.viewerImageURL) {
+                fullScreenImage = ViewerImage(url: url)
+            }
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Opens the image full screen")
+        .fullScreenCover(item: $fullScreenImage) { item in
+            ImageViewer(url: item.url)
+        }
     }
 
     @ViewBuilder
