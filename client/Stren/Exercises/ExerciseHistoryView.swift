@@ -114,7 +114,29 @@ struct ExerciseHistoryView: View {
         } else if let page, page.entries.isEmpty {
             VStack(spacing: 0) {
                 heroImage
-                actionsSection
+                // Outside a List a `Section` renders with no
+                // card background, so the Details disclosure
+                // gets the app's standard rounded surface
+                // card applied manually to match the grouped
+                // look of the non-empty branch.
+                actionsContent
+                    .padding(.vertical, DSSpacing.sm)
+                    .padding(.horizontal, DSSpacing.md)
+                    .background(
+                        RoundedRectangle(
+                            cornerRadius: DSSpacing.cornerRadius,
+                            style: .continuous
+                        )
+                        .fill(DSColors.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(
+                            cornerRadius: DSSpacing.cornerRadius,
+                            style: .continuous
+                        )
+                        .stroke(DSColors.separator, lineWidth: 0.5)
+                    )
+                    .padding(.top, DSSpacing.md)
                 Spacer()
                 emptyState
             }
@@ -185,46 +207,57 @@ struct ExerciseHistoryView: View {
     }
 
     /// "Watch Video" button and the "Details" `DisclosureGroup`
-    /// (which holds the description and the type chip). The
-    /// image is rendered separately so this section is just
-    /// the page's primary actions and metadata.
+    /// (which holds the description and the type chip), wrapped
+    /// in a List `Section` so it picks up the inset-grouped
+    /// card background when this screen has entries. The image
+    /// is rendered separately so this section is just the
+    /// page's primary actions and metadata.
     @ViewBuilder
     private var actionsSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: DSSpacing.sm) {
-                if exercise.hasVideo {
-                    Button {
-                        if let url = URL(string: exercise.videoURL) {
-                            openURL(url)
-                        }
-                    } label: {
-                        Label("Watch Video", systemImage: Icons.play)
-                            .font(.subheadline.weight(.semibold))
+            actionsContent
+        }
+    }
+
+    /// The raw contents of `actionsSection` without the List
+    /// `Section` wrapper — also used by the empty-state branch,
+    /// where there is no List and the card background is
+    /// applied manually instead.
+    @ViewBuilder
+    private var actionsContent: some View {
+        VStack(alignment: .leading, spacing: DSSpacing.sm) {
+            if exercise.hasVideo {
+                Button {
+                    if let url = URL(string: exercise.videoURL) {
+                        openURL(url)
                     }
-                    .buttonStyle(.dsSecondary)
-                    .frame(maxWidth: .infinity)
-                }
-                DisclosureGroup(isExpanded: $isDetailsExpanded) {
-                    VStack(alignment: .leading, spacing: DSSpacing.xs) {
-                        if !exercise.description.isEmpty {
-                            Text(exercise.description)
-                                .font(.subheadline)
-                                .foregroundStyle(DSColors.textSecondary)
-                        } else {
-                            Text("No description available")
-                                .font(.subheadline)
-                                .foregroundStyle(DSColors.textSecondary)
-                        }
-                        ExerciseTypeChip(type: exercise.type)
-                    }
-                    .padding(.top, DSSpacing.xs)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
-                    Text(isDetailsExpanded ? "Hide details" : "Details")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(DSColors.text)
-                        .textCase(nil)
+                    Label("Watch Video", systemImage: Icons.play)
+                        .font(.subheadline.weight(.semibold))
                 }
+                .buttonStyle(.dsSecondary)
+                .frame(maxWidth: .infinity)
+            }
+            DisclosureGroup(isExpanded: $isDetailsExpanded) {
+                VStack(alignment: .leading, spacing: DSSpacing.xs) {
+                    if !exercise.description.isEmpty {
+                        Text(exercise.description)
+                            .font(.subheadline)
+                            .foregroundStyle(DSColors.textSecondary)
+                    } else {
+                        Text("No description available")
+                            .font(.subheadline)
+                            .foregroundStyle(DSColors.textSecondary)
+                    }
+                    ExerciseTypeChip(type: exercise.type)
+                }
+                .padding(.top, DSSpacing.xs)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } label: {
+                Text(isDetailsExpanded ? "Hide details" : "Details")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DSColors.text)
+                    .textCase(nil)
             }
         }
     }

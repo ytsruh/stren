@@ -2,8 +2,7 @@ import SwiftUI
 
 /// Single row for the weight list. Layout (left → right):
 ///
-///   [ thumbnail ]   [ date           ]   [ weight ]
-///                   [ notes (opt.)   ]
+///   [ thumbnail ]   [ weight ]   [ date ]
 ///
 /// The thumbnail is filled with the entry's photo when
 /// one exists; otherwise a muted placeholder tile with the
@@ -11,9 +10,8 @@ import SwiftUI
 /// row has the same visual rhythm — matches the
 /// `ExerciseRow` pattern in `ExerciseListView.swift`.
 ///
-/// Tapping the row fires `onTap` so the parent can open
-/// the editor. The whole row is the hit target (iOS
-/// list rows are inherently tappable).
+/// Notes are deliberately not shown here — they only appear
+/// when the user taps into the editor (`onTap`).
 struct WeightRow: View {
     let entry: WeightEntryDTO
     let weightUnit: String
@@ -60,18 +58,10 @@ struct WeightRow: View {
                 thumbnail
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.formattedWeight(in: weightUnit))
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(DSColors.text)
-                if !entry.notes.isEmpty {
-                    Text(entry.notes)
-                        .font(.caption)
-                        .foregroundStyle(DSColors.textSecondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(entry.formattedWeight(in: weightUnit))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(DSColors.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(formattedDate)
                 .font(.subheadline.weight(.semibold))
@@ -138,7 +128,7 @@ struct WeightRow: View {
 
     /// Muted tile with the figure.stand icon shown when
     /// the entry has no photo. Keeps every row's leading
-    /// edge at the same width so the date / notes column
+    /// edge at the same width so the weight / date column
     /// aligns across the list — matches the placeholder
     /// shape used by `ExerciseRow` for the catalogue list.
     private var placeholder: some View {
