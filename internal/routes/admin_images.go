@@ -19,9 +19,13 @@ import (
 
 // ExerciseImageConfig controls the two image variants the admin
 // upload route produces. Both variants are derived from the same
-// upload (a single source image goes in) and share the same 4:3
-// aspect ratio so the display card and any future "view original"
-// surface stay visually consistent.
+// upload (a single source image goes in) and share the same 3:1
+// banner aspect ratio, matching the ratio-enforced display
+// components on both surfaces (components.BannerImage on the web,
+// BannerImage in client/Stren/DesignSystem/Image.swift) so an
+// upload in the expected ratio survives the whole pipeline
+// untouched. Uploads are expected to already be 3:1 (e.g.
+// 3000x1000) — anything else is centre-cropped to fit.
 type ExerciseImageConfig struct {
 	// DisplayWidth / DisplayHeight is the size written to the
 	// "img_url" storage key. Used in cards, dialogs, and any other
@@ -30,7 +34,7 @@ type ExerciseImageConfig struct {
 	DisplayWidth  int
 	DisplayHeight int
 	// OriginalWidth / OriginalHeight is the size of the
-	// "img_url_original" storage key. A 1920x1440 source surrogate
+	// "img_url_original" storage key. A 2400x800 source surrogate
 	// is large enough to look good in a future full-screen viewer
 	// without bloating R2 storage. Quality 95 preserves detail.
 	OriginalWidth  int
@@ -41,10 +45,10 @@ type ExerciseImageConfig struct {
 // admin exercise image upload. Centralised so tests can refer to the
 // same numbers.
 var DefaultExerciseImageConfig = ExerciseImageConfig{
-	DisplayWidth:   800,
-	DisplayHeight:  600,
-	OriginalWidth:  1920,
-	OriginalHeight: 1440,
+	DisplayWidth:   1200,
+	DisplayHeight:  400,
+	OriginalWidth:  2400,
+	OriginalHeight: 800,
 }
 
 // exerciseImageProcessor is the subset of imaging.Processor the

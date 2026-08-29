@@ -37,9 +37,12 @@ type ImageUploadProps struct {
 	RemoveFieldName    string
 	RemoveLabel        string
 	// AspectWidth / AspectHeight define the visual frame the
-	// preview should match. The cropped output from the server is
-	// guaranteed to have this ratio, so the preview never jumps
-	// when the upload completes.
+	// preview should match (default 16:9). The cropped output
+	// from the server is guaranteed to have this ratio, so the
+	// preview never jumps when the upload completes. Uploads are
+	// expected to already be in this ratio — 16:9 landscape
+	// (e.g. 1920x1080) for exercise images; the server
+	// centre-crops anything else to fit.
 	AspectWidth  int
 	AspectHeight int
 }
@@ -93,10 +96,10 @@ templ ImageUpload(props ImageUploadProps) {
 		aspectW := props.AspectWidth
 		aspectH := props.AspectHeight
 		if aspectW <= 0 {
-			aspectW = 4
+			aspectW = 16
 		}
 		if aspectH <= 0 {
-			aspectH = 3
+			aspectH = 9
 		}
 		inputID := "image-input-" + name
 		currentID := "image-current-" + name
@@ -104,11 +107,13 @@ templ ImageUpload(props ImageUploadProps) {
 		removeFieldID := "image-remove-field-" + name
 		displayHiddenID := "image-key-display-" + name
 		originalHiddenID := "image-key-original-" + name
-		// aspectWidth% / aspectHeight% produce the right padding-bottom
-		// for an aspect-ratio frame: e.g. 4:3 = 75%, 16:9 = 56.25%.
-		aspectPercent := (aspectH * 100) / aspectW
+		// height / width as a percentage produces the right
+		// padding-bottom for an aspect-ratio frame: e.g. 16:9 =
+		// 56.25%, 4:3 = 75%. Float math keeps non-terminating
+		// ratios like 16:9 exact instead of truncating to 56%.
+		aspectPercent := float32(aspectH) * 100 / float32(aspectW)
 		if aspectPercent < 1 {
-			aspectPercent = 75
+			aspectPercent = 56.25
 		}
 	}}
 	<div
@@ -122,7 +127,7 @@ templ ImageUpload(props ImageUploadProps) {
 		<label for={ inputID }>{ props.Label }</label>
 		if props.CurrentURL != "" {
 			<div class="flex items-start justify-between gap-3">
-				<div id={ currentID } class="relative flex-1 max-w-sm overflow-hidden rounded-md border bg-muted transition-opacity" style={ fmt.Sprintf("padding-bottom: %d%%;", aspectPercent) }>
+				<div id={ currentID } class="relative flex-1 max-w-sm overflow-hidden rounded-md border bg-muted transition-opacity" style={ fmt.Sprintf("padding-bottom: %g%%;", aspectPercent) }>
 					<img
 						src={ templ.SafeURL(props.CurrentURL) }
 						alt="Current image"

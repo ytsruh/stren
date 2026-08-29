@@ -12,10 +12,6 @@ type PageData struct {
 	IsAuthenticated bool
 	IsAdmin         bool
 	CurrentPath     string
-	// Wide relaxes the layout's default max-w-3xl reading width
-	// to max-w-5xl. Only the marketing landing page uses it —
-	// app pages (tables, forms, charts) stay narrow on purpose.
-	Wide bool
 }
 
 // Layout is the base layout for all pages
@@ -299,7 +295,7 @@ templ Layout(data PageData) {
 						</ul>
 					</nav>
 				</header>
-				<div class={ "container", "mx-auto", templ.KV("max-w-3xl", !data.Wide), templ.KV("max-w-5xl", data.Wide), "px-4 py-4 md:py-8" }>
+				<div class="container mx-auto max-w-5xl px-4 py-4 md:py-8">
 					{ children... }
 				</div>
 			</main>

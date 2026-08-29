@@ -1,0 +1,101 @@
+package components
+
+// ImageProps configures the ratio-enforced image components
+// (LandscapeImage, PortraitImage, SquareImage, BannerImage).
+//
+// Expected upload ratios — images should be uploaded already in
+// the ratio of the component that displays them, so nothing
+// important gets cropped away:
+//
+//   - BannerImage:    3:1  (e.g. 3000x1000) — exercise hero
+//     banners, mirrored on iOS in client/Stren/DesignSystem/Image.swift
+//   - LandscapeImage: 16:9 (e.g. 1920x1080)
+//   - PortraitImage:  3:4  (e.g. 1080x1440)
+//   - SquareImage:    1:1  (e.g. 1080x1080)
+//
+// A source with a different ratio still renders, but it is
+// centre-cropped to fill the frame (object-fit: cover) — it is
+// never stretched or distorted. The same contract applies to the
+// iOS mirror of these components in
+// client/Stren/DesignSystem/Image.swift.
+type ImageProps struct {
+	// Src is the image URL — usually an R2 public URL built
+	// with utils.PublicURLFor. Converted to a templ.SafeURL
+	// when rendered, so a plain string is fine here.
+	Src string
+	// Alt is the image's alt text.
+	Alt string
+	// Class is appended to the frame div's class list so
+	// callers can add spacing, max-widths, etc. without the
+	// component needing a variant for each context.
+	Class string
+}
+
+// BannerImage renders an image locked to a 3:1 banner frame.
+// Expects 3:1 uploads (e.g. 3000x1000); anything else is
+// centre-cropped to fill the frame.
+//
+// This is the exercise-hero ratio, shared with the iOS app so one
+// upload dimension works everywhere. Callers cap its width (e.g.
+// "max-w-[624px] mx-auto" → 624x208 on desktop, proportionally
+// smaller on phones) — the window stays exactly 3:1 at every
+// viewport because the frame is ratio-locked rather than
+// height-capped. The server also centre-crops admin uploads to
+// 3:1 (DefaultExerciseImageConfig), so a 3:1 upload survives the
+// whole pipeline untouched.
+//
+// The component is purely presentational — callers keep
+// click/dialog behaviour by wrapping it (e.g. in a <button>).
+templ BannerImage(props ImageProps) {
+	@ratioImage(props, "aspect-[3/1]")
+}
+
+// LandscapeImage renders an image locked to a 16:9 landscape
+// frame. Expects 16:9 uploads (e.g. 1920x1080); anything else is
+// centre-cropped to fill the frame.
+//
+// Callers can cap the frame's height via Class (e.g. "max-h-52")
+// when a full-width 16:9 frame would get unreasonably tall on
+// wide screens — the visible window then becomes wider than 16:9
+// and the image centre-crops further. For hero banners prefer
+// BannerImage, whose 3:1 window matches the iOS app and the
+// server's crop.
+//
+// The component is purely presentational — callers keep
+// click/dialog behaviour by wrapping it (e.g. in a <button>).
+templ LandscapeImage(props ImageProps) {
+	@ratioImage(props, "aspect-video")
+}
+
+// PortraitImage renders an image locked to a 3:4 portrait frame.
+// Expects 3:4 uploads (e.g. 1080x1440); anything else is
+// centre-cropped to fill the frame.
+templ PortraitImage(props ImageProps) {
+	@ratioImage(props, "aspect-3/4")
+}
+
+// SquareImage renders an image locked to a 1:1 square frame.
+// Expects square uploads (e.g. 1080x1080); anything else is
+// centre-cropped to fill the frame.
+templ SquareImage(props ImageProps) {
+	@ratioImage(props, "aspect-square")
+}
+
+// ratioImage is the shared frame behind the three ratio-enforced
+// image components. The frame div reserves the aspect ratio via
+// a Tailwind aspect-* utility plus overflow-hidden, so page
+// layout never jumps while the image loads, and the img fills it
+// with object-fit: cover, centre-cropping any overflow.
+//
+// aspectClass must be a literal Tailwind class: the Tailwind CLI
+// only compiles classes it finds in the source files, so the
+// ratio cannot be assembled dynamically at render time.
+templ ratioImage(props ImageProps, aspectClass string) {
+	<div class={ "relative w-full overflow-hidden rounded-lg bg-muted", aspectClass, props.Class }>
+		<img
+			src={ templ.SafeURL(props.Src) }
+			alt={ props.Alt }
+			class="absolute inset-0 size-full object-cover"
+		/>
+	</div>
+}

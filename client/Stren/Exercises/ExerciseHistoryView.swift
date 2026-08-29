@@ -229,44 +229,29 @@ struct ExerciseHistoryView: View {
         }
     }
 
+    /// Width cap for the hero banner: the frame is exactly 3:1
+    /// (BannerImage), so capping width keeps the whole photo
+    /// visible — ~353pt iPhone rows render ~353x118pt full-width,
+    /// while wider iPad / Pro Max rows get a centred 360x120pt
+    /// card instead of a heavily cropped strip. Mirrors the web's
+    /// `max-w-[624px]` cap on `components.BannerImage` in
+    /// `internal/views/exercise/history.templ`; uploads should be
+    /// 3:1 (e.g. 3000x1000). Both the image and the no-image
+    /// placeholder use it so empty states match.
+    private let heroMaxWidth: CGFloat? = 360
+
     @ViewBuilder
     private var heroImage: some View {
-        if exercise.hasImage, let url = URL(string: exercise.imageURL) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure, .empty:
-                    imagePlaceholder
-                @unknown default:
-                    imagePlaceholder
-                }
-            }
-            .frame(height: 160)
-            .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous))
-        } else {
-            imagePlaceholder
-                .frame(height: 160)
-                .frame(maxWidth: .infinity)
-        }
-    }
-
-    /// Muted tile with the dumbbell icon shown when the
-    /// exercise has no image (or its image hasn't loaded
-    /// yet). Matches the web's
-    /// `<div class="… bg-muted …"><Dumbbell /></div>` block
-    /// in `internal/views/exercise/history.templ:65-67`.
-    private var imagePlaceholder: some View {
-        RoundedRectangle(cornerRadius: DSSpacing.cornerRadius, style: .continuous)
-            .fill(DSColors.surfaceElevated)
-            .overlay(
-                Image(systemName: Icons.exercises)
-                    .font(.system(size: 48))
-                    .foregroundStyle(DSColors.textSecondary)
-            )
+        // A nil URL renders the component's own placeholder tile,
+        // so the no-image state goes through the identical 3:1
+        // layout path as a loaded photo and the two can never
+        // diverge.
+        BannerImage(
+            url: exercise.hasImage ? URL(string: exercise.imageURL) : nil,
+            accessibilityLabel: exercise.name,
+            placeholderIcon: Icons.exercises
+        )
+        .frame(maxWidth: heroMaxWidth)
     }
 
     @ViewBuilder

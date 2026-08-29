@@ -151,12 +151,11 @@ func TestAdminExerciseForm_Edit_UploadEndpointHardCoded(t *testing.T) {
 }
 
 func TestAdminExerciseForm_PreviewAspectMatchesCard(t *testing.T) {
-	// The exercise image is used on the history card with
-	// `w-full h-48 object-cover` inside a max-w-3xl container
-	// (768px), giving a visible aspect of 768:192 = 4:1. The
-	// admin form's preview must match that aspect so the admin
-	// sees roughly what users will see — not the raw 4:3 file
-	// aspect, which renders as a far taller rectangle.
+	// The exercise image is displayed on the history page through
+	// components.LandscapeImage — a 16:9 frame (aspect-video) — and
+	// the server crops uploads to 16:9 too (DefaultExerciseImageConfig).
+	// The admin form's preview must match that 16:9 aspect so the
+	// admin sees what users will see — not the raw file aspect.
 	//
 	// The preview div only renders when the widget has a CurrentURL
 	// (i.e. when storage is configured AND the exercise has an
@@ -204,12 +203,15 @@ func TestAdminExerciseForm_PreviewAspectMatchesCard(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			html := renderToString(t, AdminExerciseForm(tc.form, "Admin", true, true))
-			hasPadding := strings.Contains(html, "padding-bottom: 25%")
+			hasPadding := strings.Contains(html, "padding-bottom: 56.25%")
 			if hasPadding != tc.wantPadding {
-				t.Errorf("padding-bottom: 25%% presence = %v, want %v", hasPadding, tc.wantPadding)
+				t.Errorf("padding-bottom: 56.25%% presence = %v, want %v", hasPadding, tc.wantPadding)
 			}
 			if strings.Contains(html, "padding-bottom: 75%") {
 				t.Errorf("preview still using 4:3 aspect (padding-bottom: 75%%), got html:\n%s", html)
+			}
+			if strings.Contains(html, "padding-bottom: 25%") {
+				t.Errorf("preview still using the old 4:1 aspect (padding-bottom: 25%%), got html:\n%s", html)
 			}
 		})
 	}

@@ -14,12 +14,12 @@ func TestImageUpload_RendersValidStyleAttribute(t *testing.T) {
 		CurrentOriginalKey: "exercises/abc_original.jpg",
 		MaxSizeMB:          10,
 		UploadEndpoint:     "/admin/exercises/image-upload",
-		AspectWidth:        4,
-		AspectHeight:       3,
+		AspectWidth:        16,
+		AspectHeight:       9,
 	}
 	html := renderToString(t, ImageUpload(props))
-	if !strings.Contains(html, `padding-bottom: 75%`) {
-		t.Errorf("expected 'padding-bottom: 75%%' in rendered HTML, got:\n%s", html)
+	if !strings.Contains(html, `padding-bottom: 56.25%`) {
+		t.Errorf("expected 'padding-bottom: 56.25%%' in rendered HTML, got:\n%s", html)
 	}
 	if strings.Contains(html, "TemplUnsupportedStyleAttributeValue") {
 		t.Error("rendered HTML still contains the unsupported-style-attribute sentinel — SafeURL leaked through")

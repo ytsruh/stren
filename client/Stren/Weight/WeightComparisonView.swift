@@ -60,15 +60,28 @@ struct WeightComparisonView: View {
             let height = geometry.size.height
 
             ZStack(alignment: .leading) {
-                remoteImage(urlString: comparison.after.photoURL)
-                    .frame(width: width, height: height)
+                // Both photos render through PortraitImage — the
+                // ratio-enforced component formalising the 3:4
+                // frame this sheet has always used. cornerRadius 0
+                // because the ZStack below clips and strokes the
+                // whole comparison as one rounded shape.
+                PortraitImage(
+                    url: URL(string: comparison.after.photoURL),
+                    cornerRadius: 0,
+                    showsLoadingIndicator: true
+                )
+                .frame(width: width, height: height)
 
-                remoteImage(urlString: comparison.before.photoURL)
-                    .frame(width: width, height: height)
-                    .mask(alignment: .leading) {
-                        Rectangle()
-                            .frame(width: width * revealPosition, height: height)
-                    }
+                PortraitImage(
+                    url: URL(string: comparison.before.photoURL),
+                    cornerRadius: 0,
+                    showsLoadingIndicator: true
+                )
+                .frame(width: width, height: height)
+                .mask(alignment: .leading) {
+                    Rectangle()
+                        .frame(width: width * revealPosition, height: height)
+                }
 
                 Rectangle()
                     .fill(BrandColors.brandOrange)
@@ -113,41 +126,6 @@ struct WeightComparisonView: View {
             .frame(width: 44, height: 44)
             .background(BrandColors.brandOrange, in: Circle())
             .shadow(color: .black.opacity(0.3), radius: 4)
-    }
-
-    @ViewBuilder
-    private func remoteImage(urlString: String) -> some View {
-        if let url = URL(string: urlString) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    imagePlaceholder
-                case .empty:
-                    ZStack {
-                        imagePlaceholder
-                        ProgressView()
-                    }
-                @unknown default:
-                    imagePlaceholder
-                }
-            }
-        } else {
-            imagePlaceholder
-        }
-    }
-
-    private var imagePlaceholder: some View {
-        Rectangle()
-            .fill(DSColors.surfaceElevated)
-            .overlay {
-                Image(systemName: "photo")
-                    .font(.largeTitle)
-                    .foregroundStyle(DSColors.textSecondary)
-            }
     }
 
     private func photoLabel(title: String, date: String, entry: WeightEntryDTO) -> some View {
