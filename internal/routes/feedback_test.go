@@ -213,3 +213,127 @@ func TestDashboard_EmptyState_ShowsIOSBanner(t *testing.T) {
 		t.Error("expected empty state alongside banner")
 	}
 }
+
+// seedAdminFeedback stores one open and one closed feedback item so
+// the admin list tests can assert on filter behaviour.
+func seedAdminFeedback(t *testing.T, mock *mockFeedbackRepository) {
+	t.Helper()
+	for _, f := range []*models.Feedback{
+		{UserID: "user-1", Title: "Open feedback item", Message: "This one is still open."},
+		{UserID: "user-1", Title: "Closed feedback item", Message: "This one is already closed.", IsClosed: true},
+	} {
+		if err := mock.Create(f); err != nil {
+			t.Fatalf("failed to seed feedback: %v", err)
+		}
+	}
+}
+
+func TestAdminListFeedback_DefaultShowsOpenOnly(t *testing.T) {
+	h, mockFeedback, e := setupFeedbackHandler(t)
+	seedAdminFeedback(t, mockFeedback)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/feedback", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "admin-1", "admin@example.com", "Admin User", true)
+
+	if err := h.AdminListFeedback(c); err != nil {
+		t.Fatalf("AdminListFeedback failed: %v", err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Open feedback item") {
+		t.Error("expected the default view to include open feedback")
+	}
+	if strings.Contains(body, "Closed feedback item") {
+		t.Error("expected the default view to exclude closed feedback")
+	}
+}
+
+func TestAdminListFeedback_FilterAllShowsEverything(t *testing.T) {
+	h, mockFeedback, e := setupFeedbackHandler(t)
+	seedAdminFeedback(t, mockFeedback)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/feedback?filter=all", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAuthContext(c, "admin-1", "admin@example.com", "Admin User", true)
+
+	if err := h.AdminListFeedback(c); err != nil {
+		t.Fatalf("AdminListFeedback failed: %v", err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Open feedback item") || !strings.Contains(body, "Closed feedback item") {
+		t.Error("expected filter=all to include both open and closed feedback")
+	}
+}
+
+// TestAdminFeedbackDetail_CloseTargetsToaster verifies the status
+// update confirmation follows the profile page's toast pattern: the
+// htmx response is appended to the layout's #toaster element rather
+// than swapped into an ad-hoc container.
+func TestAdminFeedbackDetail_CloseTargetsToaster(t *testing.T) {
+	h, mockFeedback, e := setupFeedbackHandler(t)
+	seedAdminFeedback(t, mockFeedback)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/feedback/fb-1", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("fb-Open feedback item")
+	setAuthContext(c, "admin-1", "admin@example.com", "Admin User", true)
+
+	if err := h.AdminFeedbackDetail(c); err != nil {
+		t.Fatalf("AdminFeedbackDetail failed: %v", err)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`hx-target="#toaster"`,
+		`hx-swap="beforeend"`,
+		// The page-scoped script that redirects back to the
+		// feedback list once the toast has been shown.
+		"feedbackStatusUpdated",
+		"window.location.href = '/admin/feedback'",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected detail page to contain %q", want)
+		}
+	}
+	if strings.Contains(body, `hx-target="#close-result"`) {
+		t.Error("expected detail page to no longer target the removed #close-result container")
+	}
+}
+
+// TestAdminCloseFeedback_HtmxReturnsToast verifies the close/reopen
+// endpoint responds to htmx requests with a success toast fragment
+// (rendered into #toaster by the detail page).
+func TestAdminCloseFeedback_HtmxReturnsToast(t *testing.T) {
+	h, mockFeedback, e := setupFeedbackHandler(t)
+	seedAdminFeedback(t, mockFeedback)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/feedback/fb-1/close", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("fb-Open feedback item")
+	setAuthContext(c, "admin-1", "admin@example.com", "Admin User", true)
+
+	if err := h.AdminCloseFeedback(c); err != nil {
+		t.Fatalf("AdminCloseFeedback failed: %v", err)
+	}
+	// The detail page listens for this event to redirect back to
+	// the feedback list after the toast has been shown.
+	if trigger := rec.Header().Get("HX-Trigger"); !strings.Contains(trigger, "feedbackStatusUpdated") {
+		t.Errorf("expected HX-Trigger feedbackStatusUpdated, got %q", trigger)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Feedback status updated") || !strings.Contains(body, `data-category="success"`) {
+		t.Errorf("expected success toast in body, got: %s", body)
+	}
+
+	mockFeedback.mu.Lock()
+	defer mockFeedback.mu.Unlock()
+	if !mockFeedback.feedback[0].IsClosed {
+		t.Error("expected feedback to be closed after AdminCloseFeedback")
+	}
+}

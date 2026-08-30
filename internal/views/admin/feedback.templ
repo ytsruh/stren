@@ -8,8 +8,9 @@ import (
 	"stren/internal/views/components"
 )
 
-// AdminFeedbackList renders the admin page listing all feedback with
-// Open / Closed / All filter buttons.
+// AdminFeedbackList renders the admin page listing feedback with
+// Open / Closed / All filter buttons. The default view (no filter
+// query param) shows only open feedback.
 templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName string, isAuthenticated bool, isAdmin bool) {
 	@views.Layout(views.PageData{Title: "Admin - Feedback", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="flex justify-between items-center mb-6">
@@ -29,7 +30,7 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 				Closed
 			</a>
 			<a
-				href="/admin/feedback"
+				href="/admin/feedback?filter=all"
 				class={ getFilterBtnClass(filter, "all") }
 			>
 				All
@@ -149,8 +150,8 @@ templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenti
 					type="button"
 					hx-post={ fmt.Sprintf("/admin/feedback/%s/close", feedback.ID) }
 					hx-indicator="#close-spinner"
-					hx-target="#close-result"
-					hx-swap="innerHTML"
+					hx-target="#toaster"
+					hx-swap="beforeend"
 					class="btn relative inline-flex"
 				>
 					<span class="btn-text flex items-center gap-2">
@@ -166,9 +167,22 @@ templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenti
 						@components.Icon(components.IconProps{Name: "loader", Size: 18})
 					</span>
 				</button>
-				<div id="close-result"></div>
 			</div>
 		</form>
+		// Page-scoped success handler: the POST response carries an
+		// HX-Trigger for this event once the status has been updated.
+		// The confirmation toast is appended to #toaster by htmx, so
+		// we give it a moment to be seen before sending the admin
+		// back to the feedback list. Scoped to this page rather than
+		// the global layout because only the detail view performs a
+		// status update.
+		<script>
+			document.body.addEventListener('feedbackStatusUpdated', function() {
+				setTimeout(function() {
+					window.location.href = '/admin/feedback';
+				}, 1000);
+			});
+		</script>
 	}
 }
 
