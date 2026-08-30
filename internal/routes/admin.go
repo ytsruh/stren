@@ -22,7 +22,63 @@ func (h *Handler) AdminListUsers(c echo.Context) error {
 		return err
 	}
 
-	return render(c, admin.AdminUserList(users, claims.Name, true, claims.IsAdmin))
+	return render(c, admin.AdminUserList(users, claims.UserID, claims.Name, true, claims.IsAdmin))
+}
+
+// AdminSetUserAdmin handles POST /admin/users/:id/admin. The form
+// value is_admin ("true"/"false") carries the target state, so the
+// same endpoint serves both grant and revoke. The controller rejects
+// self-demotion (controllers.ErrCannotDemoteSelf). htmx requests get
+// a toast fragment plus a triggerRedirect back to the list so the
+// row re-renders with the new badge; plain POSTs fall back to a
+// redirect.
+func (h *Handler) AdminSetUserAdmin(c echo.Context) error {
+	id := c.Param("id")
+	isAdmin := c.FormValue("is_admin") == "true"
+	claims := GetClaims(c)
+
+	if err := h.adminUserCtrl.SetAdmin(c.Request().Context(), claims.UserID, id, isAdmin); err != nil {
+		switch {
+		case errors.Is(err, controllers.ErrUserNotFound):
+			return render(c, admin.AdminUserActionError("User not found"))
+		case errors.Is(err, controllers.ErrCannotDemoteSelf):
+			return render(c, admin.AdminUserActionError("You can't remove your own admin access"))
+		default:
+			c.Logger().Errorf("admin set user admin failed: %v", err)
+			return render(c, admin.AdminUserActionError("Failed to update user. Please try again."))
+		}
+	}
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		c.Response().Header().Set("HX-Trigger", `{"triggerRedirect": "/admin/users"}`)
+		if isAdmin {
+			return render(c, admin.AdminUserActionSuccess("Admin access granted"))
+		}
+		return render(c, admin.AdminUserActionSuccess("Admin access removed"))
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/users")
+}
+
+// AdminSendUserPasswordReset handles POST /admin/users/:id/send-password-reset.
+// Sends the same one-hour password-reset email the forgot-password
+// flow sends — the admin action is only a different trigger, the
+// reset link and /reset-password page are shared. htmx requests get
+// a toast fragment; plain POSTs fall back to a redirect.
+func (h *Handler) AdminSendUserPasswordReset(c echo.Context) error {
+	id := c.Param("id")
+
+	if err := h.adminUserCtrl.SendPasswordReset(c.Request().Context(), id); err != nil {
+		if errors.Is(err, controllers.ErrUserNotFound) {
+			return render(c, admin.AdminUserActionError("User not found"))
+		}
+		c.Logger().Errorf("admin send password reset failed: %v", err)
+		return render(c, admin.AdminUserActionError("Failed to send password reset email. Please try again."))
+	}
+
+	if c.Request().Header.Get("HX-Request") == "true" {
+		return render(c, admin.AdminUserActionSuccess("Password reset email sent"))
+	}
+	return c.Redirect(http.StatusSeeOther, "/admin/users")
 }
 
 // --- Admin Exercise Handlers ---

@@ -54,7 +54,7 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 					<tbody>
 						for _, f := range feedback {
 							<tr>
-								<td class="font-medium truncate max-w-[150px] sm:max-w-[300px]">{ f.Title }</td>
+								<td class="font-medium truncate max-w-37.5 sm:max-w-75">{ f.Title }</td>
 								<td class="hidden sm:table-cell">{ f.UserName }</td>
 								<td class="text-muted-foreground hidden sm:table-cell">{ f.CreatedAt.Format("02 Jan 2006") }</td>
 								<td>
@@ -82,9 +82,11 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 // feedback item, with a Close / Reopen action button.
 templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenticated bool, isAdmin bool) {
 	@views.Layout(views.PageData{Title: "Admin - Feedback Detail", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		<a href="/admin/feedback" class="btn-outline mb-4 inline-flex">
-			@components.Icon(components.IconProps{Name: "arrow-left", Size: 18})
-			Back
+		<a href="/admin/feedback" class="btn-outline mb-4 ">
+			<span class="flex items-center gap-2">
+				@components.Icon(components.IconProps{Name: "chevron-left", Size: 18})
+				Back
+			</span>
 		</a>
 		<form class="">
 			<fieldset class="grid gap-4">
@@ -151,9 +153,9 @@ templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenti
 					hx-swap="innerHTML"
 					class="btn relative inline-flex"
 				>
-					<span class="btn-text">
+					<span class="btn-text flex items-center gap-2">
 						if feedback.IsClosed {
-							@components.Icon(components.IconProps{Name: "rotate-ccw", Size: 18})
+							@components.Icon(components.IconProps{Name: "undo", Size: 18})
 							Reopen
 						} else {
 							@components.Icon(components.IconProps{Name: "check", Size: 18})

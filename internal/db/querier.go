@@ -88,6 +88,13 @@ type Querier interface {
 	// is already active (completed_at is already NULL), so the route can
 	// call it without first checking the current state.
 	ReopenGoal(ctx context.Context, arg ReopenGoalParams) error
+	// Grant or revoke a user's admin status. Scoped to id; the RETURNING
+	// clause turns "no such user" into sql.ErrNoRows so the repository
+	// can surface a clean not-found error instead of silently no-oping.
+	// Separate from UpdateUser for the same reason as UpdateUserPassword:
+	// a narrow, single-purpose query prevents the admin form from
+	// clobbering any other columns.
+	SetUserAdmin(ctx context.Context, arg SetUserAdminParams) (string, error)
 	Update(ctx context.Context, arg UpdateParams) (Exercise, error)
 	UpdateExerciseEntry(ctx context.Context, arg UpdateExerciseEntryParams) error
 	UpdateExerciseEntryWithDate(ctx context.Context, arg UpdateExerciseEntryWithDateParams) error

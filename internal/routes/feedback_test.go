@@ -29,7 +29,7 @@ func setupFeedbackHandler(t *testing.T) (*Handler, *mockFeedbackRepository, *ech
 		controllers.NewAuthRecoveryController(mockUser, newMockAuthTokenRepo(), nil),
 		controllers.NewExerciseEntryController(newMockRepository()),
 		controllers.NewAdminController(newMockRepository()),
-		controllers.NewAdminUserController(newMockAdminUserRepository()),
+		controllers.NewAdminUserController(newMockAdminUserRepository(), newMockAuthTokenRepo(), nil),
 		controllers.NewFeedbackController(mockFeedback),
 		controllers.NewWeightController(newMockWeightRepository(), nil),
 		controllers.NewGoalsController(newMockGoalRepository()),

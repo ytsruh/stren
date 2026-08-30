@@ -228,6 +228,33 @@ func (q *Queries) MarkUserReminderFired(ctx context.Context, arg MarkUserReminde
 	return err
 }
 
+const setUserAdmin = `-- name: SetUserAdmin :one
+UPDATE users
+SET is_admin = ?,
+    updated_at = ?
+WHERE id = ?
+RETURNING id
+`
+
+type SetUserAdminParams struct {
+	IsAdmin   int64
+	UpdatedAt sql.NullTime
+	ID        string
+}
+
+// Grant or revoke a user's admin status. Scoped to id; the RETURNING
+// clause turns "no such user" into sql.ErrNoRows so the repository
+// can surface a clean not-found error instead of silently no-oping.
+// Separate from UpdateUser for the same reason as UpdateUserPassword:
+// a narrow, single-purpose query prevents the admin form from
+// clobbering any other columns.
+func (q *Queries) SetUserAdmin(ctx context.Context, arg SetUserAdminParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, setUserAdmin, arg.IsAdmin, arg.UpdatedAt, arg.ID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const updateUser = `-- name: UpdateUser :exec
 UPDATE users
 SET name = ?,

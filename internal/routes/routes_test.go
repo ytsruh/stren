@@ -522,6 +522,35 @@ func (m *mockAdminUserRepository) ListUsers(_ context.Context) ([]models.User, e
 	return m.users, nil
 }
 
+// GetUserByID returns a copy of the matching admin-user row, or nil
+// when the ID is unknown. Used by the admin user action tests to
+// verify the controller validated the target user first.
+func (m *mockAdminUserRepository) GetUserByID(_ context.Context, id string) (*models.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.users {
+		if m.users[i].ID == id {
+			u := m.users[i]
+			return &u, nil
+		}
+	}
+	return nil, nil
+}
+
+// SetUserAdmin flips the admin flag on the matching row. Unknown IDs
+// error so a silent no-op cannot hide a broken test expectation.
+func (m *mockAdminUserRepository) SetUserAdmin(_ context.Context, userID string, isAdmin bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.users {
+		if m.users[i].ID == userID {
+			m.users[i].IsAdmin = isAdmin
+			return nil
+		}
+	}
+	return errors.New("user not found")
+}
+
 type mockFeedbackRepository struct {
 	mu       sync.Mutex
 	feedback []*models.Feedback
@@ -856,7 +885,7 @@ func setupHandler(t *testing.T) (*Handler, *mockRepository, *mockUserRepository,
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(mockUser, newMockAuthTokenRepo(), nil)
 	entryCtrl := controllers.NewExerciseEntryController(mock)
 	adminCtrl := controllers.NewAdminController(mock)
-	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
+	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser, newMockAuthTokenRepo(), nil)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	weightCtrl := controllers.NewWeightController(mockWeight, nil)
 	goalsCtrl := controllers.NewGoalsController(mockGoals)

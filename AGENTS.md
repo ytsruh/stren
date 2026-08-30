@@ -2,7 +2,7 @@
 
 ## Product Shape (read this first)
 - **The iOS client (`client/`) is the primary user surface.** All user data entry — logging/editing sets, weigh-ins, goals, timers, feedback — happens in the iOS app over the `/api/v1` JSON namespace. That API is critical functionality: never remove or break `/api/v1/*` handlers.
-- **The web app is a limited companion surface**: read-only dashboard, per-exercise history/chart pages, profile settings, Data Export page (bulk ZIP downloads), admin (exercises + users + feedback inbox), and auth. Do not add web UI for creating or editing workout data.
+- **The web app is a limited companion surface**: read-only dashboard, per-exercise history/chart pages, profile settings, Data Export page (bulk ZIP downloads), admin (exercises + user management [admin toggle with self-demotion guard + password reset email reusing the forgot-password flow] + feedback inbox), and auth. Do not add web UI for creating or editing workout data.
 
 ## Application & Business Logic Instructions
 - Weight doesn't have KG or lbs and is stored as a number only. A user's preferred unit is a profile setting; the web reads it via `User.WeightUnitDisplay()` and labels every weight with it. Cardio distances work the same way: stored canonically in **metres**, displayed via the user's `distance_unit` profile setting (`User.DistanceUnitDisplay()`, "km"/"mi"). Pace is never stored — derived as `duration_seconds / (distance_meters/1000)`.
