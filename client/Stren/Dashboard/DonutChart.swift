@@ -52,45 +52,47 @@ struct DashboardDonutChart: View {
             .chartOverlay { proxy in
                 if let bucket = selectedBucket {
                     GeometryReader { geometry in
-                        // Plot area is the rectangular region the
-                        // chart actually draws into. For a sector
-                        // chart with no axes it's the donut's
-                        // bounding box; for the line chart the
-                        // proxy returns the inset rectangle the
-                        // points live in. Same API, same units.
-                        let plotRect = geometry[proxy.plotAreaFrame]
-                        let center = CGPoint(x: plotRect.midX, y: plotRect.midY)
-                        // The visible ring sits between the
-                        // inner cutout (0.6) and the outer edge
-                        // (1.0); 0.8 is the radial midpoint of
-                        // that ring, which is the natural place
-                        // to anchor a tooltip.
-                        let radius = min(plotRect.width, plotRect.height) / 2 * 0.8
-                        let cumulativeBefore = Self.cumulativeCount(of: bucket, in: buckets)
-                        let sliceCenterValue = Double(cumulativeBefore) + Double(bucket.count) / 2
-                        let total = Double(buckets.reduce(0) { $0 + $1.count })
-                        // Swift Charts sectors start at 12
-                        // o'clock (top) and increase clockwise,
-                        // matching standard math convention with
-                        // the y-axis flipped for screen space.
-                        let angle = sliceCenterValue / total * 2 * .pi
-                        let anchorX = center.x + radius * sin(angle)
-                        let anchorY = center.y - radius * cos(angle)
+                        if let plotFrame = proxy.plotFrame {
+                            // Plot area is the rectangular region the
+                            // chart actually draws into. For a sector
+                            // chart with no axes it's the donut's
+                            // bounding box; for the line chart the
+                            // proxy returns the inset rectangle the
+                            // points live in. Same API, same units.
+                            let plotRect = geometry[plotFrame]
+                            let center = CGPoint(x: plotRect.midX, y: plotRect.midY)
+                            // The visible ring sits between the
+                            // inner cutout (0.6) and the outer edge
+                            // (1.0); 0.8 is the radial midpoint of
+                            // that ring, which is the natural place
+                            // to anchor a tooltip.
+                            let radius = min(plotRect.width, plotRect.height) / 2 * 0.8
+                            let cumulativeBefore = Self.cumulativeCount(of: bucket, in: buckets)
+                            let sliceCenterValue = Double(cumulativeBefore) + Double(bucket.count) / 2
+                            let total = Double(buckets.reduce(0) { $0 + $1.count })
+                            // Swift Charts sectors start at 12
+                            // o'clock (top) and increase clockwise,
+                            // matching standard math convention with
+                            // the y-axis flipped for screen space.
+                            let angle = sliceCenterValue / total * 2 * .pi
+                            let anchorX = center.x + radius * sin(angle)
+                            let anchorY = center.y - radius * cos(angle)
 
-                        // Clamp the card so it never runs off
-                        // the chart's edges. Same approach as
-                        // the line chart's tooltip.
-                        let cardHalfWidth: CGFloat = 60
-                        let cardHalfHeight: CGFloat = 22
-                        let minX = cardHalfWidth + 4
-                        let maxX = geometry.size.width - cardHalfWidth - 4
-                        let minY = cardHalfHeight + 4
-                        let maxY = geometry.size.height - cardHalfHeight - 4
-                        let clampedX = min(max(anchorX, minX), maxX)
-                        let clampedY = min(max(anchorY, minY), maxY)
+                            // Clamp the card so it never runs off
+                            // the chart's edges. Same approach as
+                            // the line chart's tooltip.
+                            let cardHalfWidth: CGFloat = 60
+                            let cardHalfHeight: CGFloat = 22
+                            let minX = cardHalfWidth + 4
+                            let maxX = geometry.size.width - cardHalfWidth - 4
+                            let minY = cardHalfHeight + 4
+                            let maxY = geometry.size.height - cardHalfHeight - 4
+                            let clampedX = min(max(anchorX, minX), maxX)
+                            let clampedY = min(max(anchorY, minY), maxY)
 
-                        TooltipCard(bucket: bucket, total: total)
-                            .position(x: clampedX, y: clampedY)
+                            TooltipCard(bucket: bucket, total: total)
+                                .position(x: clampedX, y: clampedY)
+                        }
                     }
                 }
             }

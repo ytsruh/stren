@@ -8,7 +8,10 @@ import SwiftUI
 /// (`luminosity: dark`) variant. Swift code consumes them via
 /// `Color("<token>", bundle: .main)` (see `Colors.swift`) —
 /// Xcode strips the `DS/` folder prefix at compile time, so the
-/// runtime name is the colorset name only.
+/// runtime name is the colorset name only. Three colorsets carry
+/// a `ds-` prefix (`ds-primary`, `ds-secondary`, `ds-accent`) to
+/// avoid Xcode generated-symbol conflicts; the web tokens in the
+/// table below keep their bare names.
 ///
 /// This file is the source-of-truth comment block: when the web
 /// brand changes, update the OKLCH values in

@@ -33,7 +33,7 @@ public enum Keychain {
     /// is stored. Returns nil (not an error) for "not found"
     /// so callers can treat the cold-start case uniformly.
     public static func string(for key: String) throws -> String? {
-        var query: [String: Any] = [
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,

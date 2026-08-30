@@ -12,7 +12,11 @@ import SwiftUI
 @MainActor
 public final class AuthStore: ObservableObject {
     /// Key under which the JWT is stored in the Keychain.
-    public static let tokenKey = "auth_token"
+    /// Marked `nonisolated` so the (nonisolated) `currentToken()`
+    /// and the API client's token-provider closure can read it
+    /// from any thread — an immutable `String` constant needs no
+    /// actor protection.
+    public nonisolated static let tokenKey = "auth_token"
 
     /// The currently authenticated user, or nil when no
     /// session is active. SwiftUI views observe this via

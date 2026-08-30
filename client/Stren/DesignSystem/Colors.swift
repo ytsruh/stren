@@ -15,8 +15,13 @@ import SwiftUI
 /// Use a wrong prefix and the lookup silently fails: the resulting
 /// `Color` is `.clear`, the view background isn't painted, and
 /// (most visibly) any white-text-on-accent button becomes
-/// white-on-white. There's a unit test in `StrenTests/
-/// DesignSystemTests.swift` that asserts every token resolves.
+/// white-on-white.
+///
+/// Three tokens — `ds-primary`, `ds-secondary`, `ds-accent` — carry
+/// a `ds-` prefix: their bare names collide with symbols Xcode
+/// auto-generates from the asset catalog (`Color.primary` /
+/// `Color.secondary` are SwiftUI's system label colours), which
+/// otherwise emits `#warning`s in `GeneratedAssetSymbols.swift`.
 ///
 /// The mapping (semantic → web CSS variable) is documented in
 /// `BrandColors.swift`. The actual `Color` literals live in the
@@ -45,7 +50,8 @@ public enum DSColors {
     /// takes the theme's foreground luminance so chips read against
     /// both surfaces — dark fill in light mode, light fill in dark
     /// mode. Maps to web `--secondary` (see styles/input.css).
-    public static let secondary = Color("secondary", bundle: .main)
+    /// Asset name is prefixed `ds-` — see the header note.
+    public static let secondary = Color("ds-secondary", bundle: .main)
     /// Text/icon colour on a `secondary` surface.
     /// Maps to web `--secondary-foreground`.
     public static let onSecondary = Color("secondary-foreground", bundle: .main)
@@ -67,10 +73,12 @@ public enum DSColors {
     /// The single brand colour — used for primary buttons, the
     /// active tab tint, links, and the profile initials halo.
     /// Maps to web `--primary` (#F44900 brand orange).
-    public static let accent = Color("primary", bundle: .main)
+    /// Asset name is prefixed `ds-` — see the header note.
+    public static let accent = Color("ds-primary", bundle: .main)
     /// Soft accent background (e.g. a tinted row in a list).
-    /// Maps to web `--accent`.
-    public static let accentSubtle = Color("accent", bundle: .main)
+    /// Maps to web `--accent`. Asset name is prefixed `ds-` —
+    /// see the header note.
+    public static let accentSubtle = Color("ds-accent", bundle: .main)
     /// Text on the soft accent surface. Maps to web `--accent-foreground`.
     public static let onAccentSubtle = Color("accent-foreground", bundle: .main)
     /// Focus ring. Maps to web `--ring`.

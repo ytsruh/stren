@@ -105,7 +105,7 @@ struct NewSetView: View {
             // apply), and stale strength values must not leak into a
             // cardio row or vice versa. Switching between two exercises
             // of the SAME mode keeps whatever rows are already typed.
-            .onChange(of: isCardioMode) { _ in resetSetsForMode() }
+            .onChange(of: isCardioMode) { _, _ in resetSetsForMode() }
         }
         .task { await loadExercises() }
     }

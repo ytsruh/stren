@@ -432,40 +432,38 @@ struct WeightEditorView: View {
         isSaving = true
         defer { isSaving = false }
 
-        do {
-            switch mode {
-            case .create:
-                let request = CreateWeightEntryRequest(
-                    weight: weight,
-                    notes: trimmedNotes,
-                    photoKey: photoKey,
-                    createdAt: encodedCreatedAt
-                )
-                let created = await store.create(request)
-                if created == nil {
-                    errorMessage = store.errorMessage ?? "Could not save the entry."
-                    return
-                }
-            case .edit(let entry):
-                let request = UpdateWeightEntryRequest(
-                    weight: weight,
-                    notes: trimmedNotes,
-                    photoKey: photoKey,
-                    removePhoto: removePhoto,
-                    createdAt: encodedCreatedAt
-                )
-                await store.update(id: entry.id, request: request)
-                if let msg = store.errorMessage {
-                    errorMessage = msg
-                    return
-                }
+        // `WeightStore` methods are non-throwing: they report
+        // failure via a nil result / `errorMessage`, so no
+        // do/catch is needed here. (The photo upload above
+        // does throw and keeps its own do/catch.)
+        switch mode {
+        case .create:
+            let request = CreateWeightEntryRequest(
+                weight: weight,
+                notes: trimmedNotes,
+                photoKey: photoKey,
+                createdAt: encodedCreatedAt
+            )
+            let created = await store.create(request)
+            if created == nil {
+                errorMessage = store.errorMessage ?? "Could not save the entry."
+                return
             }
-            dismiss()
-        } catch let error as APIError {
-            errorMessage = error.errorDescription
-        } catch {
-            errorMessage = "Could not save the entry."
+        case .edit(let entry):
+            let request = UpdateWeightEntryRequest(
+                weight: weight,
+                notes: trimmedNotes,
+                photoKey: photoKey,
+                removePhoto: removePhoto,
+                createdAt: encodedCreatedAt
+            )
+            await store.update(id: entry.id, request: request)
+            if let msg = store.errorMessage {
+                errorMessage = msg
+                return
+            }
         }
+        dismiss()
     }
 
     private func deleteAndDismiss() async {

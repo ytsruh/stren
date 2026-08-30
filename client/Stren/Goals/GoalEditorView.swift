@@ -235,34 +235,31 @@ struct GoalEditorView: View {
             targetDate: targetDate,
             endDate: endDate
         )
-        do {
-            switch mode {
-            case .create:
-                let created = await store.create(request)
-                if created == nil {
-                    errorMessage = store.errorMessage ?? "Could not save the goal."
-                    return
-                }
-            case .edit(let goal):
-                let update = UpdateGoalRequest(
-                    title: request.title,
-                    description: request.description,
-                    startDate: request.startDate,
-                    targetDate: request.targetDate,
-                    endDate: request.endDate
-                )
-                await store.update(id: goal.id, request: update)
-                if let msg = store.errorMessage {
-                    errorMessage = msg
-                    return
-                }
+        // `GoalStore` methods are non-throwing: they report
+        // failure via a nil result / `errorMessage`, so no
+        // do/catch is needed here.
+        switch mode {
+        case .create:
+            let created = await store.create(request)
+            if created == nil {
+                errorMessage = store.errorMessage ?? "Could not save the goal."
+                return
             }
-            dismiss()
-        } catch let error as APIError {
-            errorMessage = error.errorDescription
-        } catch {
-            errorMessage = "Could not save the goal."
+        case .edit(let goal):
+            let update = UpdateGoalRequest(
+                title: request.title,
+                description: request.description,
+                startDate: request.startDate,
+                targetDate: request.targetDate,
+                endDate: request.endDate
+            )
+            await store.update(id: goal.id, request: update)
+            if let msg = store.errorMessage {
+                errorMessage = msg
+                return
+            }
         }
+        dismiss()
     }
 
     private func deleteAndDismiss() async {
