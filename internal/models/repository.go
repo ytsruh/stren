@@ -102,6 +102,16 @@ type UserRepo interface {
 // AdminUserRepo defines the interface for admin user operations.
 type AdminUserRepo interface {
 	ListUsers(ctx context.Context) ([]User, error)
+	// GetUserByID retrieves a single user by ID, or nil when the
+	// user does not exist. Used by the admin actions (admin toggle,
+	// password reset email) to validate the target user before
+	// acting, so a stale row from the list page surfaces as a clean
+	// not-found instead of a silent no-op.
+	GetUserByID(ctx context.Context, id string) (*User, error)
+	// SetUserAdmin grants or revokes a user's admin status. Kept
+	// separate from the user-facing UpdateUser (which never touches
+	// is_admin) so the profile form cannot grant itself admin.
+	SetUserAdmin(ctx context.Context, userID string, isAdmin bool) error
 }
 
 // Compile-time check to ensure AdminUserRepository implements AdminUserRepo.

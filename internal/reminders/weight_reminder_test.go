@@ -28,9 +28,9 @@ type fakeReminderRepo struct {
 }
 
 type firedRecord struct {
-	UserID    string
-	FiredAt   time.Time
-	NextFire  time.Time
+	UserID   string
+	FiredAt  time.Time
+	NextFire time.Time
 }
 
 func (f *fakeReminderRepo) ListUsersDueForReminder(_ context.Context, now time.Time) ([]models.User, error) {
@@ -199,11 +199,11 @@ func TestUserReminder_Run_FiresOneEmailPerUser(t *testing.T) {
 }
 
 func TestUserReminder_Run_AdvancesByCadenceStride(t *testing.T) {
-	// After firing, the next_fire_at must be exactly the
-	// cadence's stride later: 24h for daily, 7d for weekly,
+	// After an on-time fire, the next_fire_at must be exactly
+	// the cadence's stride later: 24h for daily, 7d for weekly,
 	// 14d for biweekly. This is the tripwire for any future
-	// refactor that mis-computes the advance.
-r, repo, _ := newTestReminder(t)
+	// refactor that mis-computes the snapped advance.
+	r, repo, _ := newTestReminder(t)
 	day := 0
 	now := r.clock.Now()
 	// Pre-compute the "next candidate" for each frequency so
@@ -248,10 +248,11 @@ r, repo, _ := newTestReminder(t)
 			t.Errorf("unexpected user %q", rec.UserID)
 			continue
 		}
-		// The orchestrator advances by the stride and then
-		// re-computes the next candidate. The new next_fire_at
-		// should be the previous next_fire_at + stride (since
-		// we set the row's next_fire_at to now=09:00 today).
+		// The orchestrator snaps the next_fire_at to the
+		// user's saved schedule via ComputeNextFire. Since we
+		// set the row's next_fire_at to now=09:00 Sunday (an
+		// on-time fire), the snapped slot is exactly one
+		// stride away.
 		got := rec.NextFire.Sub(now)
 		if got != want {
 			t.Errorf("user %s: next fire advance = %v, want %v", rec.UserID, got, want)
@@ -365,14 +366,18 @@ func TestUserReminder_SendToUser_EmptyEmailIsSkipped(t *testing.T) {
 }
 
 func TestUserReminder_SendToUser_AdvancesNextFireByCadence(t *testing.T) {
-	// SendToUser must advance the user's next_fire_at by
-	// the cadence's stride so the next tick skips them
-	// until the new time. A regression that forgot the
-	// advance would have the tick pick the user up every
-	// hour, which the seed users are configured to
-	// tolerate but the operator would notice.
-r, repo, _ := newTestReminder(t)
+	// SendToUser must advance the user's next_fire_at to the
+	// cadence's next slot so the next tick skips them until
+	// then. The fake clock is pinned to Sunday 09:00 UTC with
+	// the seed users scheduled for Sunday 09:00 — an on-time
+	// fire — so the snapped slot is exactly one stride away:
+	// 24h for daily, 7d for weekly, 14d for biweekly. A
+	// regression that forgot the advance would have the tick
+	// pick the user up every hour, which the seed users are
+	// configured to tolerate but the operator would notice.
+	r, repo, _ := newTestReminder(t)
 	day := 0
+	now := r.clock.Now()
 	for _, freq := range []models.ReminderFrequency{
 		models.ReminderDaily, models.ReminderWeekly, models.ReminderBiweekly,
 	} {
@@ -385,7 +390,6 @@ r, repo, _ := newTestReminder(t)
 			ReminderDayOfWeek: &day, ReminderTime: "09:00",
 			CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 		}
-		now := r.clock.Now()
 		r.SendToUser(context.Background(), u, now)
 		fired := repo.firedRecords()
 		if len(fired) != 1 {
@@ -400,18 +404,122 @@ r, repo, _ := newTestReminder(t)
 		case models.ReminderBiweekly:
 			want = 14 * 24 * time.Hour
 		}
-		// We pass `now + stride` into ComputeNextFire (via
-		// reminderStride), so the new next_fire_at is the
-		// "next candidate at-or-after now+stride". For the
-		// canonical case of weekly Sunday 09:00 with
-		// now=Sun 09:00, +7d is also a Sunday 09:00, so the
-		// next_fire_at lands exactly 7d later.
+		// The fire lands exactly on the scheduled slot, so the
+		// snapped next_fire_at is exactly one stride later — no
+		// fudge factor needed.
 		got := fired[0].NextFire.Sub(now)
-		// Allow a small fudge for the day-of-week math
-		// (sub-day rolls on biweekly across DST etc).
-		if got < want || got > want+24*time.Hour {
-			t.Errorf("%s: advance = %v, want ~%v", freq, got, want)
+		if got != want {
+			t.Errorf("%s: advance = %v, want %v", freq, got, want)
 		}
+	}
+}
+
+func TestUserReminder_SendToUser_CatchUpFireSnapsToSavedSchedule(t *testing.T) {
+	// The self-heal for schedule drift: when a scheduled slot is
+	// missed (downtime over Sunday 09:00) the tick fires the user
+	// whenever it next sees them — here Wednesday afternoon. The
+	// re-anchor must snap back to the user's chosen Sunday 09:00,
+	// NOT offset from the catch-up instant (the old +7d-from-`now`
+	// behavior, which permanently re-anchored the cadence to
+	// Wednesday 14:37 and, in production, moved a Sunday reminder
+	// onto a Saturday).
+	r, repo, _ := newTestReminder(t)
+	day := 0
+	u := &models.User{
+		ID: "u1", Name: "Alice", Email: "a@x.com",
+		ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+		ReminderDayOfWeek: &day, ReminderTime: "09:00",
+		CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	// Wednesday 2026-08-05 14:37 UTC — three days late for the
+	// Sunday 2026-08-02 09:00 slot.
+	catchUp := time.Date(2026, 8, 5, 14, 37, 0, 0, time.UTC)
+	r.SendToUser(context.Background(), u, catchUp)
+	fired := repo.firedRecords()
+	if len(fired) != 1 {
+		t.Fatalf("mark-fired calls = %d, want 1", len(fired))
+	}
+	want := time.Date(2026, 8, 9, 9, 0, 0, 0, time.UTC) // the coming Sunday 09:00 UTC
+	if !fired[0].NextFire.Equal(want) {
+		t.Errorf("catch-up next fire = %v, want %v (snapped to saved schedule)", fired[0].NextFire, want)
+	}
+}
+
+func TestUserReminder_SendToUser_BiweeklyKeepsFortnightStride(t *testing.T) {
+	// Biweekly must stay a strict 14-day stride. ComputeNextFire
+	// is weekly-shaped (next matching day/hour, 7 days out), so
+	// the orchestrator adds one more week on top. On-time fire:
+	// Sunday 09:00 → Sunday 09:00 +14d. Catch-up fire mid-week:
+	// the anchor still lands on the user's chosen weekday, one
+	// full fortnight slot ahead.
+	r, repo, _ := newTestReminder(t)
+	day := 0
+	u := &models.User{
+		ID: "u1", Name: "Alice", Email: "a@x.com",
+		ReminderEnabled: true, ReminderFrequency: models.ReminderBiweekly,
+		ReminderDayOfWeek: &day, ReminderTime: "09:00",
+		CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	// On-time fire at the scheduled Sunday slot.
+	r.SendToUser(context.Background(), u, r.clock.Now()) // Sunday 2026-08-09 09:00 UTC
+	fired := repo.firedRecords()
+	if len(fired) != 1 {
+		t.Fatalf("on-time: mark-fired calls = %d, want 1", len(fired))
+	}
+	want := time.Date(2026, 8, 23, 9, 0, 0, 0, time.UTC)
+	if !fired[0].NextFire.Equal(want) {
+		t.Errorf("on-time biweekly next fire = %v, want %v (+14d)", fired[0].NextFire, want)
+	}
+
+	// Catch-up fire on Wednesday: the coming Sunday's slot is
+	// skipped (that would be a 4-day stride), so the next fire is
+	// the Sunday after — restoring the user's chosen weekday and
+	// the 14-day spacing from there on.
+	repo.mu.Lock()
+	repo.firedLog = nil
+	repo.mu.Unlock()
+	catchUp := time.Date(2026, 8, 5, 14, 37, 0, 0, time.UTC)
+	r.SendToUser(context.Background(), u, catchUp)
+	fired = repo.firedRecords()
+	if len(fired) != 1 {
+		t.Fatalf("catch-up: mark-fired calls = %d, want 1", len(fired))
+	}
+	want = time.Date(2026, 8, 16, 9, 0, 0, 0, time.UTC)
+	if !fired[0].NextFire.Equal(want) {
+		t.Errorf("catch-up biweekly next fire = %v, want %v (Sunday after next)", fired[0].NextFire, want)
+	}
+}
+
+func TestUserReminder_SendToUser_NormalisesNowToUTC(t *testing.T) {
+	// The turso driver binds time.Time as an RFC3339 string in the
+	// value's location, and SQLite compares reminder timestamps as
+	// TEXT. A caller handing SendToUser a non-UTC "now" (e.g. a
+	// laptop running in BST) must still produce "Z"-suffixed
+	// firedAt / nextFireAt values, otherwise the due-users query
+	// mis-compares the row and fires at the wrong hour.
+	r, repo, _ := newTestReminder(t)
+	bst := time.FixedZone("BST", 3600)
+	r.clock = fixedClock{t: time.Date(2026, 8, 9, 10, 0, 0, 0, bst)} // = 09:00 UTC
+	day := 0
+	u := &models.User{
+		ID: "u1", Name: "Alice", Email: "a@x.com",
+		ReminderEnabled: true, ReminderFrequency: models.ReminderWeekly,
+		ReminderDayOfWeek: &day, ReminderTime: "09:00",
+		CreatedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	r.SendToUser(context.Background(), u, r.clock.Now())
+	fired := repo.firedRecords()
+	if len(fired) != 1 {
+		t.Fatalf("mark-fired calls = %d, want 1", len(fired))
+	}
+	if got := fired[0].FiredAt.Location(); got != time.UTC {
+		t.Errorf("firedAt location = %v, want UTC", got)
+	}
+	if got := fired[0].NextFire.Location(); got != time.UTC {
+		t.Errorf("nextFire location = %v, want UTC", got)
+	}
+	if want := (time.Time)(time.Date(2026, 8, 16, 9, 0, 0, 0, time.UTC)); !fired[0].NextFire.Equal(want) {
+		t.Errorf("nextFire = %v, want %v", fired[0].NextFire, want)
 	}
 }
 
@@ -422,7 +530,7 @@ func TestUserReminder_SendToUser_MarkFiredErrorDoesNotPanic(t *testing.T) {
 	// will re-attempt (the row is still "due" because the
 	// write failed). This is the same recovery story as
 	// the all-user email failure.
-r, repo, _ := newTestReminder(t)
+	r, repo, _ := newTestReminder(t)
 	repo.markErr = errors.New("db write failed")
 	day := 0
 	u := &models.User{

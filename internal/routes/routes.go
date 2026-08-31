@@ -160,6 +160,8 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	admin.GET("/feedback/:id", h.AdminFeedbackDetail)
 	admin.POST("/feedback/:id/close", h.AdminCloseFeedback)
 	admin.GET("/users", h.AdminListUsers)
+	admin.POST("/users/:id/admin", h.AdminSetUserAdmin)
+	admin.POST("/users/:id/send-password-reset", h.AdminSendUserPasswordReset)
 
 	// JSON API namespace for the iOS client and any other
 	// native client. The auth middleware (registered above

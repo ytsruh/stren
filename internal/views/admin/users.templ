@@ -1,13 +1,18 @@
 package admin
 
 import (
+	"fmt"
+
 	"stren/internal/models"
 	"stren/internal/views"
 	"stren/internal/views/components"
 )
 
-// AdminUserList renders the admin page listing all users.
-templ AdminUserList(users []models.User, userName string, isAuthenticated bool, isAdmin bool) {
+// AdminUserList renders the admin page listing all users. actingUserID
+// is the signed-in admin's own ID: the Revoke Admin button is hidden on
+// their row because self-demotion would lock them out of /admin (the
+// server rejects it too — controllers.ErrCannotDemoteSelf).
+templ AdminUserList(users []models.User, actingUserID string, userName string, isAuthenticated bool, isAdmin bool) {
 	@views.Layout(views.PageData{Title: "Admin - Users", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin, CurrentPath: "/admin/users"}) {
 		<div class="flex justify-between items-center mb-6">
 			@components.Title(components.TitleProps{Size: "lg", Color: "default", Title: "Users"})
@@ -25,26 +30,125 @@ templ AdminUserList(users []models.User, userName string, isAuthenticated bool, 
 						<th>Email</th>
 						<th>Admin</th>
 						<th>Created</th>
+						<th>Actions</th>
 					</tr>
 				</thead>
 				<tbody>
 					for _, u := range users {
-						<tr>
-							<td class="hidden lg:table-cell">{ u.ID }</td>
-							<td>{ u.Name }</td>
-							<td>{ u.Email }</td>
-							<td>
-								if u.IsAdmin {
-									<span class="badge badge-success">Yes</span>
-								} else {
-									<span class="badge">No</span>
-								}
-							</td>
-							<td>{ u.CreatedAt.Format("Jan 02, 2006") }</td>
-						</tr>
+						@adminUserRow(u, actingUserID)
 					}
 				</tbody>
 			</table>
 		}
+		// Toast fragments returned by the admin user action handlers
+		// swap into the layout's #toaster container (see the buttons
+		// below); the toggle's success toast is followed by a
+		// triggerRedirect back to this page so the badge re-renders.
 	}
+}
+
+// adminUserRow renders one row of the admin user table with the
+// admin-toggle and send-reset actions. Both buttons post via htmx:
+// the layout's global htmx:confirm handler turns hx-confirm into the
+// shared confirm dialog, and the response is a toast fragment
+// appended to the layout's #toaster container (the same pattern the
+// profile form uses). data-confirm-variant="primary" styles the
+// dialog's OK button brand orange — these are workflow actions, not
+// destructive deletions.
+templ adminUserRow(u models.User, actingUserID string) {
+	<tr>
+		<td class="hidden lg:table-cell">{ u.ID }</td>
+		<td>{ u.Name }</td>
+		<td>{ u.Email }</td>
+		<td>
+			if u.IsAdmin {
+				<span class="badge badge-success">Yes</span>
+			} else {
+				<span class="badge">No</span>
+			}
+		</td>
+		<td>{ u.CreatedAt.Format("Jan 02, 2006") }</td>
+		<td class="whitespace-nowrap">
+			<div class="flex gap-2">
+				if u.IsAdmin {
+					if u.ID != actingUserID {
+						@userAdminToggleBtn(u, false)
+					}
+				} else {
+					@userAdminToggleBtn(u, true)
+				}
+				<button
+					type="button"
+					class="btn-outline text-sm py-1 relative inline-flex"
+					hx-post={ fmt.Sprintf("/admin/users/%s/send-password-reset", u.ID) }
+					hx-confirm={ fmt.Sprintf("Send password reset email to %s?", u.Email) }
+					data-confirm-variant="primary"
+					hx-indicator={ fmt.Sprintf("#user-reset-spinner-%s", u.ID) }
+					hx-target="#toaster"
+					hx-swap="beforeend"
+				>
+					<span class="btn-text">Send Reset</span>
+					<span id={ fmt.Sprintf("user-reset-spinner-%s", u.ID) } class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+						@components.Icon(components.IconProps{Name: "loader", Size: 14})
+					</span>
+				</button>
+			</div>
+		</td>
+	</tr>
+}
+
+// userAdminToggleBtn renders the Make Admin / Revoke Admin button for
+// a user row. grant selects the target state: true renders "Make
+// Admin" for a non-admin row, false renders "Revoke Admin" for an
+// admin row. hx-vals carries the state as the is_admin form value
+// that POST /admin/users/:id/admin reads.
+templ userAdminToggleBtn(u models.User, grant bool) {
+	if grant {
+		<button
+			type="button"
+			class="btn-outline text-sm py-1 relative inline-flex"
+			hx-post={ fmt.Sprintf("/admin/users/%s/admin", u.ID) }
+			hx-vals={ `{"is_admin": "true"}` }
+			hx-confirm={ fmt.Sprintf("Grant admin access to %s?", u.Name) }
+			data-confirm-variant="primary"
+			hx-indicator={ fmt.Sprintf("#user-admin-spinner-%s", u.ID) }
+			hx-target="#toaster"
+			hx-swap="beforeend"
+		>
+			<span class="btn-text">Make Admin</span>
+			<span id={ fmt.Sprintf("user-admin-spinner-%s", u.ID) } class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+				@components.Icon(components.IconProps{Name: "loader", Size: 14})
+			</span>
+		</button>
+	} else {
+		<button
+			type="button"
+			class="btn-outline text-sm py-1 relative inline-flex"
+			hx-post={ fmt.Sprintf("/admin/users/%s/admin", u.ID) }
+			hx-vals={ `{"is_admin": "false"}` }
+			hx-confirm={ fmt.Sprintf("Revoke admin access from %s?", u.Name) }
+			data-confirm-variant="primary"
+			hx-indicator={ fmt.Sprintf("#user-admin-spinner-%s", u.ID) }
+			hx-target="#toaster"
+			hx-swap="beforeend"
+		>
+			<span class="btn-text">Revoke Admin</span>
+			<span id={ fmt.Sprintf("user-admin-spinner-%s", u.ID) } class="htmx-indicator absolute inset-0 flex items-center justify-center animate-spin">
+				@components.Icon(components.IconProps{Name: "loader", Size: 14})
+			</span>
+		</button>
+	}
+}
+
+// AdminUserActionSuccess is the toast returned to HTMX after an
+// admin user action (admin toggle / password reset email) succeeds.
+templ AdminUserActionSuccess(message string) {
+	@views.Toast("success", "Success", message)
+}
+
+// AdminUserActionError is the toast returned to HTMX when an admin
+// user action fails (unknown user, self-demotion attempt, SMTP
+// failure, ...).
+templ AdminUserActionError(message string) {
+	@views.Toast("error", "Error", message)
 }

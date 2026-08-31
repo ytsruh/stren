@@ -91,7 +91,7 @@ func main() {
 	authCtrl := controllers.NewAuthController(userRepo, jwtService, emailService)
 	exerciseEntryCtrl := controllers.NewExerciseEntryController(repo)
 	adminCtrl := controllers.NewAdminController(repo)
-	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo)
+	adminUserCtrl := controllers.NewAdminUserController(adminUserRepo, authTokenRepo, emailService)
 	feedbackCtrl := controllers.NewFeedbackController(models.NewFeedbackRepository(database))
 	weightCtrl := controllers.NewWeightController(weightRepo, r2PhotoGetter{})
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(userRepo, authTokenRepo, emailService)

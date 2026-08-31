@@ -32,7 +32,7 @@ func profileTestHarness(t *testing.T) (*Handler, *mockUserRepository, *echo.Echo
 	authRecoveryCtrl := controllers.NewAuthRecoveryController(mockUser, newMockAuthTokenRepo(), nil)
 	entryCtrl := controllers.NewExerciseEntryController(mockRepo)
 	adminCtrl := controllers.NewAdminController(mockRepo)
-	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser)
+	adminUserCtrl := controllers.NewAdminUserController(mockAdminUser, newMockAuthTokenRepo(), nil)
 	feedbackCtrl := controllers.NewFeedbackController(mockFeedback)
 	weightCtrl := controllers.NewWeightController(mockWeight, nil)
 	goalsCtrl := controllers.NewGoalsController(newMockGoalRepository())

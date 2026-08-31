@@ -18,11 +18,41 @@ func TestImageUpload_RendersValidStyleAttribute(t *testing.T) {
 		AspectHeight:       9,
 	}
 	html := renderToString(t, ImageUpload(props))
-	if !strings.Contains(html, `padding-bottom: 56.25%`) {
-		t.Errorf("expected 'padding-bottom: 56.25%%' in rendered HTML, got:\n%s", html)
+	if !strings.Contains(html, `aspect-ratio: 16 / 9`) {
+		t.Errorf("expected 'aspect-ratio: 16 / 9' in rendered HTML, got:\n%s", html)
 	}
 	if strings.Contains(html, "TemplUnsupportedStyleAttributeValue") {
 		t.Error("rendered HTML still contains the unsupported-style-attribute sentinel — SafeURL leaked through")
+	}
+}
+
+func TestImageUpload_DefaultAspectIsThreeToOne(t *testing.T) {
+	// The exercise image pipeline is 3:1 end to end — the server
+	// crops uploads to 1200x400 (DefaultExerciseImageConfig) and
+	// the history page displays them via components.BannerImage
+	// (aspect-[3/1]). With no explicit AspectWidth/AspectHeight
+	// the preview must default to the same 3:1 frame so the
+	// admin sees what users will see. The frame must also span
+	// the full available width (w-full) with the height
+	// constrained by the ratio rather than a fixed pixel cap.
+	html := renderToString(t, ImageUpload(ImageUploadProps{
+		Name:       "exercise",
+		Label:      "Image",
+		CurrentURL: "https://pub-test.r2.dev/exercises/abc.jpg",
+	}))
+
+	if !strings.Contains(html, `aspect-ratio: 3 / 1`) {
+		t.Errorf("expected default preview frame to be 'aspect-ratio: 3 / 1', got:\n%s", html)
+	}
+	if !strings.Contains(html, `w-full`) {
+		t.Error("expected the preview frame to be w-full")
+	}
+	// The old padding-bottom aspect hack must be gone.
+	if strings.Contains(html, "padding-bottom") {
+		t.Errorf("preview still using the padding-bottom aspect hack, got:\n%s", html)
+	}
+	if strings.Contains(html, "max-w-sm") {
+		t.Error("preview must not be width-capped with max-w-sm; it should span the form width")
 	}
 }
 

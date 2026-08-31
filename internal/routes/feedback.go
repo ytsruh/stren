@@ -65,9 +65,14 @@ func feedbackValidationError(err error) string {
 }
 
 // AdminListFeedback renders the admin feedback inbox with an
-// optional open/closed filter.
+// optional open/closed filter. The default view (no filter query
+// param) shows only open feedback; "all" must be requested
+// explicitly via ?filter=all.
 func (h *Handler) AdminListFeedback(c echo.Context) error {
 	filter := c.QueryParam("filter")
+	if filter == "" {
+		filter = "open"
+	}
 
 	claims := GetClaims(c)
 	feedback, err := h.feedbackCtrl.AdminList(filter)
@@ -98,6 +103,10 @@ func (h *Handler) AdminCloseFeedback(c echo.Context) error {
 	}
 
 	if c.Request().Header.Get("HX-Request") == "true" {
+		// The detail page listens for this event and redirects back
+		// to the feedback list once the confirmation toast has been
+		// visible for a moment (see internal/views/admin/feedback.templ).
+		c.Response().Header().Set("HX-Trigger", "feedbackStatusUpdated")
 		return render(c, admin.AdminFeedbackClosedSuccess())
 	}
 

@@ -8,8 +8,9 @@ import (
 	"stren/internal/views/components"
 )
 
-// AdminFeedbackList renders the admin page listing all feedback with
-// Open / Closed / All filter buttons.
+// AdminFeedbackList renders the admin page listing feedback with
+// Open / Closed / All filter buttons. The default view (no filter
+// query param) shows only open feedback.
 templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName string, isAuthenticated bool, isAdmin bool) {
 	@views.Layout(views.PageData{Title: "Admin - Feedback", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
 		<div class="flex justify-between items-center mb-6">
@@ -29,7 +30,7 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 				Closed
 			</a>
 			<a
-				href="/admin/feedback"
+				href="/admin/feedback?filter=all"
 				class={ getFilterBtnClass(filter, "all") }
 			>
 				All
@@ -54,7 +55,7 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 					<tbody>
 						for _, f := range feedback {
 							<tr>
-								<td class="font-medium truncate max-w-[150px] sm:max-w-[300px]">{ f.Title }</td>
+								<td class="font-medium truncate max-w-37.5 sm:max-w-75">{ f.Title }</td>
 								<td class="hidden sm:table-cell">{ f.UserName }</td>
 								<td class="text-muted-foreground hidden sm:table-cell">{ f.CreatedAt.Format("02 Jan 2006") }</td>
 								<td>
@@ -82,9 +83,11 @@ templ AdminFeedbackList(feedback []*models.Feedback, filter string, userName str
 // feedback item, with a Close / Reopen action button.
 templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenticated bool, isAdmin bool) {
 	@views.Layout(views.PageData{Title: "Admin - Feedback Detail", UserName: userName, IsAuthenticated: isAuthenticated, IsAdmin: isAdmin}) {
-		<a href="/admin/feedback" class="btn-outline mb-4 inline-flex">
-			@components.Icon(components.IconProps{Name: "arrow-left", Size: 18})
-			Back
+		<a href="/admin/feedback" class="btn-outline mb-4 ">
+			<span class="flex items-center gap-2">
+				@components.Icon(components.IconProps{Name: "chevron-left", Size: 18})
+				Back
+			</span>
 		</a>
 		<form class="">
 			<fieldset class="grid gap-4">
@@ -147,13 +150,13 @@ templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenti
 					type="button"
 					hx-post={ fmt.Sprintf("/admin/feedback/%s/close", feedback.ID) }
 					hx-indicator="#close-spinner"
-					hx-target="#close-result"
-					hx-swap="innerHTML"
+					hx-target="#toaster"
+					hx-swap="beforeend"
 					class="btn relative inline-flex"
 				>
-					<span class="btn-text">
+					<span class="btn-text flex items-center gap-2">
 						if feedback.IsClosed {
-							@components.Icon(components.IconProps{Name: "rotate-ccw", Size: 18})
+							@components.Icon(components.IconProps{Name: "undo", Size: 18})
 							Reopen
 						} else {
 							@components.Icon(components.IconProps{Name: "check", Size: 18})
@@ -164,9 +167,22 @@ templ AdminFeedbackDetail(feedback *models.Feedback, userName string, isAuthenti
 						@components.Icon(components.IconProps{Name: "loader", Size: 18})
 					</span>
 				</button>
-				<div id="close-result"></div>
 			</div>
 		</form>
+		// Page-scoped success handler: the POST response carries an
+		// HX-Trigger for this event once the status has been updated.
+		// The confirmation toast is appended to #toaster by htmx, so
+		// we give it a moment to be seen before sending the admin
+		// back to the feedback list. Scoped to this page rather than
+		// the global layout because only the detail view performs a
+		// status update.
+		<script>
+			document.body.addEventListener('feedbackStatusUpdated', function() {
+				setTimeout(function() {
+					window.location.href = '/admin/feedback';
+				}, 1000);
+			});
+		</script>
 	}
 }
 

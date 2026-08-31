@@ -37,12 +37,14 @@ type ImageUploadProps struct {
 	RemoveFieldName    string
 	RemoveLabel        string
 	// AspectWidth / AspectHeight define the visual frame the
-	// preview should match (default 16:9). The cropped output
+	// preview should match (default 3:1). The cropped output
 	// from the server is guaranteed to have this ratio, so the
 	// preview never jumps when the upload completes. Uploads are
-	// expected to already be in this ratio — 16:9 landscape
-	// (e.g. 1920x1080) for exercise images; the server
-	// centre-crops anything else to fit.
+	// expected to already be in this ratio — 3:1 landscape
+	// (e.g. 1200x400) for exercise images, matching
+	// components.BannerImage and the server's
+	// DefaultExerciseImageConfig; the server centre-crops
+	// anything else to fit.
 	AspectWidth  int
 	AspectHeight int
 }
@@ -96,10 +98,10 @@ templ ImageUpload(props ImageUploadProps) {
 		aspectW := props.AspectWidth
 		aspectH := props.AspectHeight
 		if aspectW <= 0 {
-			aspectW = 16
+			aspectW = 3
 		}
 		if aspectH <= 0 {
-			aspectH = 9
+			aspectH = 1
 		}
 		inputID := "image-input-" + name
 		currentID := "image-current-" + name
@@ -107,14 +109,13 @@ templ ImageUpload(props ImageUploadProps) {
 		removeFieldID := "image-remove-field-" + name
 		displayHiddenID := "image-key-display-" + name
 		originalHiddenID := "image-key-original-" + name
-		// height / width as a percentage produces the right
-		// padding-bottom for an aspect-ratio frame: e.g. 16:9 =
-		// 56.25%, 4:3 = 75%. Float math keeps non-terminating
-		// ratios like 16:9 exact instead of truncating to 56%.
-		aspectPercent := float32(aspectH) * 100 / float32(aspectW)
-		if aspectPercent < 1 {
-			aspectPercent = 56.25
-		}
+		// The preview frame is ratio-locked via the CSS
+		// aspect-ratio property, so its height stays constrained
+		// to width ÷ ratio at every viewport — the same approach
+		// as ratioImage's Tailwind aspect-* utilities, but as an
+		// inline style so the ratio stays prop-driven (the
+		// Tailwind CLI only compiles literal classes).
+		aspectStyle := fmt.Sprintf("aspect-ratio: %d / %d;", aspectW, aspectH)
 	}}
 	<div
 		class="grid gap-2"
@@ -127,7 +128,7 @@ templ ImageUpload(props ImageUploadProps) {
 		<label for={ inputID }>{ props.Label }</label>
 		if props.CurrentURL != "" {
 			<div class="flex items-start justify-between gap-3">
-				<div id={ currentID } class="relative flex-1 max-w-sm overflow-hidden rounded-md border bg-muted transition-opacity" style={ fmt.Sprintf("padding-bottom: %g%%;", aspectPercent) }>
+				<div id={ currentID } class="relative w-full overflow-hidden rounded-md border bg-muted transition-opacity" style={ aspectStyle }>
 					<img
 						src={ templ.SafeURL(props.CurrentURL) }
 						alt="Current image"

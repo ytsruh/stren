@@ -326,16 +326,22 @@ templ Layout(data PageData) {
 						{{
 							/*
 								The OK button defaults to `btn-destructive`
-								because the dialog was originally built for
-								"are you sure you want to delete …?"
-								confirmations. Non-destructive callers
-								swap the class to `btn` (or another
-								non-destructive variant) right before
-								showModal() and restore the original
-								className on the dialog's `close`
-								event — see openConfirm in
+								(red) because confirmations can be
+								destructive (e.g. "Remove this image? It
+								will be deleted when you save."). Callers
+								whose action is a normal workflow step —
+								not a deletion — opt into the brand-orange
+								`btn-primary` styling with
+								data-confirm-variant="primary" on the
+								element that carries hx-confirm (the
+								htmx:confirm handler below swaps the class
+								before showModal and the dialog's close
+								handler restores the red default so the
+								next opener — including the JS-driven
+								openConfirm in
 								internal/views/components/image_upload.templ
-								for the canonical example.
+								— always starts from the destructive
+								default).
 							*/
 						}}
 						<button type="button" id="confirm-ok" value="confirm" hx-indicator="#confirm-spinner, self" class="btn-destructive relative inline-flex">
@@ -348,11 +354,30 @@ templ Layout(data PageData) {
 				</form>
 			</dialog>
 			<script>
+				// confirm-ok classes are swapped per opener: destructive
+				// (red) is the default; an hx-confirm element with
+				// data-confirm-variant="primary" gets the brand orange.
+				// The dialog's close handler restores the default so a
+				// JS-driven opener (image upload's openConfirm) never
+				// inherits an orange left behind by a previous htmx
+				// confirmation.
+				var CONFIRM_OK_DEFAULT_CLASS = 'btn-destructive';
+				var CONFIRM_OK_VARIANTS = ['btn-destructive', 'btn-primary'];
+				function setConfirmOkVariant(variant) {
+					var okBtn = document.getElementById('confirm-ok');
+					if (!okBtn) return;
+					CONFIRM_OK_VARIANTS.forEach(function(cls) { okBtn.classList.remove(cls); });
+					okBtn.classList.add(variant === 'primary' ? 'btn-primary' : CONFIRM_OK_DEFAULT_CLASS);
+				}
+				document.getElementById('confirm-dialog').addEventListener('close', function() {
+					setConfirmOkVariant('destructive');
+				});
 				document.body.addEventListener('htmx:confirm', function(evt) {
 					if (!evt.target.hasAttribute('hx-confirm')) return;
 					evt.preventDefault();
 					var dialog = document.getElementById('confirm-dialog');
 					document.getElementById('confirm-message').textContent = evt.detail.question;
+					setConfirmOkVariant(evt.target.getAttribute('data-confirm-variant'));
 					document.getElementById('confirm-ok').onclick = function() {
 						evt.detail.issueRequest(true);
 					};

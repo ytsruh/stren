@@ -152,10 +152,11 @@ func TestAdminExerciseForm_Edit_UploadEndpointHardCoded(t *testing.T) {
 
 func TestAdminExerciseForm_PreviewAspectMatchesCard(t *testing.T) {
 	// The exercise image is displayed on the history page through
-	// components.LandscapeImage — a 16:9 frame (aspect-video) — and
-	// the server crops uploads to 16:9 too (DefaultExerciseImageConfig).
-	// The admin form's preview must match that 16:9 aspect so the
-	// admin sees what users will see — not the raw file aspect.
+	// components.BannerImage — a 3:1 frame (aspect-[3/1]) — and
+	// the server crops uploads to 3:1 too (DefaultExerciseImageConfig,
+	// 1200x400). The admin form's preview must match that 3:1
+	// aspect so the admin sees what users will see — not the raw
+	// file aspect.
 	//
 	// The preview div only renders when the widget has a CurrentURL
 	// (i.e. when storage is configured AND the exercise has an
@@ -175,13 +176,13 @@ func TestAdminExerciseForm_PreviewAspectMatchesCard(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		form         AdminExerciseFormData
-		wantPadding  bool // true → preview div should be in the HTML
+		wantPreview  bool // true → preview div should be in the HTML
 	}{
 		{
 			name: "new form",
 			form: AdminExerciseFormData{IsEdit: false},
 			// No exercise, so no preview.
-			wantPadding: false,
+			wantPreview: false,
 		},
 		{
 			name: "edit form with image",
@@ -189,7 +190,7 @@ func TestAdminExerciseForm_PreviewAspectMatchesCard(t *testing.T) {
 				IsEdit:   true,
 				Exercise: &models.Exercise{ID: "ex-1", Name: "Squat", ImgURL: "exercises/abc.jpg"},
 			},
-			wantPadding: true,
+			wantPreview: true,
 		},
 		{
 			name: "edit form without image",
@@ -198,20 +199,20 @@ func TestAdminExerciseForm_PreviewAspectMatchesCard(t *testing.T) {
 				Exercise: &models.Exercise{ID: "ex-1", Name: "Squat"},
 			},
 			// Image URL is empty, so no preview.
-			wantPadding: false,
+			wantPreview: false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			html := renderToString(t, AdminExerciseForm(tc.form, "Admin", true, true))
-			hasPadding := strings.Contains(html, "padding-bottom: 56.25%")
-			if hasPadding != tc.wantPadding {
-				t.Errorf("padding-bottom: 56.25%% presence = %v, want %v", hasPadding, tc.wantPadding)
+			hasAspect := strings.Contains(html, "aspect-ratio: 3 / 1")
+			if hasAspect != tc.wantPreview {
+				t.Errorf("aspect-ratio: 3 / 1 presence = %v, want %v", hasAspect, tc.wantPreview)
 			}
-			if strings.Contains(html, "padding-bottom: 75%") {
-				t.Errorf("preview still using 4:3 aspect (padding-bottom: 75%%), got html:\n%s", html)
+			if strings.Contains(html, "aspect-ratio: 16 / 9") {
+				t.Errorf("preview still using the old 16:9 aspect, got html:\n%s", html)
 			}
-			if strings.Contains(html, "padding-bottom: 25%") {
-				t.Errorf("preview still using the old 4:1 aspect (padding-bottom: 25%%), got html:\n%s", html)
+			if strings.Contains(html, "padding-bottom") {
+				t.Errorf("preview still using the old padding-bottom aspect hack, got html:\n%s", html)
 			}
 		})
 	}

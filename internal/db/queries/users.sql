@@ -27,6 +27,19 @@ SET name = ?,
     updated_at = ?
 WHERE id = ?;
 
+-- name: SetUserAdmin :one
+-- Grant or revoke a user's admin status. Scoped to id; the RETURNING
+-- clause turns "no such user" into sql.ErrNoRows so the repository
+-- can surface a clean not-found error instead of silently no-oping.
+-- Separate from UpdateUser for the same reason as UpdateUserPassword:
+-- a narrow, single-purpose query prevents the admin form from
+-- clobbering any other columns.
+UPDATE users
+SET is_admin = ?,
+    updated_at = ?
+WHERE id = ?
+RETURNING id;
+
 -- name: UpdateUserPassword :exec
 -- Replace a user's password hash. Used by the password-reset flow
 -- after a reset token has been successfully consumed. Separate from
