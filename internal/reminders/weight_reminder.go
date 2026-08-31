@@ -153,10 +153,10 @@ type TickResult struct {
 	// ListError is non-empty when the user list was unreadable.
 	// When set, Results is nil and Users is 0 (the admin route
 	// surfaces this as a distinct error card).
-	ListError  string
-	Duration   time.Duration
-	Attempted  bool
-	Now        time.Time
+	ListError string
+	Duration  time.Duration
+	Attempted bool
+	Now       time.Time
 }
 
 // Run is the function the Scheduler invokes on every tick. It
@@ -174,7 +174,16 @@ type TickResult struct {
 // distinct error card). When true, the result reflects what
 // actually ran (which may include zero attempts if no user is due).
 func (r *UserReminder) Run(ctx context.Context) (TickResult, bool) {
-	start := r.clock.Now()
+	// UTC is mandatory here, not cosmetic: the turso driver binds
+	// time.Time as an RFC3339 string in the value's location, and
+	// SQLite compares reminder_next_fire_at <= ? as plain TEXT. A
+	// process running in a non-UTC zone (e.g. a laptop in BST) would
+	// otherwise write "+01:00"-suffixed strings that sort incorrectly
+	// against the "Z"-suffixed rows the rest of the app writes, so
+	// due-users would fire at the wrong hour. Normalising the tick's
+	// clock reading here makes every downstream write (list param,
+	// last_fired_at, next_fire_at) land as "...Z".
+	start := r.clock.Now().UTC()
 	log.Printf("reminders: tick starting at %s", start.UTC().Format(time.RFC3339))
 
 	users, err := r.repo.ListUsersDueForReminder(ctx, start)
@@ -201,11 +210,11 @@ func (r *UserReminder) Run(ctx context.Context) (TickResult, bool) {
 	)
 
 	return TickResult{
-		Users:      len(users),
-		Results:    results,
-		Duration:   duration,
-		Attempted:  true,
-		Now:        start,
+		Users:     len(users),
+		Results:   results,
+		Duration:  duration,
+		Attempted: true,
+		Now:       start,
 	}, true
 }
 
@@ -221,12 +230,27 @@ func (r *UserReminder) Run(ctx context.Context) (TickResult, bool) {
 //     user should have an email, but the orchestrator does not
 //     assume the user repo is perfect).
 //
-// After firing, next_fire_at is advanced by the cadence's stride
-// (24h / 7d / 14d) using the supplied "now" as the base. The
-// advanced time is written via repo.MarkUserReminderFired, which
-// also stamps last_fired_at. The orchestrator does not read the
-// row back — the value it wrote is the new next_fire_at.
+// After firing, next_fire_at is recomputed from the user's saved
+// schedule via User.ComputeNextFire (snapped to the chosen
+// day-of-week and reminder_time, +7d for biweekly) rather than
+// offsetting from the fire time, so a catch-up fire after downtime
+// cannot permanently re-anchor the cadence to the wrong slot. The
+// value is written via repo.MarkUserReminderFired, which also
+// stamps last_fired_at. The orchestrator does not read the row
+// back — the value it wrote is the new next_fire_at.
+//
+// All time decisions and writes use the UTC projection of the
+// supplied "now", so values bound to SQLite always compare
+// correctly against the rest of the app's "Z"-suffixed timestamps.
 func (r *UserReminder) SendToUser(ctx context.Context, user *models.User, now time.Time) UserReminderResult {
+	// Normalise to UTC before any decision or write. SendToUser is
+	// exported and callable outside the cron path (tests today, a
+	// future admin route), so the guarantee Run provides must hold
+	// here too: the firedAt / nextFireAt values bound by the driver
+	// must always be "Z"-suffixed for SQLite's TEXT comparison to
+	// evaluate correctly.
+	now = now.UTC()
+
 	res := UserReminderResult{
 		UserID:    user.ID,
 		UserName:  user.Name,
@@ -261,43 +285,41 @@ func (r *UserReminder) SendToUser(ctx context.Context, user *models.User, now ti
 		}
 	}
 
-	// Advance next_fire_at by the cadence's stride. Unlike
-	// the initial-schedule case (where ComputeNextFire finds
-	// the next matching <day_of_week> at <hour>), a
-	// successful fire always means "schedule the next one
-	// exactly N time-units from now", regardless of day-of-
-	// week: if the user was fired on Sunday, the next weekly
-	// fire is exactly 7 days later (still Sunday). Adding
-	// the stride to the current fire time gives that result
-	// directly, without re-running the day-of-week math.
-	nextFire := now.Add(reminderStride(user.ReminderFrequency))
+	// Advance next_fire_at by snapping to the user's saved
+	// schedule rather than offsetting from the actual fire
+	// time. This is the self-heal for schedule drift: the
+	// due-users query fires anyone whose next_fire_at is in
+	// the past (a scheduled Sunday 09:00 slot missed because
+	// the server was down fires at the next tick — possibly
+	// days later, on any weekday). Offsetting from that
+	// catch-up instant would permanently re-anchor the
+	// cadence to the wrong day and hour. Recomputing via
+	// ComputeNextFire instead always lands on the user's
+	// chosen <day_of_week> at <reminder_time>, so one
+	// off-schedule send costs a single late email and the
+	// schedule returns to normal from the next fire on.
+	//
+	// Biweekly needs one extra week beyond ComputeNextFire's
+	// result: its branch is weekly-shaped (next matching
+	// day/hour, 7 days out), but the cadence is a strict
+	// 14-day stride, so the slot after the coming one is the
+	// correct next fire.
+	nextFire, ok := user.ComputeNextFire(now)
+	if !ok {
+		// Off / unknown frequency: the tick should not have
+		// selected this row, but if it did (e.g. the row was
+		// disabled between the list query and the per-user
+		// send), the +24h advance lets the next tick correctly
+		// skip it (RemindersEnabled() will be false by then).
+		nextFire = now.Add(24 * time.Hour)
+	} else if user.ReminderFrequency == models.ReminderBiweekly {
+		nextFire = nextFire.AddDate(0, 0, 7)
+	}
 	if err := r.repo.MarkUserReminderFired(ctx, user.ID, now, nextFire); err != nil {
 		log.Printf("reminders: user %s: mark fired failed: %v", user.ID, err)
 		res.Error = err.Error()
 	}
 	return res
-}
-
-// reminderStride returns the per-frequency offset that the
-// orchestrator adds to the current fire time to compute the
-// next one. Pulled into a helper so the four cases live in one
-// place and the orchestrator's advance-NextFireAt code reads
-// as a single expression.
-func reminderStride(f models.ReminderFrequency) time.Duration {
-	switch f {
-	case models.ReminderDaily:
-		return 24 * time.Hour
-	case models.ReminderWeekly:
-		return 7 * 24 * time.Hour
-	case models.ReminderBiweekly:
-		return 14 * 24 * time.Hour
-	}
-	// Off / unknown: the tick should not have selected this row,
-	// but if it did (e.g. the row was disabled between the list
-	// query and the per-user send), the +24h advance lets the
-	// next tick correctly skip it (RemindersEnabled() will be
-	// false by then).
-	return 24 * time.Hour
 }
 
 // Compile-time checks: the production types must satisfy the

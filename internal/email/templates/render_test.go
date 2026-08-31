@@ -227,9 +227,11 @@ func TestRenderWelcome_DirectRenderEqualsViaRenderFn(t *testing.T) {
 func TestRenderWeightReminder_CadenceSpecificCopy(t *testing.T) {
 	// The email must be cadence-specific: a daily subscriber
 	// gets "Today's weigh-in", a weekly subscriber gets the
-	// Sunday-specific copy. The button label also changes
-	// ("Log today's weight" vs "Log this week's weight") so
-	// the call-to-action matches the cadence the user picked.
+	// day-agnostic weekly copy (no email text names a day,
+	// since the reminder fires on whichever weekday the user
+	// picked). The button label also changes ("Log today's
+	// weight" vs "Log this week's weight") so the
+	// call-to-action matches the cadence the user picked.
 	cases := []struct {
 		cadence     models.ReminderFrequency
 		wantInHTML  []string
@@ -242,8 +244,8 @@ func TestRenderWeightReminder_CadenceSpecificCopy(t *testing.T) {
 		},
 		{
 			cadence:    models.ReminderWeekly,
-			wantInHTML: []string{"It&#39;s Sunday", "Log this week&#39;s weight"},
-			wantInText: []string{"It's Sunday", "this week's weight"},
+			wantInHTML: []string{"Weekly weigh-in", "Log this week&#39;s weight"},
+			wantInText: []string{"this week's weight", "this week's reading"},
 		},
 		{
 			cadence:    models.ReminderBiweekly,

@@ -9,9 +9,12 @@ package emailtmpl
 //
 // The cadence is rendered into the title and the header blurb so
 // a daily subscriber gets "Today's weigh-in" and a weekly
-// subscriber gets "Sunday weigh-in" (etc.) — the same template
-// serves every frequency, so adding a new cadence is a one-line
-// change in reminderCadenceCopy rather than a new templ file.
+// subscriber gets "Weekly weigh-in reminder" (etc.) — the same
+// template serves every frequency, so adding a new cadence is a
+// one-line change in reminderCadenceCopy rather than a new templ
+// file. The copy is deliberately day-agnostic: a weekly reminder
+// fires on whichever weekday the user picked, so no email text
+// names a specific day or time.
 //
 // The baseURL is threaded through so a staging deployment sends
 // an email that points at itself, not at production.
@@ -37,8 +40,8 @@ templ WeightReminderEmail(name string, baseURL string, subject string, header st
 // component stays a dumb renderer.
 func reminderBodyBlurb(subject string) string {
 	switch subject {
-	case "Sunday weigh-in reminder":
-		return "A single entry a week is the most reliable way to spot a trend without making the scale a daily event. Tap below to add today's reading — and feel free to add a photo if you want to see your progress over time."
+	case "Weekly weigh-in reminder":
+		return "A single entry a week is the most reliable way to spot a trend without making the scale a daily event. Tap below to add this week's reading — and feel free to add a photo if you want to see your progress over time."
 	case "Time to log your weight":
 		return "A quick reading keeps your trend line honest. Tap below to add today's entry — and feel free to add a photo if you want to see your progress over time."
 	}
@@ -51,7 +54,7 @@ func reminderBodyBlurb(subject string) string {
 // weekly user sees "Log this week's weight".
 func reminderButtonLabel(subject string) string {
 	switch subject {
-	case "Sunday weigh-in reminder":
+	case "Weekly weigh-in reminder":
 		return "Log this week's weight"
 	case "Time to log your weight":
 		return "Log today's weight"

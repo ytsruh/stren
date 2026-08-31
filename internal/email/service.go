@@ -114,9 +114,10 @@ func (s *Service) SendWelcome(ctx context.Context, user *models.User) error {
 // reminder email. The cadence is one of models.ReminderDaily /
 // Weekly / Biweekly and is threaded into the templ component so
 // a daily user gets a "Time to log your weight" subject and a
-// weekly user gets "Sunday weigh-in reminder" (the same copy
-// that the old all-user orchestrator used, but driven by
-// per-user preferences now).
+// weekly user gets "Weekly weigh-in reminder". The copy is
+// deliberately day-agnostic: a weekly reminder fires on
+// whichever weekday the user picked, so no email text names a
+// day or a time.
 //
 // The caller (the reminders package) is expected to fire this
 // from a goroutine with a recover so a single SMTP failure does
@@ -151,7 +152,7 @@ func weightReminderSubject(cadence models.ReminderFrequency) (string, string) {
 	case models.ReminderDaily:
 		return "Time to log your weight", "Today's weigh-in"
 	case models.ReminderWeekly:
-		return "Sunday weigh-in reminder", "It's Sunday — time to log this week's weight."
+		return "Weekly weigh-in reminder", "Time to log this week's weight."
 	case models.ReminderBiweekly:
 		return "Time to log your weight", "Time to log this week's weight."
 	}

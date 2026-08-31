@@ -203,6 +203,7 @@ templ ReminderSection(r ReminderFormState) {
 					step="3600"
 					value={ r.Time }
 				/>
+				<p class="text-sm text-muted-foreground">Times are UTC, not local. 09:00 UTC arrives at 10:00 during UK summer time (BST) and 09:00 in winter (GMT) — pick an hour earlier if you want a 9am local nudge.</p>
 			</div>
 		</div>
 	</fieldset>

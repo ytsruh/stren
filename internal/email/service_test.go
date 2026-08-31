@@ -215,8 +215,8 @@ func TestService_SendWeightReminder_HappyPath(t *testing.T) {
 	if got.To != "alice@example.com" {
 		t.Errorf("To = %q, want alice@example.com", got.To)
 	}
-	if got.Subject != "Sunday weigh-in reminder" {
-		t.Errorf("Subject = %q, want %q", got.Subject, "Sunday weigh-in reminder")
+	if got.Subject != "Weekly weigh-in reminder" {
+		t.Errorf("Subject = %q, want %q", got.Subject, "Weekly weigh-in reminder")
 	}
 	if !strings.Contains(got.HTML, "Alice") {
 		t.Errorf("HTML missing user name: %q", got.HTML)
@@ -240,7 +240,9 @@ func TestService_SendWeightReminder_HappyPath(t *testing.T) {
 func TestService_SendWeightReminder_CadenceSubjects(t *testing.T) {
 	// The subject and body must change with the cadence. A
 	// daily user gets "Time to log your weight" + "Today's
-	// weigh-in"; a weekly user gets the Sunday-specific copy.
+	// weigh-in"; a weekly user gets the day-agnostic weekly
+	// copy (the reminder can fire on whichever weekday the
+	// user picked, so no email text names a day).
 	// The orchestrator picks the cadence from the user's row,
 	// so this is the only place to assert that the mapping is
 	// right end-to-end (cadence → subject → body).
@@ -258,8 +260,8 @@ func TestService_SendWeightReminder_CadenceSubjects(t *testing.T) {
 		},
 		{
 			cadence:     models.ReminderWeekly,
-			wantSubject: "Sunday weigh-in reminder",
-			wantInText:  "It's Sunday",
+			wantSubject: "Weekly weigh-in reminder",
+			wantInText:  "Time to log this week's weight",
 			wantInHTML:  "Log this week&#39;s weight",
 		},
 		{

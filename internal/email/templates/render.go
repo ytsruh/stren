@@ -106,8 +106,10 @@ func RenderWelcome(name, baseURL string) (html, text string) {
 // Weekly / Biweekly and is used to pick the email's subject
 // line and a short cadence-aware blurb in the body so the user
 // gets a "Time to log today's weight" email on a daily cadence
-// and a "Sunday weigh-in" email on a weekly cadence, rather
-// than the same Sunday-specific copy every time.
+// and a "Weekly weigh-in" email on a weekly cadence. The copy
+// is deliberately day-agnostic: a weekly reminder can fire on
+// whichever weekday the user picked (and drift for operational
+// reasons), so no email copy names a day or a time.
 //
 // The baseURL is threaded into the dashboard button (which
 // points at /weight/new) and the footer's "view on the web"
@@ -133,7 +135,7 @@ func reminderCadenceCopy(cadence models.ReminderFrequency) (subject, header stri
 	case models.ReminderDaily:
 		return "Time to log your weight", "Today's weigh-in"
 	case models.ReminderWeekly:
-		return "Sunday weigh-in reminder", "It's Sunday — time to log this week's weight."
+		return "Weekly weigh-in reminder", "Time to log this week's weight."
 	case models.ReminderBiweekly:
 		return "Time to log your weight", "Time to log this week's weight."
 	}
@@ -186,21 +188,21 @@ func welcomeText(name, baseURL string) string {
 }
 
 // weightReminderText is the plaintext body of the per-user
-// "log your weight" reminder email. Kept in Go (not a .templ
-// file) because the body is short and templ would be
+// "log your weight" reminder email. Kept in Go (not a .templ file)
+// because the body is short and templ would be
 // overkill. The dashboard link points at /weight/new so the
 // recipient lands directly on the new-entry form. The cadence
-// label ("Sunday weigh-in" / "Today's weigh-in" / generic) is
+// label ("Weekly weigh-in" / "Today's weigh-in" / generic) is
 // threaded in from reminderCadenceCopy so the same function
 // is the single source of truth for the cadence-specific
 // copy across HTML and plaintext.
 func weightReminderText(name, baseURL, subject, header string) string {
 	body := ""
 	switch subject {
-	case "Sunday weigh-in reminder":
-		body = "It's Sunday — time to log your weight for the week. " +
+	case "Weekly weigh-in reminder":
+		body = "Time to log your weight for the week. " +
 			"A single entry a week is the most reliable way to spot a trend without making the scale a daily event. " +
-			"Tap below to add today's reading, and feel free to add a photo if you want to see your progress over time:"
+			"Tap below to add this week's reading, and feel free to add a photo if you want to see your progress over time:"
 	case "Time to log your weight":
 		body = "Time to log your weight. " +
 			"A quick reading keeps your trend line honest. " +
