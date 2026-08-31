@@ -171,7 +171,7 @@ templ ReminderSection(r ReminderFormState) {
 			<label for="reminder_enabled" class="text-base">Send me weight reminders</label>
 		</div>
 		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-			<div class="grid gap-2">
+			<div class="flex flex-col gap-2 items-start justify-start">
 				<label for="reminder_frequency">Frequency</label>
 				<select class="input w-full" id="reminder_frequency" name="reminder_frequency">
 					for _, f := range models.AllReminderFrequencies {
@@ -180,7 +180,7 @@ templ ReminderSection(r ReminderFormState) {
 				</select>
 			</div>
 			<div
-				class="grid gap-2"
+				class="flex flex-col gap-2 items-start justify-start"
 				id="reminder-day-of-week-wrap"
 				if !r.Frequency.NeedsDayOfWeek() {
 					hidden
@@ -193,7 +193,7 @@ templ ReminderSection(r ReminderFormState) {
 					}
 				</select>
 			</div>
-			<div class="grid gap-2">
+			<div class="flex flex-col gap-2 items-start justify-start">
 				<label for="reminder_time">Time of day (UTC)</label>
 				<input
 					class="input"
@@ -203,7 +203,7 @@ templ ReminderSection(r ReminderFormState) {
 					step="3600"
 					value={ r.Time }
 				/>
-				<p class="text-sm text-muted-foreground">Times are UTC, not local. 09:00 UTC arrives at 10:00 during UK summer time (BST) and 09:00 in winter (GMT) — pick an hour earlier if you want a 9am local nudge.</p>
+				<p class="text-xs text-muted-foreground">Times are UTC, not local. 09:00 UTC arrives at 10:00 during UK summer time (BST) and 09:00 in winter (GMT) — pick an hour earlier if you want a 9am local nudge.</p>
 			</div>
 		</div>
 	</fieldset>
