@@ -21,7 +21,7 @@ struct ForgotPasswordView: View {
                         Text("Forgot password?")
                             .font(.title.bold())
                             .foregroundStyle(DSColors.text)
-                        Text("Enter your email and we'll send you a link to reset your password on the Stren website.")
+                        Text("Enter your email and we'll send you a link to reset your password on the Hylete website.")
                             .font(.body)
                             .foregroundStyle(DSColors.textSecondary)
                     }

@@ -99,7 +99,7 @@ struct ProfileView: View {
                 Text("We'll read every submission.")
             }
             .alert(
-                "Sign out of Stren?",
+                "Sign out of Hylete?",
                 isPresented: $showingSignOutConfirm
             ) {
                 Button("Sign out", role: .destructive) {

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The single dependency container for the running app.
-/// Created in `StrenApp` once at launch and injected into
+/// Created in `HyleteApp` once at launch and injected into
 /// every view via `@EnvironmentObject`.
 @MainActor
 public final class AppEnvironment: ObservableObject {
@@ -48,7 +48,7 @@ public final class AppEnvironment: ObservableObject {
     /// `make dev` server on the developer's machine when
     /// the simulator runs on the same Mac.
     private static func resolveBaseURL() -> URL {
-        if let raw = Bundle.main.object(forInfoDictionaryKey: "STREN_API_BASE_URL") as? String,
+        if let raw = Bundle.main.object(forInfoDictionaryKey: "HYLETE_API_BASE_URL") as? String,
            !raw.isEmpty,
            let url = URL(string: raw) {
             return url

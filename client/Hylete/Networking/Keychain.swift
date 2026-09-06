@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 /// Tiny wrapper around the iOS Keychain for storing the JWT
-/// issued by the Stren server. One generic-password item per
+/// issued by the Hylete server. One generic-password item per
 /// service; the token is the only secret we store so the API
 /// is intentionally narrow.
 ///
@@ -16,7 +16,7 @@ public enum Keychain {
     /// item this app stores. A single service groups all of
     /// our items under one searchable namespace in the
     /// Keychain Access app.
-    private static let service = "com.ytsruh.stren"
+    private static let service = "com.ytsruh.hylete"
 
     public enum KeychainError: Error, LocalizedError {
         case unhandled(OSStatus)

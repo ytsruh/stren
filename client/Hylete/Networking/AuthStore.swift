@@ -30,7 +30,7 @@ public final class AuthStore: ObservableObject {
     @Published public private(set) var isRestoring: Bool = true
 
     private var api: APIClient
-    private let userDefaultsKey = "stren.cachedUser"
+    private let userDefaultsKey = "hylete.cachedUser"
 
     public init(api: APIClient) {
         self.api = api

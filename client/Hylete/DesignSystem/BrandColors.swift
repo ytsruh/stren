@@ -3,7 +3,7 @@ import SwiftUI
 /// Index of every brand colour used by the app, in one file for easy auditing.
 ///
 /// **The values themselves live in the asset catalog** at
-/// `client/Stren/Assets.xcassets/DS/<token>.colorset/Contents.json`.
+/// `client/Hylete/Assets.xcassets/DS/<token>.colorset/Contents.json`.
 /// Each colorset declares a light (universal) variant and a dark
 /// (`luminosity: dark`) variant. Swift code consumes them via
 /// `Color("<token>", bundle: .main)` (see `Colors.swift`) —

@@ -39,11 +39,11 @@ const (
 	// ytsruh.com (the same domain the app is deployed on), so any
 	// future change to the From address is a code change, not a config
 	// change.
-	defaultFrom = "stren@ytsruh.com"
+	defaultFrom = "hylete@ytsruh.com"
 	// ehloIdentity is the hostname used in the EHLO greeting. SMTP
 	// RFC 5321 §4.1.1.1 says it should be the client's FQDN. We
 	// advertise the app's own hostname; some servers log it.
-	ehloIdentity = "stren.ytsruh.com"
+	ehloIdentity = "hylete.ytsruh.com"
 
 	defaultDialTimeout = 30 * time.Second
 )
@@ -81,7 +81,7 @@ type ClientConfig struct {
 	APIToken string
 
 	// FromAddress is the envelope-from / From header. Defaults to
-	// "stren@ytsruh.com" when empty.
+	// "hylete@ytsruh.com" when empty.
 	FromAddress string
 
 	// Host is the SMTP server. Defaults to
@@ -332,7 +332,7 @@ func randomBoundary() string {
 		// crypto/rand failing is a system-level catastrophe;
 		// falling back to a fixed string keeps the function
 		// total without panicking in production.
-		return "stren-boundary"
+		return "hylete-boundary"
 	}
 	return hex.EncodeToString(b[:])
 }

@@ -1,5 +1,5 @@
 import XCTest
-@testable import Stren
+@testable import Hylete
 
 /// Tests for `CalendarMath`, the pure date helpers behind
 /// `WeekCalendarView`. Every test pins an explicit `Calendar`

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Semantic colour tokens. The values are looked up from the
-/// asset catalog at `client/Stren/Assets.xcassets/DS/<token>.colorset/`,
+/// asset catalog at `client/Hylete/Assets.xcassets/DS/<token>.colorset/`,
 /// which declares both a light and a dark variant. SwiftUI
 /// automatically picks the right one based on the current
 /// `ColorScheme`, so every consumer of `DSColors.*` gets correct

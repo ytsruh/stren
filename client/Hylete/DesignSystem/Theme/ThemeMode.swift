@@ -8,7 +8,7 @@ import SwiftUI
 ///
 /// Persisted via `@AppStorage("themeMode")`; the raw value is
 /// the enum's `rawValue` string so the storage is
-/// human-readable in `defaults read com.ytsruh.stren`.
+/// human-readable in `defaults read com.ytsruh.hylete`.
 public enum ThemeMode: String, CaseIterable, Identifiable {
 
     /// Follow the device's current `ColorScheme`. The default.

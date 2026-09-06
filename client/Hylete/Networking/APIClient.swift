@@ -1,6 +1,6 @@
 import Foundation
 
-/// HTTP client for the Stren server's `/api/v1` namespace.
+/// HTTP client for the Hylete server's `/api/v1` namespace.
 /// One method per endpoint, all `async throws`, all returning
 /// a strongly-typed DTO. No third-party networking
 /// dependency — just `URLSession`.

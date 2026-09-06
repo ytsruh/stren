@@ -10,7 +10,7 @@ import SwiftUI
 /// splash. While that's running, `RootView` shows a spinner
 /// (see `isRestoring` on `AuthStore`).
 @main
-struct StrenApp: App {
+struct HyleteApp: App {
     @StateObject private var env = AppEnvironment.live()
 
     var body: some Scene {

@@ -74,7 +74,7 @@ struct LoginView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: DSSpacing.xs) {
-            Text("Stren")
+            Text("Hylete")
                 .font(.largeTitle.bold())
                 .foregroundStyle(DSColors.text)
             Text("Track your lifts.")

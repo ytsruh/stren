@@ -51,7 +51,7 @@ public enum Icons {
 
     /// Swipe-action "Delete" button on the history rows.
     /// Matches the same icon used in the dashboard's
-    /// swipe-to-delete (client/Stren/Dashboard/SetList.swift:57).
+    /// swipe-to-delete (client/Hylete/Dashboard/SetList.swift:57).
     public static let trash = "trash"
 
     // MARK: - Stat cards

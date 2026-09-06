@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>$(STREN_DISPLAY_NAME)</string>
+	<string>$(HYLETE_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -35,8 +35,8 @@
 			</dict>
 		</dict>
 	</dict>
-	<key>STREN_API_BASE_URL</key>
-	<string>$(STREN_API_SCHEME)://$(STREN_API_HOST)$(STREN_API_PATH)</string>
+	<key>HYLETE_API_BASE_URL</key>
+	<string>$(HYLETE_API_SCHEME)://$(HYLETE_API_HOST)$(HYLETE_API_PATH)</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Inter_18pt-Regular.ttf</string>

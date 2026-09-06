@@ -1,7 +1,7 @@
 // Debug build configuration. Used for simulator development
 // on the developer's Mac. The iOS simulator can reach the
 // Mac's loopback over the shared network namespace, so
-// STREN_API_SCHEME + STREN_API_HOST + STREN_API_PATH
+// HYLETE_API_SCHEME + HYLETE_API_HOST + HYLETE_API_PATH
 // resolves to the local `make dev` server.
 //
 // A real iPhone cannot reach this address. For on-device
@@ -10,18 +10,18 @@
 //
 // Why three variables instead of one? xcconfig treats `//`
 // as a line-comment delimiter even inside quoted values, so
-// a single `STREN_API_BASE_URL = http://localhost...` would
+// a single `HYLETE_API_BASE_URL = http://localhost...` would
 // be truncated to `http:`. Splitting the URL into scheme /
 // host / path lets Info.plist concatenate them with
-// `://` and `$(STREN_API_PATH)` in the middle, where the
+// `://` and `$(HYLETE_API_PATH)` in the middle, where the
 // `//` is created at expansion time and never seen by the
 // xcconfig parser.
-STREN_API_SCHEME = http
-STREN_API_HOST = localhost:8080
-STREN_API_PATH = /api/v1
+HYLETE_API_SCHEME = http
+HYLETE_API_HOST = localhost:8080
+HYLETE_API_PATH = /api/v1
 
 // The Debug configuration installs as a SEPARATE app from the
-// Release one: a `.dev` bundle ID and a "Stren Dev" home-screen
+// Release one: a `.dev` bundle ID and a "Hylete Dev" home-screen
 // name let a production install and a dev install coexist
 // side-by-side on the same device/simulator without overwriting
 // each other. iOS sandboxes Keychain per bundle ID, so the two
@@ -31,5 +31,5 @@ STREN_API_PATH = /api/v1
 // settings — direct build settings in the pbxproj take precedence
 // over xcconfig files, which would pin every configuration to a
 // single value.
-PRODUCT_BUNDLE_IDENTIFIER = com.ytsruh.stren.dev
-STREN_DISPLAY_NAME = Stren Dev
+PRODUCT_BUNDLE_IDENTIFIER = com.ytsruh.hylete.dev
+HYLETE_DISPLAY_NAME = Hylete Dev
